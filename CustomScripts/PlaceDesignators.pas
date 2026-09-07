@@ -21,6 +21,35 @@ procedure TFormSilk.ButtonOKClick(SilSender: TObject); forward;
 procedure TFormSilk.ButtonCancelClick(SilSender: TObject); forward;
 procedure TFormSilk.FormSilkShow(SilSender: TObject); forward;
 
+procedure SilShowBox(const Msg : String; Flags : Integer);
+begin
+    try
+        MessageBox(0, PChar(Msg), PChar(FormSilk.Caption), Flags);
+    except
+        try ShowInfo(Msg, FormSilk.Caption); except end;
+    end;
+end;
+
+function SilParseFloat(const SilS : String; var SilV : Double) : Boolean;
+var
+    SilT : String;
+begin
+    Result := False;
+    SilT := SilS;
+    try
+        SilV := StrToFloat(StringReplace(SilT, ',', '.', [rfReplaceAll]));
+        Result := True;
+        Exit;
+    except
+    end;
+    try
+        SilV := StrToFloat(StringReplace(SilT, '.', ',', [rfReplaceAll]));
+        Result := True;
+    except
+        Result := False;
+    end;
+end;
+
 function RectsOverlap(L1, B1, R1, SilT1, L2, B2, R2, SilT2 : TCoord) : Boolean;
 begin
     Result := not ((R1 < L2) or (R2 < L1) or (SilT1 < B2) or (SilT2 < B1));
@@ -35,8 +64,22 @@ begin
 end;
 
 function IsHiddenName(SilCmp : IPCB_Component) : Boolean;
+var
+    Txt : IPCB_Text;
 begin
     Result := False;
+    try
+        Txt := SilCmp.Name;
+        if Txt <> nil then
+        begin
+            if Txt.IsHidden then
+            begin
+                Result := True;
+                Exit;
+            end;
+        end;
+    except
+    end;
     try
         if SilCmp.NameOn = False then Result := True;
     except
@@ -203,8 +246,7 @@ begin
     Txt.BeginModify;
     SilCmp.ChangeNameAutoposition := eAutoPos_Manual;
     ApplyRotationForReadability(Txt, SilCmp, Best90);
-    Txt.XLocation := BestX;
-    Txt.YLocation := BestY;
+    Txt.MoveToXY(BestX, BestY);
     Txt.EndModify;
     Txt.GraphicallyInvalidate;
     Inc(MovedCnt);
@@ -262,10 +304,9 @@ begin
     end;
 
     Client.SendMessage('PCB:Zoom', 'Action=Redraw', 255, Client.CurrentView);
-    ShowInfo('Расставлено: ' + IntToStr(MovedCnt) + sLineBreak +
-             'С предупреждением (край платы / плотно): ' + IntToStr(FailCnt) + sLineBreak +
-             'Пропущено скрытых: ' + IntToStr(SkipCnt),
-             'Десигнаторы');
+    SilShowBox(LabelInfoMoved.Caption + IntToStr(MovedCnt) + sLineBreak +
+               LabelInfoWarn.Caption + IntToStr(FailCnt) + sLineBreak +
+               LabelInfoSkip.Caption + IntToStr(SkipCnt), 64);
 end;
 
 { ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
@@ -374,27 +415,26 @@ var
     SilH : Double;
 begin
     SkipHidden := CheckSkipHidden.Checked;
-    try
-        SilH := StrToFloat(EditH.Text);
-    except
-        ShowError('Некорректная высота текста.');
+    if not SilParseFloat(EditH.Text, SilH) then
+    begin
+        SilShowBox(LabelErrH.Caption, 16);
         Exit;
     end;
     if SilH < 0 then
     begin
-        ShowError('Высота не может быть отрицательной.');
+        SilShowBox(LabelErrHNeg.Caption, 16);
         Exit;
     end;
     if SilH = 0 then FixedHeight := 0 else FixedHeight := MMsToCoord(SilH);
     if PCBServer = nil then
     begin
-        ShowError('PCB-server is not available.');
+        SilShowBox(LabelErrNoSrv.Caption, 16);
         Exit;
     end;
     SilBoard := PCBServer.GetCurrentPCBBoard;
     if SilBoard = nil then
     begin
-        ShowError('Open a PCB document.');
+        SilShowBox(LabelErrNoPcb.Caption, 16);
         Exit;
     end;
     FormSilk.Close;

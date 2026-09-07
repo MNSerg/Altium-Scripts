@@ -5,11 +5,11 @@ object FormBom: TFormBom
   Caption = #1069#1082#1089#1087#1086#1088#1090' BOM (Excel)'
   ClientHeight = 360
   ClientWidth = 740
-  Color = clBtnFace
+  Color = $001E1A1A
   Font.Charset = DEFAULT_CHARSET
-  Font.Color = clWindowText
-  Font.Height = -11
-  Font.Name = 'Tahoma'
+  Font.Color = $00F0F0F0
+  Font.Height = -12
+  Font.Name = 'Segoe UI'
   Font.Style = []
   OldCreateOrder = False
   Position = poScreenCenter
@@ -23,6 +23,12 @@ object FormBom: TFormBom
     Height = 214
   end
   object LabelImageHint: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 8
     Top = 226
     Width = 320
@@ -32,6 +38,12 @@ object FormBom: TFormBom
     WordWrap = True
   end
   object LabelPath: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 12
     Width = 200
@@ -39,6 +51,13 @@ object FormBom: TFormBom
     Caption = #1060#1072#1081#1083' Excel (.xls):'
   end
   object EditPath: TEdit
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 28
     Width = 280
@@ -46,6 +65,13 @@ object FormBom: TFormBom
     TabOrder = 0
   end
   object ButtonBrowse: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 628
     Top = 26
     Width = 90
@@ -55,6 +81,12 @@ object FormBom: TFormBom
     OnClick = ButtonBrowseClick
   end
   object LabelCols: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 64
     Width = 380
@@ -64,6 +96,13 @@ object FormBom: TFormBom
     WordWrap = True
   end
   object ButtonOK: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 400
     Top = 310
     Width = 90
@@ -74,6 +113,13 @@ object FormBom: TFormBom
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 510
     Top = 310
     Width = 90
@@ -82,5 +128,37 @@ object FormBom: TFormBom
     Caption = #1054#1090#1084#1077#1085#1072
     TabOrder = 3
     OnClick = ButtonCancelClick
+  end
+  object LabelErrPath: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1059#1082#1072#1078#1080#1090#1077' '#1087#1091#1090#1100' '#1082' '#1092#1072#1081#1083#1091' .xls.'
+  end
+  object LabelWarnNone: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1050#1086#1084#1087#1086#1085#1077#1085#1090#1099' '#1085#1077' '#1085#1072#1081#1076#1077#1085#1099'. '#1054#1090#1082#1088#1086#1081#1090#1077' '#1089#1093#1077#1084#1091' '#1080#1083#1080' PCB '#1087#1088#1086#1077#1082#1090#1072'.'
+  end
+  object LabelInfoDone: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = 'BOM '#1079#1072#1087#1080#1089#1072#1085': '
+  end
+  object LabelInfoCount: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1043#1088#1091#1087#1087': '
   end
 end

@@ -16,6 +16,35 @@ procedure TFormWizard.ButtonOKClick(WizSender: TObject); forward;
 procedure TFormWizard.ButtonCancelClick(WizSender: TObject); forward;
 procedure TFormWizard.FormWizardShow(WizSender: TObject); forward;
 
+procedure WizShowBox(const Msg : String; Flags : Integer);
+begin
+    try
+        MessageBox(0, PChar(Msg), PChar(FormWizard.Caption), Flags);
+    except
+        try ShowInfo(Msg, FormWizard.Caption); except end;
+    end;
+end;
+
+function WizParseFloat(const WizS : String; var WizV : Double) : Boolean;
+var
+    WizT : String;
+begin
+    Result := False;
+    WizT := WizS;
+    try
+        WizV := StrToFloat(StringReplace(WizT, ',', '.', [rfReplaceAll]));
+        Result := True;
+        Exit;
+    except
+    end;
+    try
+        WizV := StrToFloat(StringReplace(WizT, '.', ',', [rfReplaceAll]));
+        Result := True;
+    except
+        Result := False;
+    end;
+end;
+
 function AddTrackL(WizX1, WizY1, WizX2, WizY2 : TCoord; WizALayer : TLayer; Width : TCoord) : IPCB_Track;
 begin
     Result := PCBServer.PCBObjectFactory(eTrackObject, eNoDimension, eCreate_Default);
@@ -182,13 +211,13 @@ begin
     end;
     if PCBServer = nil then
     begin
-        ShowError('PCB-server is not available.');
+        WizShowBox(LabelErrNoSrv.Caption, 16);
         Exit;
     end;
     WizBoard := PCBServer.GetCurrentPCBBoard;
     if WizBoard = nil then
     begin
-        ShowError('Нет PCB-документа для записи.');
+        WizShowBox(LabelErrNoPcb.Caption, 16);
         Exit;
     end;
 
@@ -251,32 +280,30 @@ begin
     end;
 
     Client.SendMessage('PCB:Zoom', 'Action=All', 255, Client.CurrentView);
-    ShowInfo('Плата создана: ' + FormatFloat('0.##', Wmm) + '×' + FormatFloat('0.##', Hmm) + ' мм.' + sLineBreak +
-             'Контур на Keep-Out, board outline из примитивов.' + sLineBreak +
-             'Стек слоёв 4/6 задайте в Layer Stack Manager, если слои ещё не добавлены.',
-             'Мастер PCB');
+    WizShowBox(LabelInfoDone.Caption + FormatFloat('0.##', Wmm) + ' x ' +
+               FormatFloat('0.##', Hmm) + sLineBreak + LabelInfoHint.Caption, 64);
 end;
 
 function ReadPositive(const WizS : String; var WizV : Double) : Boolean;
 begin
-    Result := False;
-    try
-        WizV := StrToFloat(WizS);
-        Result := WizV > 0;
-    except
-    end;
+    Result := WizParseFloat(WizS, WizV) and (WizV > 0);
+end;
+
+function ReadNonNeg(const WizS : String; var WizV : Double) : Boolean;
+begin
+    Result := WizParseFloat(WizS, WizV) and (WizV >= 0);
 end;
 
 procedure TFormWizard.ButtonOKClick(WizSender: TObject);
 begin
-    if not ReadPositive(EditW.Text, Wmm) then begin ShowError('Некорректная ширина.'); Exit; end;
-    if not ReadPositive(EditH.Text, Hmm) then begin ShowError('Некорректная высота.'); Exit; end;
-    try FilletMM := StrToFloat(EditFillet.Text); except ShowError('Некорректное скругление.'); Exit; end;
-    if FilletMM < 0 then begin ShowError('Скругление не может быть < 0.'); Exit; end;
-    if not ReadPositive(EditHole.Text, HoleMM) then begin ShowError('Некорректное отверстие.'); Exit; end;
-    if not ReadPositive(EditPad.Text, PadMM) then begin ShowError('Некорректная площадка.'); Exit; end;
-    if not ReadPositive(EditMargin.Text, MarginMM) then begin ShowError('Некорректный отступ.'); Exit; end;
-    if not ReadPositive(EditGrid.Text, GridMM) then begin ShowError('Некорректная сетка.'); Exit; end;
+    if not ReadPositive(EditW.Text, Wmm) then begin WizShowBox(LabelErrW.Caption, 16); Exit; end;
+    if not ReadPositive(EditH.Text, Hmm) then begin WizShowBox(LabelErrH.Caption, 16); Exit; end;
+    if not ReadNonNeg(EditFillet.Text, FilletMM) then begin WizShowBox(LabelErrFillet.Caption, 16); Exit; end;
+    if FilletMM < 0 then begin WizShowBox(LabelErrFilletNeg.Caption, 16); Exit; end;
+    if not ReadPositive(EditHole.Text, HoleMM) then begin WizShowBox(LabelErrHole.Caption, 16); Exit; end;
+    if not ReadPositive(EditPad.Text, PadMM) then begin WizShowBox(LabelErrPad.Caption, 16); Exit; end;
+    if not ReadPositive(EditMargin.Text, MarginMM) then begin WizShowBox(LabelErrMargin.Caption, 16); Exit; end;
+    if not ReadPositive(EditGrid.Text, GridMM) then begin WizShowBox(LabelErrGrid.Caption, 16); Exit; end;
     FourHoles := CheckFourHoles.Checked;
     MakeGnd := CheckGnd.Checked;
     MakeMask := CheckMask.Checked;
@@ -286,8 +313,8 @@ begin
     except
         CopperCount := 4;
     end;
-    if FilletMM * 2 >= Wmm then begin ShowError('Радиус скругления слишком большой для ширины.'); Exit; end;
-    if FilletMM * 2 >= Hmm then begin ShowError('Радиус скругления слишком большой для высоты.'); Exit; end;
+    if FilletMM * 2 >= Wmm then begin WizShowBox(LabelErrFilletW.Caption, 16); Exit; end;
+    if FilletMM * 2 >= Hmm then begin WizShowBox(LabelErrFilletH.Caption, 16); Exit; end;
     FormWizard.Close;
     BuildBoard;
 end;

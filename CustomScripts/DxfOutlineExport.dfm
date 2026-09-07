@@ -5,11 +5,11 @@ object FormDxf: TFormDxf
   Caption = 'DXF: '#1082#1086#1085#1090#1091#1088#1099' '#1089#1083#1086#1105#1074' '#1083#1080#1085#1080#1103#1084#1080
   ClientHeight = 460
   ClientWidth = 740
-  Color = clBtnFace
+  Color = $001E1A1A
   Font.Charset = DEFAULT_CHARSET
-  Font.Color = clWindowText
-  Font.Height = -11
-  Font.Name = 'Tahoma'
+  Font.Color = $00F0F0F0
+  Font.Height = -12
+  Font.Name = 'Segoe UI'
   Font.Style = []
   OldCreateOrder = False
   Position = poScreenCenter
@@ -23,6 +23,12 @@ object FormDxf: TFormDxf
     Height = 214
   end
   object LabelImageHint: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 8
     Top = 226
     Width = 320
@@ -32,6 +38,12 @@ object FormDxf: TFormDxf
     WordWrap = True
   end
   object LabelLayers: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 8
     Width = 380
@@ -41,6 +53,13 @@ object FormDxf: TFormDxf
     WordWrap = True
   end
   object CheckListLayers: TCheckListBox
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 40
     Width = 384
@@ -49,6 +68,13 @@ object FormDxf: TFormDxf
     TabOrder = 0
   end
   object ButtonAll: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 368
     Width = 90
@@ -58,6 +84,13 @@ object FormDxf: TFormDxf
     OnClick = ButtonAllClick
   end
   object ButtonNone: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 436
     Top = 368
     Width = 90
@@ -67,6 +100,13 @@ object FormDxf: TFormDxf
     OnClick = ButtonNoneClick
   end
   object ButtonCopper: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 532
     Top = 368
     Width = 120
@@ -76,6 +116,13 @@ object FormDxf: TFormDxf
     OnClick = ButtonCopperClick
   end
   object ButtonOK: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 436
     Top = 420
     Width = 90
@@ -86,6 +133,13 @@ object FormDxf: TFormDxf
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 540
     Top = 420
     Width = 90
@@ -94,5 +148,29 @@ object FormDxf: TFormDxf
     Caption = #1054#1090#1084#1077#1085#1072
     TabOrder = 5
     OnClick = ButtonCancelClick
+  end
+  object LabelErrNoPcb: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = 'Open a PCB document.'
+  end
+  object LabelWarnNone: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1042#1099#1073#1077#1088#1080#1090#1077' '#1093#1086#1090#1103' '#1073#1099' '#1086#1076#1080#1085' '#1089#1083#1086#1081'.'
+  end
+  object LabelInfoSaved: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = 'DXF '#1089#1086#1093#1088#1072#1085#1105#1085':'
   end
 end

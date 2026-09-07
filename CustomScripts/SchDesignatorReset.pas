@@ -18,6 +18,25 @@ procedure TFormAnnot.ButtonOKClick(SchSender: TObject); forward;
 procedure TFormAnnot.ButtonCancelClick(SchSender: TObject); forward;
 procedure TFormAnnot.FormAnnotShow(SchSender: TObject); forward;
 
+procedure SchShowBox(const Msg : String; Flags : Integer);
+begin
+    try
+        MessageBox(0, PChar(Msg), PChar(FormAnnot.Caption), Flags);
+    except
+        try ShowInfo(Msg, FormAnnot.Caption); except end;
+    end;
+end;
+
+function SchAskYesNo(const Msg : String) : Boolean;
+begin
+    Result := False;
+    try
+        Result := MessageBox(0, PChar(Msg), PChar(FormAnnot.Caption), 36) = 6;
+    except
+        try Result := ConfirmNoYes(Msg); except end;
+    end;
+end;
+
 function DesignatorPrefix(const SchDes : String) : String;
 var
     Schi : Integer;
@@ -80,7 +99,6 @@ begin
                         SchDes := SchComp.Designator;
                         Text := SchDes.Text;
                         Pref := DesignatorPrefix(Text);
-                        SchComp.SetState_x_Location(SchComp.Location.X); { touch for undo }
                         SchDes.Text := Pref + '?';
                         Inc(ChangedCnt);
                     except
@@ -120,8 +138,9 @@ begin
             begin
                 SchX := SchComp.Location.X;
                 SchY := SchComp.Location.Y;
-                { Down then Across: сначала колонка сверху вниз, затем следующая слева направо. }
-                SortKey := Format('%.10d|%.10d', [SchX, 1000000000 - SchY]);
+                { Down then Across: колонка = корзина X, внутри колонки Y сверху вниз.
+                  Без корзины компоненты одной колонки с разным X шли бы как отдельные столбцы. }
+                SortKey := Format('%.8d|%.10d', [SchX div 100, 2000000000 - SchY]);
                 SchList.AddObject(SortKey, SchComp);
             end;
             SchComp := SchIter.NextSchObject;
@@ -180,7 +199,7 @@ begin
 
     if SchServer = nil then
     begin
-        ShowError('Нет открытой схемы (SchServer).');
+        SchShowBox(LabelErrSch.Caption, 16);
         Exit;
     end;
 
@@ -193,10 +212,10 @@ begin
     begin
         if SchProject = nil then
         begin
-            ShowError('Нет активного проекта.');
+            SchShowBox(LabelErrPrj.Caption, 16);
             Exit;
         end;
-        if not ConfirmNoYes('Перенумеровать все схематические листы проекта (Down then Across)?') then
+        if not SchAskYesNo(LabelAskAll.Caption) then
             Exit;
     end;
 
@@ -231,25 +250,21 @@ begin
                 end;
             end;
             if CountSheets = 0 then
-                ShowWarning('В проекте не найдено схематических листов.');
+                SchShowBox(LabelWarnSheets.Caption, 48);
         end
         else
         begin
             if Current = nil then
             begin
-                ShowError('Нет текущего схематического документа.');
+                SchShowBox(LabelErrDoc.Caption, 16);
                 Exit;
             end;
             if DoReset then ResetSheet(Current);
             if DoAnnotate then AnnotateSheet(Current);
         end;
 
-        ShowInfo('Готово.' + sLineBreak +
-                 'Изменено десигнаторов: ' + IntToStr(ChangedCnt) + sLineBreak +
-                 'Пропущено (заблокированы): ' + IntToStr(SkippedLock) + sLineBreak + sLineBreak +
-                 'Порядок: Down then Across. Счётчики префиксов общие на весь проект.' + sLineBreak +
-                 'Синхронизируйте PCB через ECO при необходимости.',
-                 'Аннотация');
+        SchShowBox(LabelInfoDone.Caption + IntToStr(ChangedCnt) + sLineBreak +
+                   LabelInfoLock.Caption + IntToStr(SkippedLock), 64);
     finally
         PrefixCounters.Free;
         PrefixCounters := nil;
@@ -263,7 +278,7 @@ begin
     AllSheets := CheckAllSheets.Checked;
     if (not DoReset) and (not DoAnnotate) then
     begin
-        ShowWarning('Выберите сброс и/или перенумерацию.');
+        SchShowBox(LabelWarnChoose.Caption, 48);
         Exit;
     end;
     FormAnnot.Close;

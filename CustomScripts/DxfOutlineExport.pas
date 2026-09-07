@@ -272,7 +272,6 @@ var
     Dxfi : Integer;
     Ang, DxfR : Double;
     Px, Py, Qx, Qy : TCoord;
-    DxfRot : Double;
 begin
     { Размер площадки на данном слое. Для SMT — Top/Bottom size. }
     DxfX := DxfPad.X;
@@ -292,41 +291,35 @@ begin
 
     if (SX <= 0) or (SY <= 0) then Exit;
 
+    { TShape: eRounded, eRectangular, eOctagonal, eCircleShape, eRoundRectShape. }
+    Shape := eRectangular;
     try
-        Shape := DxfPad.Mode;
+        Shape := DxfPad.TopShape;
     except
-        Shape := eSimple;
-    end;
-
-    { Круглая площадка: если размеры равны и форма круглая. }
-    try
-        if DxfPad.TopShape = eRounded then
-        begin
-            if Abs(SX - SY) < 10 then
-            begin
-                WriteCircle(LName, DxfX, DxfY, SX div 2);
-                Exit;
-            end;
+        try
+            Shape := DxfPad.ShapeOnLayer(DxfALayer);
+        except
+            Shape := eRectangular;
         end;
-    except
     end;
 
-    try
-        if (DxfPad.TopShape = eRound) or (DxfPad.Shape = eRound) then
+    if (Shape = eRounded) or (Shape = eCircleShape) then
+    begin
+        if Abs(SX - SY) < 10 then
         begin
             WriteCircle(LName, DxfX, DxfY, SX div 2);
             Exit;
         end;
-    except
     end;
 
-    { Прямоугольник / скруглённый прямоугольник — bounding box с опциональными галтелями. }
     CR := 0;
     try
         CR := DxfPad.CornerRadiusTop;
     except
         CR := 0;
     end;
+    if (CR <= 0) and (Shape = eRoundRectShape) then
+        CR := (SX + SY) div 20;
 
     if CR > 0 then
     begin
@@ -338,34 +331,29 @@ begin
         WriteArc(LName, DxfX + SX div 2 - CR, DxfY - SY div 2 + CR, CR, 270, 0);
         WriteArc(LName, DxfX + SX div 2 - CR, DxfY + SY div 2 - CR, CR, 0, 90);
         WriteArc(LName, DxfX - SX div 2 + CR, DxfY + SY div 2 - CR, CR, 90, 180);
-    end
-    else
-    begin
-        { Октагон: 8 сторон, иначе прямоугольник. }
-        try
-            if (DxfPad.TopShape = eOctagonal) or (DxfPad.Shape = eOctagonal) then
-            begin
-                DxfR := SX / 2.0;
-                for Dxfi := 0 to 7 do
-                begin
-                    Ang := (22.5 + Dxfi * 45) * DxfPiValue / 180;
-                    Px := Round(DxfX + DxfR * Cos(Ang));
-                    Py := Round(DxfY + DxfR * Sin(Ang));
-                    Ang := (22.5 + (Dxfi + 1) * 45) * DxfPiValue / 180;
-                    Qx := Round(DxfX + DxfR * Cos(Ang));
-                    Qy := Round(DxfY + DxfR * Sin(Ang));
-                    WriteLine(LName, Px, Py, Qx, Qy);
-                end;
-                Exit;
-            end;
-        except
-        end;
-
-        WriteLine(LName, DxfX - SX div 2, DxfY - SY div 2, DxfX + SX div 2, DxfY - SY div 2);
-        WriteLine(LName, DxfX + SX div 2, DxfY - SY div 2, DxfX + SX div 2, DxfY + SY div 2);
-        WriteLine(LName, DxfX + SX div 2, DxfY + SY div 2, DxfX - SX div 2, DxfY + SY div 2);
-        WriteLine(LName, DxfX - SX div 2, DxfY + SY div 2, DxfX - SX div 2, DxfY - SY div 2);
+        Exit;
     end;
+
+    if Shape = eOctagonal then
+    begin
+        DxfR := SX / 2.0;
+        for Dxfi := 0 to 7 do
+        begin
+            Ang := (22.5 + Dxfi * 45) * DxfPiValue / 180;
+            Px := Round(DxfX + DxfR * Cos(Ang));
+            Py := Round(DxfY + DxfR * Sin(Ang));
+            Ang := (22.5 + (Dxfi + 1) * 45) * DxfPiValue / 180;
+            Qx := Round(DxfX + DxfR * Cos(Ang));
+            Qy := Round(DxfY + DxfR * Sin(Ang));
+            WriteLine(LName, Px, Py, Qx, Qy);
+        end;
+        Exit;
+    end;
+
+    WriteLine(LName, DxfX - SX div 2, DxfY - SY div 2, DxfX + SX div 2, DxfY - SY div 2);
+    WriteLine(LName, DxfX + SX div 2, DxfY - SY div 2, DxfX + SX div 2, DxfY + SY div 2);
+    WriteLine(LName, DxfX + SX div 2, DxfY + SY div 2, DxfX - SX div 2, DxfY + SY div 2);
+    WriteLine(LName, DxfX - SX div 2, DxfY + SY div 2, DxfX - SX div 2, DxfY - SY div 2);
 end;
 
 procedure ExportViaOutline(const LName : String; DxfVia : IPCB_Via; DxfALayer : TLayer);
@@ -745,13 +733,19 @@ begin
 
         WriteDxfFooter;
         DxfLines.SaveToFile(DxfFileName);
-        ShowInfo('DXF сохранён:' + sLineBreak + DxfFileName + sLineBreak + sLineBreak +
-                 'Слоёв: ' + IntToStr(DxfNames.Count) + sLineBreak +
-                 'Текст шелкографии не экспортирован (см. README).',
-                 'Экспорт DXF');
+        DxfShowBox(LabelInfoSaved.Caption + sLineBreak + DxfFileName, 64);
     finally
         DxfNames.Free;
         DxfLines.Free;
+    end;
+end;
+
+procedure DxfShowBox(const Msg : String; Flags : Integer);
+begin
+    try
+        MessageBox(0, PChar(Msg), PChar(FormDxf.Caption), Flags);
+    except
+        try ShowInfo(Msg, FormDxf.Caption); except end;
     end;
 end;
 
@@ -827,7 +821,7 @@ var
 begin
     if DxfBoard = nil then
     begin
-        ShowError('Open a PCB document.');
+        DxfShowBox(LabelErrNoPcb.Caption, 16);
         Exit;
     end;
     Dxfn := 0;
@@ -835,7 +829,7 @@ begin
         if CheckListLayers.Checked[Dxfi] then Inc(Dxfn);
     if Dxfn = 0 then
     begin
-        ShowWarning('Выберите хотя бы один слой.');
+        DxfShowBox(LabelWarnNone.Caption, 48);
         Exit;
     end;
 

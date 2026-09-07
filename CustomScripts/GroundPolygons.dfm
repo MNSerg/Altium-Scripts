@@ -5,11 +5,11 @@ object FormGnd: TFormGnd
   Caption = #1047#1077#1084#1083#1103#1085#1099#1077' '#1087#1086#1083#1080#1075#1086#1085#1099' '#1087#1086' '#1082#1086#1085#1090#1091#1088#1091
   ClientHeight = 340
   ClientWidth = 740
-  Color = clBtnFace
+  Color = $001E1A1A
   Font.Charset = DEFAULT_CHARSET
-  Font.Color = clWindowText
-  Font.Height = -11
-  Font.Name = 'Tahoma'
+  Font.Color = $00F0F0F0
+  Font.Height = -12
+  Font.Name = 'Segoe UI'
   Font.Style = []
   OldCreateOrder = False
   Position = poScreenCenter
@@ -23,6 +23,12 @@ object FormGnd: TFormGnd
     Height = 214
   end
   object LabelImageHint: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 8
     Top = 226
     Width = 320
@@ -32,6 +38,12 @@ object FormGnd: TFormGnd
     WordWrap = True
   end
   object LabelNet: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 20
     Width = 70
@@ -39,6 +51,13 @@ object FormGnd: TFormGnd
     Caption = #1048#1084#1103' '#1094#1077#1087#1080':'
   end
   object EditNet: TEdit
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 480
     Top = 16
     Width = 220
@@ -47,6 +66,12 @@ object FormGnd: TFormGnd
     Text = 'GND'
   end
   object CheckSolid: TCheckBox
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 56
     Width = 360
@@ -57,6 +82,12 @@ object FormGnd: TFormGnd
     TabOrder = 1
   end
   object LabelHint: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 88
     Width = 380
@@ -66,6 +97,13 @@ object FormGnd: TFormGnd
     WordWrap = True
   end
   object ButtonOK: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 400
     Top = 290
     Width = 90
@@ -76,6 +114,13 @@ object FormGnd: TFormGnd
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 510
     Top = 290
     Width = 90
@@ -84,5 +129,77 @@ object FormGnd: TFormGnd
     Caption = #1054#1090#1084#1077#1085#1072
     TabOrder = 3
     OnClick = ButtonCancelClick
+  end
+  object LabelAskReplace1: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1072' '#1089#1083#1086#1077' '
+  end
+  object LabelAskReplace2: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = ' '#1091#1078#1077' '#1077#1089#1090#1100' '#1087#1086#1083#1080#1075#1086#1085' '#1094#1077#1087#1080' '
+  end
+  object LabelAskReplace3: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = '. '#1047#1072#1084#1077#1085#1103#1090#1100' '#1089#1091#1097#1077#1089#1090#1074#1091#1102#1097#1080#1077'? '#1044#1072' = '#1074#1089#1077' '#1079#1072#1084#1077#1085#1080#1090#1100', '#1053#1077#1090' = '#1087#1088#1086#1087#1091#1089#1082#1072#1090#1100'.'
+  end
+  object LabelAskNoNet1: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1062#1077#1087#1100' '#171
+  end
+  object LabelAskNoNet2: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #187' '#1085#1077' '#1085#1072#1081#1076#1077#1085#1072'. '#1057#1086#1079#1076#1072#1090#1100' '#1087#1086#1083#1080#1075#1086#1085#1099' '#1073#1077#1079' '#1094#1077#1087#1080'?'
+  end
+  object LabelInfoDone: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1057#1086#1079#1076#1072#1085#1086' '#1087#1086#1083#1080#1075#1086#1085#1086#1074': '
+  end
+  object LabelInfoSkip: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1055#1088#1086#1087#1091#1097#1077#1085#1086': '
+  end
+  object LabelErrNoPcb: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = 'Open a PCB document.'
+  end
+  object LabelErrNoSrv: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = 'PCB-server is not available.'
   end
 end

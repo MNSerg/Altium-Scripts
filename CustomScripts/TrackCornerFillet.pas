@@ -19,6 +19,7 @@ var
     CreatedCount   : Integer;
     SkippedCount   : Integer;
     TooLargeCount  : Integer;
+    RemovedCount   : Integer;
 
 { Run Script: choose procedure StartTrackCornerFillet (project compiles only this .pas). }
 procedure StartTrackCornerFillet; forward;
@@ -27,7 +28,7 @@ procedure TFormFillet.ButtonOKClick(FilSender: TObject); forward;
 procedure TFormFillet.ButtonCancelClick(FilSender: TObject); forward;
 procedure TFormFillet.FormFilletShow(FilSender: TObject); forward;
 procedure DoFilletWork; forward;
-procedure ExpandConnectedPath; forward;
+procedure RestoreTracksToCorner(FirstTrack, SecondTrack : IPCB_Track); forward;
 
 function Distance(FilX1, FilY1, FilX2, FilY2 : TCoord) : Double;
 begin
@@ -39,17 +40,49 @@ begin
     Result := Distance(FilX1, FilY1, FilX2, FilY2) <= cJoinTol;
 end;
 
+function FilParseFloat(const FilS : String; var FilV : Double) : Boolean;
+var
+    FilT : String;
+begin
+    Result := False;
+    FilT := FilS;
+    try
+        FilV := StrToFloat(StringReplace(FilT, ',', '.', [rfReplaceAll]));
+        Result := True;
+        Exit;
+    except
+    end;
+    try
+        FilV := StrToFloat(StringReplace(FilT, '.', ',', [rfReplaceAll]));
+        Result := True;
+    except
+        Result := False;
+    end;
+end;
+
 function IsNumericMM(Text : String) : Boolean;
 var
     FilV : Double;
 begin
-    Result := False;
-    if Text = '' then Exit;
+    Result := FilParseFloat(Text, FilV) and (FilV >= 0);
+end;
+
+procedure FilShowBox(const Msg : String; Flags : Integer);
+begin
     try
-        FilV := StrToFloat(Text);
-        Result := FilV >= 0;
+        MessageBox(0, PChar(Msg), PChar(FormFillet.Caption), Flags);
     except
-        Result := False;
+        try ShowInfo(Msg, FormFillet.Caption); except end;
+    end;
+end;
+
+function FilAskYesNo(const Msg : String) : Boolean;
+begin
+    Result := False;
+    try
+        Result := MessageBox(0, PChar(Msg), PChar(FormFillet.Caption), 36) = 6;
+    except
+        try Result := ConfirmNoYes(Msg); except end;
     end;
 end;
 
@@ -171,79 +204,21 @@ begin
     end;
 end;
 
-{ Сколько выделенных треков/дуг сходятся в точке. T-стык: >= 3. }
-function CountAllAtPoint(Xp, Yp : TCoord; FilALayer : TLayer) : Integer;
+{ Дуга угла: между двумя треками, и угол выбран (дуга или оба сегмента). }
+procedure RememberCornerArc(AnArc : IPCB_Primitive; ArcList : TStringList);
 var
-    SIter : IPCB_SpatialIterator;
-    Other : IPCB_Primitive;
+    FilKey : String;
+    FilT1, FilT2 : IPCB_Primitive;
 begin
-    Result := 0;
-    SIter := FilBoard.SpatialIterator_Create;
-    SIter.AddFilter_ObjectSet(MkSet(eTrackObject, eArcObject));
-    SIter.AddFilter_LayerSet(MkSet(FilALayer));
-    SIter.AddFilter_Area(Xp - cJoinTol, Yp - cJoinTol, Xp + cJoinTol, Yp + cJoinTol);
-    Other := SIter.FirstPCBObject;
-    while Other <> nil do
-    begin
-        if Other.ObjectId = eTrackObject then
-        begin
-            if SamePoint(Other.X1, Other.Y1, Xp, Yp) or SamePoint(Other.X2, Other.Y2, Xp, Yp) then
-                Inc(Result);
-        end
-        else if Other.ObjectId = eArcObject then
-        begin
-            if SamePoint(Other.StartX, Other.StartY, Xp, Yp) or SamePoint(Other.EndX, Other.EndY, Xp, Yp) then
-                Inc(Result);
-        end;
-        Other := SIter.NextPCBObject;
-    end;
-    FilBoard.SpatialIterator_Destroy(SIter);
-end;
-
-{ Добирает состыкованный путь той же цепи/слоя (квадрат из 1 сегмента → 4). T-стыки не трогаем. }
-procedure ExpandConnectedPath;
-var
-    Changed : Boolean;
-    Guard, Fili, EndIdx : Integer;
-    FilPrim, Other : IPCB_Primitive;
-    Xp, Yp : TCoord;
-begin
-    Guard := 0;
-    repeat
-        Changed := False;
-        Inc(Guard);
-        Fili := 0;
-        while Fili < FilBoard.SelectecObjectCount do
-        begin
-            FilPrim := FilBoard.SelectecObject(Fili);
-            if (FilPrim.ObjectId = eTrackObject) or (FilPrim.ObjectId = eArcObject) then
-            begin
-                for EndIdx := 1 to 2 do
-                begin
-                    if FilPrim.ObjectId = eTrackObject then
-                    begin
-                        if EndIdx = 1 then begin Xp := FilPrim.X1; Yp := FilPrim.Y1; end
-                        else begin Xp := FilPrim.X2; Yp := FilPrim.Y2; end;
-                    end
-                    else
-                    begin
-                        if EndIdx = 1 then begin Xp := FilPrim.StartX; Yp := FilPrim.StartY; end
-                        else begin Xp := FilPrim.EndX; Yp := FilPrim.EndY; end;
-                    end;
-                    if CountAllAtPoint(Xp, Yp, FilPrim.Layer) = 2 then
-                    begin
-                        Other := FindConnectedAtEnd(FilPrim, EndIdx, False);
-                        if (Other <> nil) and (not Other.Selected) then
-                        begin
-                            Other.Selected := True;
-                            Changed := True;
-                        end;
-                    end;
-                end;
-            end;
-            Inc(Fili);
-        end;
-    until (not Changed) or (Guard > 8000);
+    if (AnArc = nil) or (AnArc.ObjectId <> eArcObject) then Exit;
+    FilKey := IntToStr(AnArc.I_ObjectAddress);
+    if ArcList.IndexOf(FilKey) >= 0 then Exit;
+    FilT1 := FindConnectedAtEnd(AnArc, 1, False);
+    FilT2 := FindConnectedAtEnd(AnArc, 2, False);
+    if (FilT1 = nil) or (FilT2 = nil) then Exit;
+    if (FilT1.ObjectId <> eTrackObject) or (FilT2.ObjectId <> eTrackObject) then Exit;
+    if AnArc.Selected or (FilT1.Selected and FilT2.Selected) then
+        ArcList.AddObject(FilKey, AnArc);
 end;
 
 { ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
@@ -596,18 +571,29 @@ begin
     Result := True;
 end;
 
+procedure RestoreTracksToCorner(FirstTrack, SecondTrack : IPCB_Track);
+var
+    Xp, Yp : TCoord;
+begin
+    if (FirstTrack = nil) or (SecondTrack = nil) then Exit;
+    if not IntersectTracks(FirstTrack, SecondTrack, Xp, Yp) then Exit;
+    ExtendTrackToPoint(FirstTrack, Xp, Yp);
+    ExtendTrackToPoint(SecondTrack, Xp, Yp);
+end;
+
 procedure EnsureReplaceAsked;
 var
     FilAns : Boolean;
 begin
     if AskedReplace then Exit;
     AskedReplace := True;
-    FilAns := ConfirmNoYes('На выбранном треке уже есть скругления. Переделать их?');
+    FilAns := FilAskYesNo(LabelAskRedo.Caption);
     ReplaceFillets := FilAns;
 end;
 
 procedure ProcessTrackPair(FilT1, FilT2 : IPCB_Track);
 begin
+    if RadiusCoord <= 0 then Exit;
     if FilT1.I_ObjectAddress = FilT2.I_ObjectAddress then Exit;
     if FilT1.Layer <> FilT2.Layer then Exit;
     CreateFilletBetweenTracks(FilT1, FilT2);
@@ -618,21 +604,31 @@ var
     FilT1, FilT2 : IPCB_Primitive;
     OtherEnd : Integer;
 begin
-    FilT1 := FindConnectedAtEnd(AnArc, 1, True);
-    FilT2 := FindConnectedAtEnd(AnArc, 2, True);
+    FilT1 := FindConnectedAtEnd(AnArc, 1, False);
+    FilT2 := FindConnectedAtEnd(AnArc, 2, False);
     if (FilT1 = nil) or (FilT2 = nil) then Exit;
     if (FilT1.ObjectId <> eTrackObject) or (FilT2.ObjectId <> eTrackObject) then Exit;
 
-    EnsureReplaceAsked;
-    if not ReplaceFillets then
+    { R=0 всегда снимает скругление; при R>0 спрашиваем один раз. }
+    if RadiusCoord > 0 then
     begin
-        Inc(SkippedCount);
-        Exit;
+        EnsureReplaceAsked;
+        if not ReplaceFillets then
+        begin
+            Inc(SkippedCount);
+            Exit;
+        end;
     end;
 
-    { Вернуть концы треков к пересечению и поставить новую дугу. }
+    { Вернуть концы треков к пересечению; при R>0 поставить новую дугу. }
     RemoveArcUndoSafe(AnArc);
-    CreateFilletBetweenTracks(FilT1, FilT2);
+    if RadiusCoord <= 0 then
+    begin
+        RestoreTracksToCorner(FilT1, FilT2);
+        Inc(RemovedCount);
+    end
+    else
+        CreateFilletBetweenTracks(FilT1, FilT2);
 end;
 
 procedure DoFilletWork;
@@ -644,18 +640,19 @@ var
     EndIdx : Integer;
     ConnCount : Integer;
     PairDone : TStringList;
+    ArcList : TStringList;
     FilKey : String;
     Addr1, Addr2 : Integer;
 begin
     if PCBServer = nil then
     begin
-        ShowError('PCB-server is not available.');
+        FilShowBox(LabelErrNoSrv.Caption, 16);
         Exit;
     end;
     FilBoard := PCBServer.GetCurrentPCBBoard;
     if FilBoard = nil then
     begin
-        ShowError('Open a PCB document.');
+        FilShowBox(LabelErrNoPcb.Caption, 16);
         Exit;
     end;
 
@@ -668,38 +665,47 @@ begin
         else
             FilPrim.SetState_Selected(False);
     end;
-    ExpandConnectedPath;
+    { Не расширяем выделение на весь контур: только явно выбранные сегменты. }
     if FilBoard.SelectecObjectCount = 0 then
     begin
-        ShowWarning('Select one track segment or a path (a square of 4 segments gets 4 fillets).');
+        FilShowBox(LabelWarnNone.Caption, 48);
         Exit;
     end;
 
     CreatedCount := 0;
     SkippedCount := 0;
     TooLargeCount := 0;
+    RemovedCount := 0;
     AskedReplace := False;
     ReplaceFillets := False;
     PairDone := TStringList.Create;
     PairDone.Sorted := True;
     PairDone.Duplicates := dupIgnore;
+    ArcList := TStringList.Create;
 
     PCBServer.PreProcess;
     try
-        { Сначала существующие выделенные дуги-скругления. }
-        Fili := 0;
-        while Fili < FilBoard.SelectecObjectCount do
+        { Снимок дуг выбранных углов (выделенная дуга или оба сегмента).
+          Не расширяем контур: два ребра квадрата = один угол. }
+        for Fili := 0 to FilBoard.SelectecObjectCount - 1 do
         begin
             FilPrim := FilBoard.SelectecObject(Fili);
             if FilPrim.ObjectId = eArcObject then
+                RememberCornerArc(FilPrim, ArcList)
+            else if FilPrim.ObjectId = eTrackObject then
             begin
-                ProcessExistingFillet(FilPrim);
-                { После удаления дуги индексы выделения сдвигаются — не увеличиваем i. }
+                for EndIdx := 1 to 2 do
+                begin
+                    Other := FindConnectedAtEnd(FilPrim, EndIdx, False);
+                    if (Other <> nil) and (Other.ObjectId = eArcObject) then
+                        RememberCornerArc(Other, ArcList);
+                end;
             end;
-            Inc(Fili);
         end;
+        for Fili := 0 to ArcList.Count - 1 do
+            ProcessExistingFillet(ArcList.Objects[Fili]);
 
-        { Затем пары треков с общей вершиной (ровно 2 выделенных сегмента). }
+        { Пары явно выделенных треков: угол только если оба сегмента выбраны. }
         for Fili := 0 to FilBoard.SelectecObjectCount - 1 do
         begin
             FilPrim := FilBoard.SelectecObject(Fili);
@@ -717,16 +723,11 @@ begin
                 end;
 
                 ConnCount := CountSelectedAtPoint(Xp, Yp, 0);
-                { Сам трек + ровно один сосед = 2. Больше — T-стык, пропускаем. }
                 if ConnCount <> 2 then Continue;
 
                 Other := FindConnectedAtEnd(FilT1, EndIdx, True);
                 if Other = nil then Continue;
-                if Other.ObjectId = eArcObject then
-                begin
-                    { Уже есть дуга — обработано выше или пользователь отказался. }
-                    Continue;
-                end;
+                if Other.ObjectId = eArcObject then Continue;
                 if Other.ObjectId <> eTrackObject then Continue;
                 FilT2 := Other;
 
@@ -745,37 +746,32 @@ begin
     finally
         PCBServer.PostProcess;
         PairDone.Free;
+        ArcList.Free;
     end;
 
     Client.SendMessage('PCB:Zoom', 'Action=Redraw', 255, Client.CurrentView);
 
-    if CreatedCount = 0 then
-        ShowWarning('Скругления не созданы. Выделите состыкованные сегменты трека, проверьте радиус.')
+    if (CreatedCount = 0) and (RemovedCount = 0) then
+        FilShowBox(LabelWarnNone.Caption, 48)
     else
-        ShowInfo('Создано/обновлено скруглений: ' + IntToStr(CreatedCount) + sLineBreak +
-                 'Пропущено (уже есть / отказ): ' + IntToStr(SkippedCount) + sLineBreak +
-                 'Пропущено (радиус слишком большой): ' + IntToStr(TooLargeCount),
-                 'Скругление углов');
+        FilShowBox(LabelInfoDone.Caption + IntToStr(CreatedCount) + sLineBreak +
+                   LabelInfoRemoved.Caption + IntToStr(RemovedCount) + sLineBreak +
+                   LabelInfoSkip.Caption + IntToStr(SkippedCount) + sLineBreak +
+                   LabelInfoLarge.Caption + IntToStr(TooLargeCount), 64);
 end;
 
 procedure TFormFillet.ButtonOKClick(FilSender: TObject);
 var
     MM : Double;
 begin
-    if not IsNumericMM(EditRadius.Text) then
+    if not FilParseFloat(EditRadius.Text, MM) then
     begin
-        ShowError('Введите неотрицательный радиус в миллиметрах.');
+        FilShowBox(LabelErrRadius.Caption, 16);
         Exit;
     end;
-    MM := StrToFloat(EditRadius.Text);
     if MM < 0 then
     begin
-        ShowError('Радиус не может быть отрицательным.');
-        Exit;
-    end;
-    if MM = 0 then
-    begin
-        ShowError('Радиус должен быть больше нуля.');
+        FilShowBox(LabelErrNeg.Caption, 16);
         Exit;
     end;
     RadiusCoord := MMsToCoord(MM);
@@ -794,7 +790,7 @@ begin
         FilCS_TryLoadHelpImage('Fillet.bmp', 'Fillet.png');
     except
     end;
-    EditRadius.Text := FloatToStr(cDefaultRadiusMM);
+    EditRadius.Text := '0.5';
 end;
 
 procedure StartTrackCornerFillet;

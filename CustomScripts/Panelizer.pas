@@ -1,7 +1,7 @@
 ﻿{..............................................................................}
 { Panelizer.pas                                                                 }
-{ Массив плат 4×2 (столбцы×ряды) + перемычки mouse-bite БЕЗ отверстий          }
-{ и общий внешний контур на механическом слое.                                  }
+{ Массив плат 4×2 (столбцы×ряды): путь фрезы вокруг плат с разрывами           }
+{ под перемычки (без отверстий) и внешняя рамка = bbox массива + поле.         }
 {..............................................................................}
 
 const
@@ -27,16 +27,37 @@ procedure TFormPanel.ButtonBrowseClick(PanSender: TObject); forward;
 procedure TFormPanel.ButtonOKClick(PanSender: TObject); forward;
 procedure TFormPanel.ButtonCancelClick(PanSender: TObject); forward;
 procedure TFormPanel.FormPanelShow(PanSender: TObject); forward;
+function BoardOriginX(Col : Integer) : TCoord; forward;
+function BoardOriginY(Row : Integer) : TCoord; forward;
 
-function ParsePositive(const PanS : String; var PanV : Double) : Boolean;
+function PanParseFloat(const PanS : String; var PanV : Double) : Boolean;
+var
+    PanT : String;
 begin
     Result := False;
+    PanT := PanS;
     try
-        PanV := StrToFloat(PanS);
-        Result := PanV > 0;
+        PanV := StrToFloat(StringReplace(PanT, ',', '.', [rfReplaceAll]));
+        Result := True;
+        Exit;
+    except
+    end;
+    try
+        PanV := StrToFloat(StringReplace(PanT, '.', ',', [rfReplaceAll]));
+        Result := True;
     except
         Result := False;
     end;
+end;
+
+function ParsePositive(const PanS : String; var PanV : Double) : Boolean;
+begin
+    Result := PanParseFloat(PanS, PanV) and (PanV > 0);
+end;
+
+function ParseNonNeg(const PanS : String; var PanV : Double) : Boolean;
+begin
+    Result := PanParseFloat(PanS, PanV) and (PanV >= 0);
 end;
 
 function ParsePositiveInt(const PanS : String; var PanV : Integer) : Boolean;
@@ -95,45 +116,86 @@ begin
     AddArc(ABoard, PanX0 + PanR, PanY1 - PanR, PanR, 90, 180, PanALayer);
 end;
 
-{ Перемычка mouse-bite: узкая перемычка БЕЗ отверстий, со скруглением стыка. }
-procedure DrawHTab(ABoard : IPCB_Board; GapLeft, GapRight, MidY, HalfTab, PanR : TCoord; PanALayer : TLayer);
+procedure DrawGappedH(ABoard : IPCB_Board; X0, X1, Y, TabMid, HalfTab : TCoord; PanALayer : TLayer);
 var
-    PanY1, PanY2 : TCoord;
+    G0, G1 : TCoord;
 begin
-    PanY1 := MidY - HalfTab;
-    PanY2 := MidY + HalfTab;
-    { Две горизонтали перемычки и скругления у стыка с контуром платы. }
-    AddTrack(ABoard, GapLeft, PanY1 + PanR, GapRight, PanY1 + PanR, PanALayer);
-    AddTrack(ABoard, GapLeft, PanY2 - PanR, GapRight, PanY2 - PanR, PanALayer);
-    if PanR > 0 then
+    if X1 < X0 then Exit;
+    G0 := TabMid - HalfTab;
+    G1 := TabMid + HalfTab;
+    if G0 > X0 then AddTrack(ABoard, X0, Y, G0, Y, PanALayer);
+    if G1 < X1 then AddTrack(ABoard, G1, Y, X1, Y, PanALayer);
+end;
+
+procedure DrawGappedV(ABoard : IPCB_Board; Y0, Y1, X, TabMid, HalfTab : TCoord; PanALayer : TLayer);
+var
+    G0, G1 : TCoord;
+begin
+    if Y1 < Y0 then Exit;
+    G0 := TabMid - HalfTab;
+    G1 := TabMid + HalfTab;
+    if G0 > Y0 then AddTrack(ABoard, X, Y0, X, G0, PanALayer);
+    if G1 < Y1 then AddTrack(ABoard, X, G1, X, Y1, PanALayer);
+end;
+
+{ Фреза: контур со смещением mill-радиуса от края платы, разрывы = перемычки. }
+procedure DrawMillAroundBoard(ABoard : IPCB_Board; Col, Row : Integer; PanALayer : TLayer);
+var
+    L, B, Rgt, Tp : TCoord;
+    CL, CB, CR, CT, Off, HalfTab, MidX, MidY, Corner : TCoord;
+begin
+    L := BoardOriginX(Col);
+    B := BoardOriginY(Row);
+    Rgt := L + MMsToCoord(BoardW);
+    Tp := B + MMsToCoord(BoardH);
+    Off := MMsToCoord(FilletR);
+    CL := L - Off;
+    CB := B - Off;
+    CR := Rgt + Off;
+    CT := Tp + Off;
+    HalfTab := MMsToCoord(TabW) div 2;
+    if HalfTab < 1 then HalfTab := 1;
+    MidX := (L + Rgt) div 2;
+    MidY := (B + Tp) div 2;
+    Corner := Off;
+    if Corner < 0 then Corner := 0;
+
+    DrawGappedH(ABoard, CL + Corner, CR - Corner, CB, MidX, HalfTab, PanALayer);
+    DrawGappedH(ABoard, CL + Corner, CR - Corner, CT, MidX, HalfTab, PanALayer);
+    DrawGappedV(ABoard, CB + Corner, CT - Corner, CL, MidY, HalfTab, PanALayer);
+    DrawGappedV(ABoard, CB + Corner, CT - Corner, CR, MidY, HalfTab, PanALayer);
+
+    if Off > 0 then
     begin
-        AddArc(ABoard, GapLeft, PanY1 + PanR, PanR, 90, 180, PanALayer);
-        AddArc(ABoard, GapLeft, PanY2 - PanR, PanR, 180, 270, PanALayer);
-        AddArc(ABoard, GapRight, PanY1 + PanR, PanR, 0, 90, PanALayer);
-        AddArc(ABoard, GapRight, PanY2 - PanR, PanR, 270, 0, PanALayer);
-    end
-    else
-    begin
-        AddTrack(ABoard, GapLeft, PanY1, GapLeft, PanY2, PanALayer);
-        AddTrack(ABoard, GapRight, PanY1, GapRight, PanY2, PanALayer);
+        AddArc(ABoard, CL + Off, CB + Off, Off, 180, 270, PanALayer);
+        AddArc(ABoard, CR - Off, CB + Off, Off, 270, 0, PanALayer);
+        AddArc(ABoard, CR - Off, CT - Off, Off, 0, 90, PanALayer);
+        AddArc(ABoard, CL + Off, CT - Off, Off, 90, 180, PanALayer);
     end;
 end;
 
-procedure DrawVTab(ABoard : IPCB_Board; GapBottom, GapTop, MidX, HalfTab, PanR : TCoord; PanALayer : TLayer);
+procedure DrawAllMillPaths(ABoard : IPCB_Board; PanALayer : TLayer);
 var
-    PanX1, PanX2 : TCoord;
+    r, c : Integer;
 begin
-    PanX1 := MidX - HalfTab;
-    PanX2 := MidX + HalfTab;
-    AddTrack(ABoard, PanX1 + PanR, GapBottom, PanX1 + PanR, GapTop, PanALayer);
-    AddTrack(ABoard, PanX2 - PanR, GapBottom, PanX2 - PanR, GapTop, PanALayer);
-    if PanR > 0 then
-    begin
-        AddArc(ABoard, PanX1 + PanR, GapBottom, PanR, 180, 270, PanALayer);
-        AddArc(ABoard, PanX2 - PanR, GapBottom, PanR, 270, 0, PanALayer);
-        AddArc(ABoard, PanX1 + PanR, GapTop, PanR, 90, 180, PanALayer);
-        AddArc(ABoard, PanX2 - PanR, GapTop, PanR, 0, 90, PanALayer);
-    end;
+    for r := 0 to Rows - 1 do
+        for c := 0 to Cols - 1 do
+            DrawMillAroundBoard(ABoard, c, r, PanALayer);
+end;
+
+{ Рамка: bbox массива плат + поле (PanMargin) с каждой стороны. }
+procedure DrawCommonOuterContour(ABoard : IPCB_Board; PanALayer : TLayer);
+var
+    X0, Y0, X1, Y1 : TCoord;
+begin
+    X0 := BoardOriginX(0) - MMsToCoord(PanMargin);
+    Y0 := BoardOriginY(0) - MMsToCoord(PanMargin);
+    X1 := BoardOriginX(Cols - 1) + MMsToCoord(BoardW) + MMsToCoord(PanMargin);
+    Y1 := BoardOriginY(Rows - 1) + MMsToCoord(BoardH) + MMsToCoord(PanMargin);
+    AddTrack(ABoard, X0, Y0, X1, Y0, PanALayer);
+    AddTrack(ABoard, X1, Y0, X1, Y1, PanALayer);
+    AddTrack(ABoard, X1, Y1, X0, Y1, PanALayer);
+    AddTrack(ABoard, X0, Y1, X0, Y0, PanALayer);
 end;
 
 function BoardOriginX(Col : Integer) : TCoord;
@@ -144,80 +206,6 @@ end;
 function BoardOriginY(Row : Integer) : TCoord;
 begin
     Result := MMsToCoord(PanMargin + Row * (BoardH + GapY));
-end;
-
-procedure DrawBoardRect(ABoard : IPCB_Board; Col, Row : Integer; PanALayer : TLayer);
-var
-    PanX0, PanY0, PanX1, PanY1 : TCoord;
-begin
-    PanX0 := BoardOriginX(Col);
-    PanY0 := BoardOriginY(Row);
-    PanX1 := PanX0 + MMsToCoord(BoardW);
-    PanY1 := PanY0 + MMsToCoord(BoardH);
-    DrawRoundedRect(ABoard, PanX0, PanY0, PanX1, PanY1, 0, PanALayer);
-end;
-
-procedure DrawAllTabs(ABoard : IPCB_Board; PanALayer : TLayer);
-var
-    r, c : Integer;
-    PanX0, PanY0, PanX1, PanY1 : TCoord;
-    GapL, GapR, GapB, GapT : TCoord;
-    Mid : TCoord;
-    HalfTab, PanR : TCoord;
-begin
-    HalfTab := MMsToCoord(TabW) div 2;
-    PanR := MMsToCoord(FilletR);
-
-    { Горизонтальные перемычки между столбцами. }
-    for r := 0 to Rows - 1 do
-        for c := 0 to Cols - 2 do
-        begin
-            PanX1 := BoardOriginX(c) + MMsToCoord(BoardW);
-            GapL := PanX1;
-            GapR := BoardOriginX(c + 1);
-            PanY0 := BoardOriginY(r);
-            Mid := PanY0 + MMsToCoord(BoardH / 2);
-            DrawHTab(ABoard, GapL, GapR, Mid, HalfTab, PanR, PanALayer);
-        end;
-
-    { Вертикальные перемычки между рядами. }
-    for c := 0 to Cols - 1 do
-        for r := 0 to Rows - 2 do
-        begin
-            PanY1 := BoardOriginY(r) + MMsToCoord(BoardH);
-            GapB := PanY1;
-            GapT := BoardOriginY(r + 1);
-            PanX0 := BoardOriginX(c);
-            Mid := PanX0 + MMsToCoord(BoardW / 2);
-            DrawVTab(ABoard, GapB, GapT, Mid, HalfTab, PanR, PanALayer);
-        end;
-
-    { Перемычки от крайних плат к рамке панели. }
-    for c := 0 to Cols - 1 do
-    begin
-        PanX0 := BoardOriginX(c);
-        Mid := PanX0 + MMsToCoord(BoardW / 2);
-        { вниз к Y=0 }
-        DrawVTab(ABoard, 0, BoardOriginY(0), Mid, HalfTab, PanR, PanALayer);
-        { вверх к PanelH }
-        DrawVTab(ABoard, BoardOriginY(Rows - 1) + MMsToCoord(BoardH), MMsToCoord(PanelH), Mid, HalfTab, PanR, PanALayer);
-    end;
-    for r := 0 to Rows - 1 do
-    begin
-        PanY0 := BoardOriginY(r);
-        Mid := PanY0 + MMsToCoord(BoardH / 2);
-        DrawHTab(ABoard, 0, BoardOriginX(0), Mid, HalfTab, PanR, PanALayer);
-        DrawHTab(ABoard, BoardOriginX(Cols - 1) + MMsToCoord(BoardW), MMsToCoord(PanelW), Mid, HalfTab, PanR, PanALayer);
-    end;
-end;
-
-{ Общий внешний контур вокруг ВСЕХ плат с учётом перемычек к рамке. }
-procedure DrawCommonOuterContour(ABoard : IPCB_Board; PanALayer : TLayer);
-var
-    PanR : TCoord;
-begin
-    PanR := MMsToCoord(FilletR);
-    DrawRoundedRect(ABoard, 0, 0, MMsToCoord(PanelW), MMsToCoord(PanelH), PanR, PanALayer);
 end;
 
 procedure PlaceEmbeddedArray(ABoard : IPCB_Board);
@@ -238,13 +226,13 @@ begin
     ABoard.AddPCBObject(Emb);
 end;
 
-procedure CopySourceOutlineAsMech(ABoard : IPCB_Board);
-var
-    c, r : Integer;
+procedure PanShowBox(const Msg : String; Flags : Integer);
 begin
-    for r := 0 to Rows - 1 do
-        for c := 0 to Cols - 1 do
-            DrawBoardRect(ABoard, c, r, MechLayer);
+    try
+        MessageBox(0, PChar(Msg), PChar(FormPanel.Caption), Flags);
+    except
+        try ShowInfo(Msg, FormPanel.Caption); except end;
+    end;
 end;
 
 procedure ApplyPanelBoardOutline(ABoard : IPCB_Board);
@@ -280,7 +268,7 @@ begin
     BoardH := CoordToMMs(PanRect.Top - PanRect.Bottom);
     if (BoardW <= 0) or (BoardH <= 0) then
     begin
-        ShowError('Не удалось определить размер исходной платы.');
+        PanShowBox(LabelErrSize.Caption, 16);
         Exit;
     end;
 
@@ -295,16 +283,15 @@ begin
     PanelBoard := PCBServer.GetCurrentPCBBoard;
     if PanelBoard = nil then
     begin
-        ShowError('Не удалось создать новый PCB-документ.');
+        PanShowBox(LabelErrNew.Caption, 16);
         Exit;
     end;
 
     PCBServer.PreProcess;
     try
         PlaceEmbeddedArray(PanelBoard);
+        DrawAllMillPaths(PanelBoard, MechLayer);
         DrawCommonOuterContour(PanelBoard, MechLayer);
-        CopySourceOutlineAsMech(PanelBoard);
-        DrawAllTabs(PanelBoard, MechLayer);
 
         PanelBoard.LayerIsDisplayed[MechLayer] := True;
 
@@ -320,11 +307,9 @@ begin
     end;
 
     Client.SendMessage('PCB:Zoom', 'Action=All', 255, Client.CurrentView);
-    ShowInfo('Панель создана: ' + IntToStr(Cols) + '×' + IntToStr(Rows) + sLineBreak +
-             'Размер заготовки: ' + FormatFloat('0.##', PanelW) + ' × ' + FormatFloat('0.##', PanelH) + ' мм' + sLineBreak +
-             'Общий контур и перемычки — слой ' + Layer2String(MechLayer) + '.' + sLineBreak + sLineBreak +
-             'Проверьте Embedded Board Array и при необходимости задайте Board Outline из рамки.',
-             'Панелизация');
+    PanShowBox(LabelInfoDone.Caption + IntToStr(Cols) + 'x' + IntToStr(Rows) + sLineBreak +
+               LabelInfoSize.Caption + FormatFloat('0.##', PanelW) + ' x ' + FormatFloat('0.##', PanelH) + sLineBreak +
+               LabelInfoLayer.Caption + Layer2String(MechLayer), 64);
 end;
 
 procedure TFormPanel.ButtonBrowseClick(PanSender: TObject);
@@ -334,7 +319,7 @@ var
 begin
     PanDlg := TOpenDialog.Create(nil);
     try
-        PanDlg.Title := 'Выберите исходную плату';
+        PanDlg.Title := LabelDlgTitle.Caption;
         PanDlg.Filter := 'PCB (*.PcbDoc)|*.PcbDoc';
         if PanDlg.Execute then
         begin
@@ -347,7 +332,7 @@ begin
             if SourceBoard = nil then
                 SourceBoard := PCBServer.GetCurrentPCBBoard;
             if SourceBoard = nil then
-                ShowWarning('Не удалось открыть выбранный PCB.');
+                PanShowBox(LabelWarnOpen.Caption, 48);
         end;
     finally
         PanDlg.Free;
@@ -359,32 +344,32 @@ begin
     SourcePath := EditFile.Text;
     if (SourcePath = '') or (not FileExists(SourcePath)) then
     begin
-        ShowError('Укажите существующий файл .PcbDoc.');
+        PanShowBox(LabelErrFile.Caption, 16);
         Exit;
     end;
     if not ParsePositiveInt(EditRows.Text, Rows) then
     begin
-        ShowError('Число рядов должно быть целым > 0.');
+        PanShowBox(LabelErrRows.Caption, 16);
         Exit;
     end;
     if not ParsePositiveInt(EditCols.Text, Cols) then
     begin
-        ShowError('Число столбцов должно быть целым > 0.');
+        PanShowBox(LabelErrCols.Caption, 16);
         Exit;
     end;
-    if not ParsePositive(EditGapX.Text, GapX) then begin ShowError('Некорректный зазор X.'); Exit; end;
-    if not ParsePositive(EditGapY.Text, GapY) then begin ShowError('Некорректный зазор Y.'); Exit; end;
-    if not ParsePositive(EditMargin.Text, PanMargin) then begin ShowError('Некорректное поле.'); Exit; end;
-    if not ParsePositive(EditTab.Text, TabW) then begin ShowError('Некорректная ширина перемычки.'); Exit; end;
-    if not ParsePositive(EditFillet.Text, FilletR) then begin ShowError('Некорректный радиус фрезы.'); Exit; end;
+    if not ParsePositive(EditGapX.Text, GapX) then begin PanShowBox(LabelErrGapX.Caption, 16); Exit; end;
+    if not ParsePositive(EditGapY.Text, GapY) then begin PanShowBox(LabelErrGapY.Caption, 16); Exit; end;
+    if not ParsePositive(EditMargin.Text, PanMargin) then begin PanShowBox(LabelErrMargin.Caption, 16); Exit; end;
+    if not ParsePositive(EditTab.Text, TabW) then begin PanShowBox(LabelErrTab.Caption, 16); Exit; end;
+    if not ParseNonNeg(EditFillet.Text, FilletR) then begin PanShowBox(LabelErrMill.Caption, 16); Exit; end;
     if not ParsePositiveInt(EditMech.Text, MechIndex) then
     begin
-        ShowError('Номер механического слоя: целое 1..32.');
+        PanShowBox(LabelErrMech.Caption, 16);
         Exit;
     end;
     if (MechIndex < 1) or (MechIndex > 32) then
     begin
-        ShowError('Номер механического слоя: 1..32.');
+        PanShowBox(LabelErrMech.Caption, 16);
         Exit;
     end;
 
@@ -392,7 +377,7 @@ begin
         SourceBoard := PCBServer.GetPCBBoardByPath(SourcePath);
     if SourceBoard = nil then
     begin
-        ShowError('Не удалось загрузить исходную плату.');
+        PanShowBox(LabelErrLoad.Caption, 16);
         Exit;
     end;
 

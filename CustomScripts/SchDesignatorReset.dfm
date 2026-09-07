@@ -5,11 +5,11 @@ object FormAnnot: TFormAnnot
   Caption = #1057#1073#1088#1086#1089' '#1080' '#1072#1085#1085#1086#1090#1072#1094#1080#1103' '#1076#1077#1089#1080#1075#1085#1072#1090#1086#1088#1086#1074
   ClientHeight = 340
   ClientWidth = 740
-  Color = clBtnFace
+  Color = $001E1A1A
   Font.Charset = DEFAULT_CHARSET
-  Font.Color = clWindowText
-  Font.Height = -11
-  Font.Name = 'Tahoma'
+  Font.Color = $00F0F0F0
+  Font.Height = -12
+  Font.Name = 'Segoe UI'
   Font.Style = []
   OldCreateOrder = False
   Position = poScreenCenter
@@ -23,6 +23,12 @@ object FormAnnot: TFormAnnot
     Height = 214
   end
   object LabelImageHint: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 8
     Top = 226
     Width = 320
@@ -32,6 +38,12 @@ object FormAnnot: TFormAnnot
     WordWrap = True
   end
   object LabelInfo: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 12
     Width = 384
@@ -41,6 +53,12 @@ object FormAnnot: TFormAnnot
     WordWrap = True
   end
   object CheckReset: TCheckBox
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 96
     Width = 380
@@ -49,6 +67,12 @@ object FormAnnot: TFormAnnot
     TabOrder = 0
   end
   object CheckAnnotate: TCheckBox
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 124
     Width = 380
@@ -59,6 +83,12 @@ object FormAnnot: TFormAnnot
     TabOrder = 1
   end
   object CheckAllSheets: TCheckBox
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 152
     Width = 380
@@ -69,6 +99,13 @@ object FormAnnot: TFormAnnot
     TabOrder = 2
   end
   object ButtonOK: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 400
     Top = 290
     Width = 90
@@ -79,6 +116,13 @@ object FormAnnot: TFormAnnot
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 510
     Top = 290
     Width = 90
@@ -87,5 +131,69 @@ object FormAnnot: TFormAnnot
     Caption = #1054#1090#1084#1077#1085#1072
     TabOrder = 4
     OnClick = ButtonCancelClick
+  end
+  object LabelErrSch: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077#1090' '#1086#1090#1082#1088#1099#1090#1086#1081' '#1089#1093#1077#1084#1099' (SchServer).'
+  end
+  object LabelErrPrj: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077#1090' '#1072#1082#1090#1080#1074#1085#1086#1075#1086' '#1087#1088#1086#1077#1082#1090#1072'.'
+  end
+  object LabelAskAll: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1055#1077#1088#1077#1085#1091#1084#1077#1088#1086#1074#1072#1090#1100' '#1074#1089#1077' '#1089#1093#1077#1084#1072#1090#1080#1095#1077#1089#1082#1080#1077' '#1083#1080#1089#1090#1099' '#1087#1088#1086#1077#1082#1090#1072' (Down then Across)?'
+  end
+  object LabelWarnSheets: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1042' '#1087#1088#1086#1077#1082#1090#1077' '#1085#1077' '#1085#1072#1081#1076#1077#1085#1086' '#1089#1093#1077#1084#1072#1090#1080#1095#1077#1089#1082#1080#1093' '#1083#1080#1089#1090#1086#1074'.'
+  end
+  object LabelErrDoc: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077#1090' '#1090#1077#1082#1091#1097#1077#1075#1086' '#1089#1093#1077#1084#1072#1090#1080#1095#1077#1089#1082#1086#1075#1086' '#1076#1086#1082#1091#1084#1077#1085#1090#1072'.'
+  end
+  object LabelInfoDone: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1043#1086#1090#1086#1074#1086'. '#1048#1079#1084#1077#1085#1077#1085#1086': '
+  end
+  object LabelInfoLock: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1055#1088#1086#1087#1091#1097#1077#1085#1086' '#1079#1072#1073#1083#1086#1082#1080#1088#1086#1074#1072#1085#1085#1099#1093': '
+  end
+  object LabelWarnChoose: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1042#1099#1073#1077#1088#1080#1090#1077' '#1089#1073#1088#1086#1089' '#1080'/'#1080#1083#1080' '#1087#1077#1088#1077#1085#1091#1084#1077#1088#1072#1094#1080#1102'.'
   end
 end

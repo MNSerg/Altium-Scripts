@@ -5,11 +5,11 @@ object FormPanel: TFormPanel
   Caption = #1055#1072#1085#1077#1083#1080#1079#1072#1094#1080#1103' PCB'
   ClientHeight = 500
   ClientWidth = 760
-  Color = clBtnFace
+  Color = $001E1A1A
   Font.Charset = DEFAULT_CHARSET
-  Font.Color = clWindowText
-  Font.Height = -11
-  Font.Name = 'Tahoma'
+  Font.Color = $00F0F0F0
+  Font.Height = -12
+  Font.Name = 'Segoe UI'
   Font.Style = []
   OldCreateOrder = False
   Position = poScreenCenter
@@ -23,6 +23,12 @@ object FormPanel: TFormPanel
     Height = 214
   end
   object LabelImageHint: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 8
     Top = 226
     Width = 320
@@ -32,6 +38,12 @@ object FormPanel: TFormPanel
     WordWrap = True
   end
   object LabelFile: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 8
     Width = 200
@@ -39,6 +51,13 @@ object FormPanel: TFormPanel
     Caption = #1048#1089#1093#1086#1076#1085#1099#1081' PcbDoc:'
   end
   object EditFile: TEdit
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 24
     Width = 300
@@ -46,6 +65,13 @@ object FormPanel: TFormPanel
     TabOrder = 0
   end
   object ButtonBrowse: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 646
     Top = 22
     Width = 90
@@ -55,6 +81,12 @@ object FormPanel: TFormPanel
     OnClick = ButtonBrowseClick
   end
   object LabelCols: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 60
     Width = 200
@@ -62,6 +94,13 @@ object FormPanel: TFormPanel
     Caption = #1057#1090#1086#1083#1073#1094#1099' (X), '#1084#1072#1089#1089#1080#1074' 4x2:'
   end
   object EditCols: TEdit
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 560
     Top = 56
     Width = 80
@@ -70,6 +109,12 @@ object FormPanel: TFormPanel
     Text = '4'
   end
   object LabelRows: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 88
     Width = 200
@@ -77,6 +122,13 @@ object FormPanel: TFormPanel
     Caption = #1056#1103#1076#1099' (Y):'
   end
   object EditRows: TEdit
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 560
     Top = 84
     Width = 80
@@ -85,6 +137,12 @@ object FormPanel: TFormPanel
     Text = '2'
   end
   object LabelGapX: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 116
     Width = 210
@@ -92,6 +150,13 @@ object FormPanel: TFormPanel
     Caption = #1047#1072#1079#1086#1088' '#1087#1083#1072#1090#1072'-'#1087#1083#1072#1090#1072' X, '#1084#1084':'
   end
   object EditGapX: TEdit
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 560
     Top = 112
     Width = 80
@@ -100,6 +165,12 @@ object FormPanel: TFormPanel
     Text = '2'
   end
   object LabelGapY: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 144
     Width = 210
@@ -107,6 +178,13 @@ object FormPanel: TFormPanel
     Caption = #1047#1072#1079#1086#1088' '#1087#1083#1072#1090#1072'-'#1087#1083#1072#1090#1072' Y, '#1084#1084':'
   end
   object EditGapY: TEdit
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 560
     Top = 140
     Width = 80
@@ -115,6 +193,12 @@ object FormPanel: TFormPanel
     Text = '2'
   end
   object LabelMargin: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 172
     Width = 210
@@ -122,6 +206,13 @@ object FormPanel: TFormPanel
     Caption = #1055#1086#1083#1077' '#1076#1086' '#1082#1088#1072#1103' '#1087#1072#1085#1077#1083#1080', '#1084#1084':'
   end
   object EditMargin: TEdit
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 560
     Top = 168
     Width = 80
@@ -130,6 +221,12 @@ object FormPanel: TFormPanel
     Text = '10'
   end
   object LabelTab: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 200
     Width = 210
@@ -137,6 +234,13 @@ object FormPanel: TFormPanel
     Caption = #1064#1080#1088#1080#1085#1072' '#1087#1077#1088#1077#1084#1099#1095#1082#1080' (web), '#1084#1084':'
   end
   object EditTab: TEdit
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 560
     Top = 196
     Width = 80
@@ -145,13 +249,26 @@ object FormPanel: TFormPanel
     Text = '4'
   end
   object LabelFillet: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 228
     Width = 210
     Height = 13
-    Caption = #1056#1072#1076#1080#1091#1089' '#1089#1082#1088#1091#1075#1083#1077#1085#1080#1103' '#1087#1077#1088#1077#1084#1099#1095#1077#1082', '#1084#1084':'
+    Caption = #1056#1072#1076#1080#1091#1089' '#1092#1088#1077#1079#1099', '#1084#1084':'
   end
   object EditFillet: TEdit
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 560
     Top = 224
     Width = 80
@@ -160,6 +277,12 @@ object FormPanel: TFormPanel
     Text = '1'
   end
   object LabelMech: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 256
     Width = 210
@@ -167,6 +290,13 @@ object FormPanel: TFormPanel
     Caption = #1052#1077#1093#1072#1085#1080#1095#1077#1089#1082#1080#1081' '#1089#1083#1086#1081' '#1082#1086#1085#1090#1091#1088#1072' (1..32):'
   end
   object EditMech: TEdit
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 560
     Top = 252
     Width = 80
@@ -175,15 +305,28 @@ object FormPanel: TFormPanel
     Text = '1'
   end
   object LabelHint: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 288
     Width = 400
     Height = 80
     AutoSize = False
-    Caption = #1055#1077#1088#1077#1084#1099#1095#1082#1080' '#1082#1072#1082' mouse-bite: '#1091#1079#1082#1080#1077' '#1087#1077#1088#1077#1084#1099#1095#1082#1080' '#1073#1077#1079' '#1086#1090#1074#1077#1088#1089#1090#1080#1081'. '#1054#1073#1097#1080#1081' '#1082#1086#1085#1090#1091#1088' '#1074#1086#1082#1088#1091#1075' '#1074#1089#1077#1093' '#1087#1083#1072#1090' '#1089' '#1087#1077#1088#1077#1084#1099#1095#1082#1072#1084#1080' '#1085#1072' '#1084#1077#1093#1072#1085#1080#1095#1077#1089#1082#1086#1084' '#1089#1083#1086#1077'.'
+    Caption = #1055#1091#1090#1100' '#1092#1088#1077#1079#1099' '#1074#1086#1082#1088#1091#1075' '#1082#1072#1078#1076#1086#1081' '#1087#1083#1072#1090#1099' '#1089#1086' '#1089#1084#1077#1097#1077#1085#1080#1077#1084' '#1085#1072' '#1088#1072#1076#1080#1091#1089' '#1092#1088#1077#1079#1099', '#1088#1072#1079#1088#1099#1074#1099' = '#1087#1077#1088#1077#1084#1099#1095#1082#1080' (web). '#1056#1072#1084#1082#1072' = '#1084#1072#1089#1089#1080#1074' + '#1087#1086#1083#1077' '#1089' '#1082#1072#1078#1076#1086#1081' '#1089#1090#1086#1088#1086#1085#1099'.'
     WordWrap = True
   end
   object ButtonOK: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 420
     Top = 456
     Width = 90
@@ -194,6 +337,13 @@ object FormPanel: TFormPanel
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 530
     Top = 456
     Width = 90
@@ -202,5 +352,141 @@ object FormPanel: TFormPanel
     Caption = #1054#1090#1084#1077#1085#1072
     TabOrder = 11
     OnClick = ButtonCancelClick
+  end
+  object LabelErrSize: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077' '#1091#1076#1072#1083#1086#1089#1100' '#1086#1087#1088#1077#1076#1077#1083#1080#1090#1100' '#1088#1072#1079#1084#1077#1088' '#1080#1089#1093#1086#1076#1085#1086#1081' '#1087#1083#1072#1090#1099'.'
+  end
+  object LabelErrNew: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077' '#1091#1076#1072#1083#1086#1089#1100' '#1089#1086#1079#1076#1072#1090#1100' '#1085#1086#1074#1099#1081' PCB-'#1076#1086#1082#1091#1084#1077#1085#1090'.'
+  end
+  object LabelErrFile: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1059#1082#1072#1078#1080#1090#1077' '#1089#1091#1097#1077#1089#1090#1074#1091#1102#1097#1080#1081' '#1092#1072#1081#1083' .PcbDoc.'
+  end
+  object LabelErrRows: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1063#1080#1089#1083#1086' '#1088#1103#1076#1086#1074' '#1076#1086#1083#1078#1085#1086' '#1073#1099#1090#1100' '#1094#1077#1083#1099#1084' > 0.'
+  end
+  object LabelErrCols: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1063#1080#1089#1083#1086' '#1089#1090#1086#1083#1073#1094#1086#1074' '#1076#1086#1083#1078#1085#1086' '#1073#1099#1090#1100' '#1094#1077#1083#1099#1084' > 0.'
+  end
+  object LabelErrGapX: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077#1082#1086#1088#1088#1077#1082#1090#1085#1099#1081' '#1079#1072#1079#1086#1088' X.'
+  end
+  object LabelErrGapY: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077#1082#1086#1088#1088#1077#1082#1090#1085#1099#1081' '#1079#1072#1079#1086#1088' Y.'
+  end
+  object LabelErrMargin: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077#1082#1086#1088#1088#1077#1082#1090#1085#1086#1077' '#1087#1086#1083#1077'.'
+  end
+  object LabelErrTab: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077#1082#1086#1088#1088#1077#1082#1090#1085#1072#1103' '#1096#1080#1088#1080#1085#1072' '#1087#1077#1088#1077#1084#1099#1095#1082#1080'.'
+  end
+  object LabelErrMill: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077#1082#1086#1088#1088#1077#1082#1090#1085#1099#1081' '#1088#1072#1076#1080#1091#1089' '#1092#1088#1077#1079#1099'.'
+  end
+  object LabelErrMech: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1086#1084#1077#1088' '#1084#1077#1093#1072#1085#1080#1095#1077#1089#1082#1086#1075#1086' '#1089#1083#1086#1103': '#1094#1077#1083#1086#1077' 1..32.'
+  end
+  object LabelErrLoad: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077' '#1091#1076#1072#1083#1086#1089#1100' '#1079#1072#1075#1088#1091#1079#1080#1090#1100' '#1080#1089#1093#1086#1076#1085#1091#1102' '#1087#1083#1072#1090#1091'.'
+  end
+  object LabelWarnOpen: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077' '#1091#1076#1072#1083#1086#1089#1100' '#1086#1090#1082#1088#1099#1090#1100' '#1074#1099#1073#1088#1072#1085#1085#1099#1081' PCB.'
+  end
+  object LabelInfoDone: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1055#1072#1085#1077#1083#1100' '#1089#1086#1079#1076#1072#1085#1072': '
+  end
+  object LabelInfoSize: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1056#1072#1079#1084#1077#1088' '#1079#1072#1075#1086#1090#1086#1074#1082#1080', '#1084#1084': '
+  end
+  object LabelInfoLayer: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1060#1088#1077#1079#1072' ('#1074#1099#1088#1077#1079#1099' '#1089' '#1087#1077#1088#1077#1084#1099#1095#1082#1072#1084#1080') '#1080' '#1088#1072#1084#1082#1072' '#8212' '#1089#1083#1086#1081' '
+  end
+  object LabelDlgTitle: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1042#1099#1073#1077#1088#1080#1090#1077' '#1080#1089#1093#1086#1076#1085#1091#1102' '#1087#1083#1072#1090#1091
   end
 end

@@ -19,6 +19,25 @@ procedure TFormGnd.ButtonOKClick(GndSender: TObject); forward;
 procedure TFormGnd.ButtonCancelClick(GndSender: TObject); forward;
 procedure TFormGnd.FormGndShow(GndSender: TObject); forward;
 
+procedure GndShowBox(const Msg : String; Flags : Integer);
+begin
+    try
+        MessageBox(0, PChar(Msg), PChar(FormGnd.Caption), Flags);
+    except
+        try ShowInfo(Msg, FormGnd.Caption); except end;
+    end;
+end;
+
+function GndAskYesNo(const Msg : String) : Boolean;
+begin
+    Result := False;
+    try
+        Result := MessageBox(0, PChar(Msg), PChar(FormGnd.Caption), 36) = 6;
+    except
+        try Result := ConfirmNoYes(Msg); except end;
+    end;
+end;
+
 function FindNet(const GndName : String) : IPCB_Net;
 var
     GndIter : IPCB_BoardIterator;
@@ -141,8 +160,8 @@ begin
     begin
         if ReplaceAll < 0 then
         begin
-            GndAns := ConfirmNoYes('На слое ' + Layer2String(GndALayer) +
-                ' уже есть полигон цепи ' + NetName + '. Заменять существующие? (Да = все заменить, Нет = пропускать)');
+            GndAns := GndAskYesNo(LabelAskReplace1.Caption + Layer2String(GndALayer) +
+                LabelAskReplace2.Caption + NetName + LabelAskReplace3.Caption);
             if GndAns then ReplaceAll := 1 else ReplaceAll := 0;
         end;
         if ReplaceAll = 0 then
@@ -162,10 +181,6 @@ begin
         GndPoly.PolyHatchStyle := ePoly90;
     try
         GndPoly.RemoveDead := True;
-    except
-    end;
-    try
-        GndPoly.RestoreUndersizedPolygons := True;
     except
     end;
     { ClearanceGap не задаём: зазоры полигона — из правил проектирования. }
@@ -192,7 +207,7 @@ begin
     ANet := FindNet(NetName);
     if ANet = nil then
     begin
-        if not ConfirmNoYes('Цепь «' + NetName + '» не найдена. Создать полигоны без цепи?') then
+        if not GndAskYesNo(LabelAskNoNet1.Caption + NetName + LabelAskNoNet2.Caption) then
             Exit;
     end;
 
@@ -213,10 +228,8 @@ begin
         Layers.Free;
     end;
     Client.SendMessage('PCB:Zoom', 'Action=Redraw', 255, Client.CurrentView);
-    ShowInfo('Создано полигонов: ' + IntToStr(Created) + sLineBreak +
-             'Пропущено: ' + IntToStr(Skipped) + sLineBreak +
-             'Проверьте Repour All, если заливки не пересчитались.',
-             'Полигоны GND');
+    GndShowBox(LabelInfoDone.Caption + IntToStr(Created) + sLineBreak +
+               LabelInfoSkip.Caption + IntToStr(Skipped), 64);
 end;
 
 { ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
@@ -324,13 +337,13 @@ procedure TFormGnd.ButtonOKClick(GndSender: TObject);
 begin
     if PCBServer = nil then
     begin
-        ShowError('PCB-server is not available.');
+        GndShowBox(LabelErrNoSrv.Caption, 16);
         Exit;
     end;
     GndBoard := PCBServer.GetCurrentPCBBoard;
     if GndBoard = nil then
     begin
-        ShowError('Open a PCB document.');
+        GndShowBox(LabelErrNoPcb.Caption, 16);
         Exit;
     end;
     NetName := EditNet.Text;

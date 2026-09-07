@@ -5,11 +5,11 @@ object FormSilk: TFormSilk
   Caption = #1056#1072#1089#1089#1090#1072#1085#1086#1074#1082#1072' '#1076#1077#1089#1080#1075#1085#1072#1090#1086#1088#1086#1074
   ClientHeight = 340
   ClientWidth = 740
-  Color = clBtnFace
+  Color = $001E1A1A
   Font.Charset = DEFAULT_CHARSET
-  Font.Color = clWindowText
-  Font.Height = -11
-  Font.Name = 'Tahoma'
+  Font.Color = $00F0F0F0
+  Font.Height = -12
+  Font.Name = 'Segoe UI'
   Font.Style = []
   OldCreateOrder = False
   Position = poScreenCenter
@@ -23,6 +23,12 @@ object FormSilk: TFormSilk
     Height = 214
   end
   object LabelImageHint: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 8
     Top = 226
     Width = 320
@@ -32,6 +38,12 @@ object FormSilk: TFormSilk
     WordWrap = True
   end
   object LabelInfo: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 12
     Width = 384
@@ -41,6 +53,12 @@ object FormSilk: TFormSilk
     WordWrap = True
   end
   object LabelH: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 96
     Width = 220
@@ -48,6 +66,13 @@ object FormSilk: TFormSilk
     Caption = #1042#1099#1089#1086#1090#1072' '#1090#1077#1082#1089#1090#1072', '#1084#1084' (0 = '#1085#1077' '#1084#1077#1085#1103#1090#1100'):'
   end
   object EditH: TEdit
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 580
     Top = 92
     Width = 120
@@ -56,6 +81,12 @@ object FormSilk: TFormSilk
     Text = '0'
   end
   object CheckSkipHidden: TCheckBox
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 340
     Top = 132
     Width = 380
@@ -66,6 +97,13 @@ object FormSilk: TFormSilk
     TabOrder = 1
   end
   object ButtonOK: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 400
     Top = 290
     Width = 90
@@ -76,6 +114,13 @@ object FormSilk: TFormSilk
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
+    Color = $00383333
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = $00F0F0F0
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
     Left = 510
     Top = 290
     Width = 90
@@ -84,5 +129,61 @@ object FormSilk: TFormSilk
     Caption = #1054#1090#1084#1077#1085#1072
     TabOrder = 3
     OnClick = ButtonCancelClick
+  end
+  object LabelErrH: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077#1082#1086#1088#1088#1077#1082#1090#1085#1072#1103' '#1074#1099#1089#1086#1090#1072' '#1090#1077#1082#1089#1090#1072'.'
+  end
+  object LabelErrHNeg: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1042#1099#1089#1086#1090#1072' '#1085#1077' '#1084#1086#1078#1077#1090' '#1073#1099#1090#1100' '#1086#1090#1088#1080#1094#1072#1090#1077#1083#1100#1085#1086#1081'.'
+  end
+  object LabelErrNoSrv: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = 'PCB-server is not available.'
+  end
+  object LabelErrNoPcb: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = 'Open a PCB document.'
+  end
+  object LabelInfoMoved: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1056#1072#1089#1089#1090#1072#1074#1083#1077#1085#1086': '
+  end
+  object LabelInfoWarn: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1057' '#1087#1088#1077#1076#1091#1087#1088#1077#1078#1076#1077#1085#1080#1077#1084' ('#1082#1088#1072#1081' '#1087#1083#1072#1090#1099' / '#1087#1083#1086#1090#1085#1086'): '
+  end
+  object LabelInfoSkip: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1055#1088#1086#1087#1091#1097#1077#1085#1086' '#1089#1082#1088#1099#1090#1099#1093': '
   end
 end

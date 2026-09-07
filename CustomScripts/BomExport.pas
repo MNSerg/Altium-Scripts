@@ -32,10 +32,12 @@ end;
 
 function ParamVal(BomComp : ISch_Component; const BomNames : String) : String;
 var
+    BomIter : ISch_Iterator;
     BomP : ISch_Parameter;
-    Rest, BomName : String;
+    Rest, BomName, PName, PText : String;
     PosSep : Integer;
 begin
+    { Имя параметра читаем обходом ISch_Parameter (eParameter). }
     Result := '';
     Rest := BomNames;
     while Rest <> '' do
@@ -52,12 +54,27 @@ begin
             Rest := '';
         end;
         try
-            BomP := BomComp.GetSchParameterByName(BomName);
-            if BomP <> nil then
+            BomIter := BomComp.SchIterator_Create;
+            BomIter.AddFilter_ObjectSet(MkSet(eParameter));
+            BomP := BomIter.FirstSchObject;
+            while BomP <> nil do
             begin
-                Result := BomP.Text;
-                if Result <> '' then Exit;
+                PName := '';
+                PText := '';
+                try PName := BomP.Name; except PName := ''; end;
+                if UpperCase(PName) = UpperCase(BomName) then
+                begin
+                    try PText := BomP.Text; except PText := ''; end;
+                    if PText <> '' then
+                    begin
+                        Result := PText;
+                        BomComp.SchIterator_Destroy(BomIter);
+                        Exit;
+                    end;
+                end;
+                BomP := BomIter.NextSchObject;
             end;
+            BomComp.SchIterator_Destroy(BomIter);
         except
         end;
     end;
@@ -211,6 +228,15 @@ begin
     BomBoard.BoardIterator_Destroy(BomIter);
 end;
 
+procedure BomShowBox(const Msg : String; Flags : Integer);
+begin
+    try
+        MessageBox(0, PChar(Msg), PChar(FormBom.Caption), Flags);
+    except
+        try ShowInfo(Msg, FormBom.Caption); except end;
+    end;
+end;
+
 procedure WriteSettingsXml(const XlsPath : String);
 var
     Xml : TStringList;
@@ -279,11 +305,8 @@ begin
         Lines.Add('</Workbook>');
         Lines.SaveToFile(OutPath);
         WriteSettingsXml(OutPath);
-        ShowInfo('BOM записан: ' + OutPath + sLineBreak +
-                 'Строк: ' + IntToStr(Groups.Count) + sLineBreak +
-                 'Формат: Excel SpreadsheetML (.xls)' + sLineBreak +
-                 'Настройки: ' + ChangeFileExt(OutPath, '.bom.settings.xml'),
-                 'BOM');
+        BomShowBox(LabelInfoDone.Caption + OutPath + sLineBreak +
+                   LabelInfoCount.Caption + IntToStr(Groups.Count), 64);
     finally
         Parts.Free;
         Lines.Free;
@@ -413,7 +436,7 @@ begin
     OutPath := EditPath.Text;
     if OutPath = '' then
     begin
-        ShowError('Укажите путь к файлу .xls.');
+        BomShowBox(LabelErrPath.Caption, 16);
         Exit;
     end;
     if LowerCase(ExtractFileExt(OutPath)) = '.csv' then
@@ -428,7 +451,7 @@ begin
     try
         HarvestFromProject;
         if Groups.Count = 0 then
-            ShowWarning('Компоненты не найдены. Откройте схему или PCB проекта.')
+            BomShowBox(LabelWarnNone.Caption, 48)
         else
             WriteExcel;
     finally
