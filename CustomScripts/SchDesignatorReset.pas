@@ -1,6 +1,7 @@
 ﻿{..............................................................................}
 { SchDesignatorReset.pas                                                        }
 { Сброс десигнаторов и аннотация всего проекта: Down then Across.              }
+{ Обход: SchDoc/Comp.Iterator_Create (не SchIterator_Create). DESIGNATOR.Text.  }
 {..............................................................................}
 
 var
@@ -61,7 +62,7 @@ begin
     { Не Comp.Designator — в этом диалекте идентификатор Designator нет. }
     Result := '';
     try
-        SchIt := SchComp.SchIterator_Create;
+        SchIt := SchComp.Iterator_Create;
         SchIt.AddFilter_ObjectSet(MkSet(eParameter));
         SchP := SchIt.FirstSchObject;
         while SchP <> nil do
@@ -71,14 +72,21 @@ begin
             if UpperCase(PName) = 'DESIGNATOR' then
             begin
                 try Result := SchP.Text; except Result := ''; end;
-                SchComp.SchIterator_Destroy(SchIt);
+                SchComp.Iterator_Destroy(SchIt);
                 Exit;
             end;
             SchP := SchIt.NextSchObject;
         end;
-        SchComp.SchIterator_Destroy(SchIt);
+        SchComp.Iterator_Destroy(SchIt);
     except
         Result := '';
+    end;
+    if Result = '' then
+    begin
+        try
+            Result := SchComp.GetState_SchDesignator.Text;
+        except
+        end;
     end;
 end;
 
@@ -89,7 +97,7 @@ var
     PName : String;
 begin
     try
-        SchIt := SchComp.SchIterator_Create;
+        SchIt := SchComp.Iterator_Create;
         SchIt.AddFilter_ObjectSet(MkSet(eParameter));
         SchP := SchIt.FirstSchObject;
         while SchP <> nil do
@@ -99,12 +107,12 @@ begin
             if UpperCase(PName) = 'DESIGNATOR' then
             begin
                 SchP.Text := NewT;
-                SchComp.SchIterator_Destroy(SchIt);
+                SchComp.Iterator_Destroy(SchIt);
                 Exit;
             end;
             SchP := SchIt.NextSchObject;
         end;
-        SchComp.SchIterator_Destroy(SchIt);
+        SchComp.Iterator_Destroy(SchIt);
     except
     end;
 end;
@@ -138,7 +146,7 @@ begin
     if SchSchDoc = nil then Exit;
     SchServer.ProcessControl.PreProcess(SchSchDoc, '');
     try
-        SchIter := SchSchDoc.SchIterator_Create;
+        SchIter := SchSchDoc.Iterator_Create;
         SchIter.AddFilter_ObjectSet(MkSet(eSchComponent));
         SchComp := SchIter.FirstSchObject;
         while SchComp <> nil do
@@ -160,7 +168,7 @@ begin
             end;
             SchComp := SchIter.NextSchObject;
         end;
-        SchSchDoc.SchIterator_Destroy(SchIter);
+        SchSchDoc.Iterator_Destroy(SchIter);
         SchSchDoc.GraphicallyInvalidate;
     finally
         SchServer.ProcessControl.PostProcess(SchSchDoc, '');
@@ -182,7 +190,7 @@ begin
     SchList := TStringList.Create;
     SchServer.ProcessControl.PreProcess(SchSchDoc, '');
     try
-        SchIter := SchSchDoc.SchIterator_Create;
+        SchIter := SchSchDoc.Iterator_Create;
         SchIter.AddFilter_ObjectSet(MkSet(eSchComponent));
         SchComp := SchIter.FirstSchObject;
         while SchComp <> nil do
@@ -198,7 +206,7 @@ begin
             end;
             SchComp := SchIter.NextSchObject;
         end;
-        SchSchDoc.SchIterator_Destroy(SchIter);
+        SchSchDoc.Iterator_Destroy(SchIter);
 
         SchList.Sorted := True;
 

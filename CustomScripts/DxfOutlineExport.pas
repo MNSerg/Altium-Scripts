@@ -41,23 +41,28 @@ begin
 end;
 
 function DxfLayerName(DxfALayer : TLayer) : String;
-var
-    DxfS : String;
-    Dxfi : Integer;
-    DxfC : Char;
 begin
-    DxfS := Layer2String(DxfALayer);
-    Result := '';
-    for Dxfi := 1 to Length(DxfS) do
-    begin
-        DxfC := DxfS[Dxfi];
-        if ((DxfC >= 'A') and (DxfC <= 'Z')) or ((DxfC >= 'a') and (DxfC <= 'z')) or
-           ((DxfC >= '0') and (DxfC <= '9')) then
-            Result := Result + DxfC
-        else
-            Result := Result + '_';
-    end;
-    if Result = '' then Result := 'L' + IntToStr(DxfALayer);
+    { DXF is ASCII — no UTF-8 Russian (garbles in AutoCAD). }
+    if DxfALayer = eTopLayer then Result := 'TOP_COPPER'
+    else if DxfALayer = eBottomLayer then Result := 'BOTTOM_COPPER'
+    else if DxfALayer = eTopOverlay then Result := 'TOP_SILK'
+    else if DxfALayer = eBottomOverlay then Result := 'BOTTOM_SILK'
+    else if DxfALayer = eTopSolder then Result := 'TOP_MASK'
+    else if DxfALayer = eBottomSolder then Result := 'BOTTOM_MASK'
+    else if DxfALayer = eTopPaste then Result := 'TOP_PASTE'
+    else if DxfALayer = eBottomPaste then Result := 'BOTTOM_PASTE'
+    else if DxfALayer = eKeepOutLayer then Result := 'KEEPOUT'
+    else if DxfALayer = eMultiLayer then Result := 'MULTI'
+    else if DxfALayer = eMechanical1 then Result := 'MECH1'
+    else if DxfALayer = eMechanical2 then Result := 'MECH2'
+    else if DxfALayer = eMechanical3 then Result := 'MECH3'
+    else if DxfALayer = eMechanical4 then Result := 'MECH4'
+    else if DxfALayer = eMechanical13 then Result := 'MECH13'
+    else if DxfALayer = eMechanical15 then Result := 'MECH15'
+    else if (DxfALayer >= eMidLayer1) and (DxfALayer <= eMidLayer30) then
+        Result := 'MID_' + IntToStr(DxfALayer - eMidLayer1 + 1)
+    else
+        Result := 'LAYER_' + IntToStr(DxfALayer);
 end;
 
 function NextHandle : String;
@@ -132,7 +137,7 @@ procedure AddLayerIfMissing(DxfALayer : TLayer);
 begin
     if LayerIds.IndexOf(IntToStr(DxfALayer)) < 0 then
     begin
-        LayerItems.Add(Layer2String(DxfALayer));
+        LayerItems.Add(DxfLayerName(DxfALayer));
         LayerIds.Add(IntToStr(DxfALayer));
     end;
 end;
@@ -141,12 +146,11 @@ procedure CollectBoardLayers;
 var
     DxfLS : IPCB_LayerObject;
     DxfStack : IPCB_LayerStack;
-    DxfName : String;
     DxfId : TLayer;
 begin
     LayerItems.Clear;
     LayerIds.Clear;
-    LayerItems.Add('Отверстия (HOLES) — круги сверловки');
+    LayerItems.Add('HOLES');
     LayerIds.Add('HOLES');
 
     { Сигнальные / плоскости через V7 stack, если есть. }
@@ -162,10 +166,9 @@ begin
         while DxfLS <> nil do
         begin
             DxfId := DxfLS.LayerID;
-            DxfName := Layer2String(DxfId);
             if LayerIds.IndexOf(IntToStr(DxfId)) < 0 then
             begin
-                LayerItems.Add(DxfName);
+                LayerItems.Add(DxfLayerName(DxfId));
                 LayerIds.Add(IntToStr(DxfId));
             end;
             DxfLS := DxfStack.Next(eLayerClass_Electrical, DxfLS);
@@ -282,84 +285,32 @@ begin
     WriteLine(LName, C3x, C3y, C4x, C4y);
 end;
 
-procedure DxfRotPt(CX, CY : TCoord; RelXMM, RelYMM, Deg : Double; var OX, OY : TCoord);
-var
-    Rad, NX, NY : Double;
-begin
-    Rad := Deg * DxfPiValue / 180.0;
-    NX := RelXMM * Cos(Rad) - RelYMM * Sin(Rad);
-    NY := RelXMM * Sin(Rad) + RelYMM * Cos(Rad);
-    OX := DxfOff(CX, NX);
-    OY := DxfOff(CY, NY);
-end;
-
 procedure ExportPadOutline(const LName : String; DxfPad : IPCB_Pad; DxfALayer : TLayer);
 var
+    RR : TCoordRect;
     SX, SY, DxfX, DxfY : TCoord;
-    Shape : TShape;
-    Dxfi : Integer;
-    Ang, Rot, Hx, Hy : Double;
-    Px, Py, Qx, Qy : TCoord;
-    P0x, P0y, P1x, P1y, P2x, P2y, P3x, P3y : TCoord;
 begin
-    { Тот же XY, что у рабочих CIRCLE отверстий: Pad.X/Y, размер — XSize/YSize (TCoord). }
+    { Не XSize/YSize/TopXSize — в этом диалекте нет. Контур = BoundingRectangle (как у шелкографии). }
     if DxfALayer = eMultiLayer then Exit;
-    DxfX := DxfPad.X;
-    DxfY := DxfPad.Y;
-    SX := DxfPad.XSize;
-    SY := DxfPad.YSize;
-    if (SX <= 0) or (SY <= 0) then Exit;
-    Rot := 0;
     try
-        Rot := DxfPad.Rotation;
+        RR := DxfPad.BoundingRectangle;
     except
-        Rot := 0;
-    end;
-
-    Shape := eRectangular;
-    try
-        Shape := DxfPad.ShapeOnLayer(DxfALayer);
-    except
-        try
-            Shape := DxfPad.TopShape;
-        except
-            Shape := eRectangular;
-        end;
-    end;
-
-    if (Shape = eRounded) or (Shape = eCircleShape) or (Abs(SX - SY) < 50) then
-    begin
-        if Abs(SX - SY) < 50 then
-        begin
-            WriteCircle(LName, DxfX, DxfY, SX div 2);
-            Exit;
-        end;
-    end;
-
-    Hx := CoordToMMs(SX) / 2.0;
-    Hy := CoordToMMs(SY) / 2.0;
-
-    if Shape = eOctagonal then
-    begin
-        for Dxfi := 0 to 7 do
-        begin
-            Ang := (22.5 + Dxfi * 45);
-            DxfRotPt(DxfX, DxfY, Hx * Cos(Ang * DxfPiValue / 180), Hy * Sin(Ang * DxfPiValue / 180), Rot, Px, Py);
-            Ang := (22.5 + (Dxfi + 1) * 45);
-            DxfRotPt(DxfX, DxfY, Hx * Cos(Ang * DxfPiValue / 180), Hy * Sin(Ang * DxfPiValue / 180), Rot, Qx, Qy);
-            WriteLine(LName, Px, Py, Qx, Qy);
-        end;
         Exit;
     end;
-
-    DxfRotPt(DxfX, DxfY, -Hx, -Hy, Rot, P0x, P0y);
-    DxfRotPt(DxfX, DxfY,  Hx, -Hy, Rot, P1x, P1y);
-    DxfRotPt(DxfX, DxfY,  Hx,  Hy, Rot, P2x, P2y);
-    DxfRotPt(DxfX, DxfY, -Hx,  Hy, Rot, P3x, P3y);
-    WriteLine(LName, P0x, P0y, P1x, P1y);
-    WriteLine(LName, P1x, P1y, P2x, P2y);
-    WriteLine(LName, P2x, P2y, P3x, P3y);
-    WriteLine(LName, P3x, P3y, P0x, P0y);
+    SX := RR.Right - RR.Left;
+    SY := RR.Top - RR.Bottom;
+    if (SX <= 0) or (SY <= 0) then Exit;
+    DxfX := (RR.Left + RR.Right) div 2;
+    DxfY := (RR.Bottom + RR.Top) div 2;
+    if Abs(SX - SY) < MMsToCoord(0.05) then
+    begin
+        WriteCircle(LName, DxfX, DxfY, SX div 2);
+        Exit;
+    end;
+    WriteLine(LName, RR.Left, RR.Bottom, RR.Right, RR.Bottom);
+    WriteLine(LName, RR.Right, RR.Bottom, RR.Right, RR.Top);
+    WriteLine(LName, RR.Right, RR.Top, RR.Left, RR.Top);
+    WriteLine(LName, RR.Left, RR.Top, RR.Left, RR.Bottom);
 end;
 
 procedure ExportViaOutline(const LName : String; DxfVia : IPCB_Via; DxfALayer : TLayer);
@@ -470,10 +421,7 @@ begin
                 NY := DxfPoly.Segments[Dxfi + 1].vy;
             end;
 
-            if DxfSeg.Kind = ePolySegmentArc then
-                WriteArc(LName, DxfSeg.cx, DxfSeg.cy, DxfSeg.Radius, DxfSeg.sa1, DxfSeg.sa2)
-            else
-                WriteLine(LName, DxfSeg.vx, DxfSeg.vy, NX, NY);
+            WriteLine(LName, DxfSeg.vx, DxfSeg.vy, NX, NY);
         except
             { Сегмент недоступен — пропускаем. }
         end;

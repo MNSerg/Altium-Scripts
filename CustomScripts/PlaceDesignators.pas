@@ -6,6 +6,7 @@
 
 const
     cGapMM = 0.2;
+    cPadClearMM = 0.25;
     cSilkClear = 10000; { ~1 mil extra }
 
 var
@@ -133,6 +134,73 @@ begin
     end;
 end;
 
+function NameHitsPad(SilL, SilB, SilR, SilT : TCoord; SkipCmp : IPCB_Component) : Boolean;
+var
+    Extra : TCoord;
+    GIter : IPCB_GroupIterator;
+    SilPad : IPCB_Pad;
+    SIter : IPCB_SpatialIterator;
+    SilPrim : IPCB_Primitive;
+    RR : TCoordRect;
+    PL, PB, PR, PT : TCoord;
+begin
+    { Площадки — жёсткое препятствие: BoundingRectangle + 0.25 мм. }
+    Result := False;
+    Extra := MMsToCoord(cPadClearMM);
+    SilL := SilL - Extra;
+    SilB := SilB - Extra;
+    SilR := SilR + Extra;
+    SilT := SilT + Extra;
+
+    if SkipCmp <> nil then
+    begin
+        try
+            GIter := SkipCmp.GroupIterator_Create;
+            GIter.AddFilter_ObjectSet(MkSet(ePadObject));
+            SilPad := GIter.FirstPCBObject;
+            while SilPad <> nil do
+            begin
+                RR := SilPad.BoundingRectangle;
+                PL := RR.Left - Extra;
+                PB := RR.Bottom - Extra;
+                PR := RR.Right + Extra;
+                PT := RR.Top + Extra;
+                if RectsOverlap(SilL, SilB, SilR, SilT, PL, PB, PR, PT) then
+                begin
+                    Result := True;
+                    SkipCmp.GroupIterator_Destroy(GIter);
+                    Exit;
+                end;
+                SilPad := GIter.NextPCBObject;
+            end;
+            SkipCmp.GroupIterator_Destroy(GIter);
+        except
+        end;
+    end;
+
+    SIter := SilBoard.SpatialIterator_Create;
+    SIter.AddFilter_ObjectSet(MkSet(ePadObject));
+    SIter.AddFilter_LayerSet(MkSet(eMultiLayer, eTopLayer, eBottomLayer));
+    SIter.AddFilter_Area(SilL, SilB, SilR, SilT);
+    SilPrim := SIter.FirstPCBObject;
+    while SilPrim <> nil do
+    begin
+        RR := SilPrim.BoundingRectangle;
+        PL := RR.Left - Extra;
+        PB := RR.Bottom - Extra;
+        PR := RR.Right + Extra;
+        PT := RR.Top + Extra;
+        if RectsOverlap(SilL, SilB, SilR, SilT, PL, PB, PR, PT) then
+        begin
+            Result := True;
+            SilBoard.SpatialIterator_Destroy(SIter);
+            Exit;
+        end;
+        SilPrim := SIter.NextPCBObject;
+    end;
+    SilBoard.SpatialIterator_Destroy(SIter);
+end;
+
 function CollisionScore(SilL, SilB, SilR, SilT : TCoord; SkipCmp : IPCB_Component; SilkLayer : TLayer) : Integer;
 var
     SilIter : IPCB_SpatialIterator;
@@ -213,6 +281,11 @@ var
     SilCX, SilCY, CandX, CandY : TCoord;
     Use90 : Boolean;
     SilkLayer : TLayer;
+    PadHit : Boolean;
+    BestFreeScore : Integer;
+    BestFreeX, BestFreeY : TCoord;
+    BestFree90 : Boolean;
+    HaveFree : Boolean;
 begin
     Txt := SilCmp.Name;
     if Txt = nil then Exit;
@@ -248,12 +321,17 @@ begin
     BestX := Txt.XLocation;
     BestY := Txt.YLocation;
     Best90 := False;
+    BestFreeScore := 100000;
+    BestFreeX := BestX;
+    BestFreeY := BestY;
+    BestFree90 := False;
+    HaveFree := False;
 
-    { 12 позиций вокруг courtyard × шаги смещения 0.2 мм. }
-    for Step := 0 to 6 do
+    { Больше смещений; площадки — жёсткий запрет, если есть свободный кандидат. }
+    for Step := 0 to 14 do
     begin
-        Extra := Gap + MMsToCoord(0.2) * Step;
-        for Dir := 0 to 11 do
+        Extra := Gap + MMsToCoord(0.15) * Step;
+        for Dir := 0 to 15 do
         begin
             Use90 := False;
             CandX := SilCX;
@@ -271,6 +349,10 @@ begin
                 9: begin CandX := Court.Left + TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
                 10: begin CandX := Court.Right + Extra + TH div 2; CandY := Court.Top - TH; Use90 := True; end;
                 11: begin CandX := Court.Left - Extra - TH div 2; CandY := Court.Bottom + TH; Use90 := True; end;
+                12: begin CandX := SilCX + TW; CandY := Court.Top + Extra + TH div 2; end;
+                13: begin CandX := SilCX - TW; CandY := Court.Bottom - Extra - TH div 2; end;
+                14: begin CandX := Court.Right + Extra + TH; CandY := SilCY + TH; Use90 := True; end;
+                15: begin CandX := Court.Left - Extra - TH; CandY := SilCY - TH; Use90 := True; end;
             end;
             if Use90 then
             begin
@@ -286,7 +368,21 @@ begin
                 SilB := CandY - TH div 2;
                 SilT := CandY + TH div 2;
             end;
+            PadHit := NameHitsPad(SilL, SilB, SilR, SilT, SilCmp);
             Score := CollisionScore(SilL, SilB, SilR, SilT, SilCmp, SilkLayer);
+            if PadHit then
+                Score := Score + 1000;
+            if (not PadHit) then
+            begin
+                HaveFree := True;
+                if Score < BestFreeScore then
+                begin
+                    BestFreeScore := Score;
+                    BestFreeX := CandX;
+                    BestFreeY := CandY;
+                    BestFree90 := Use90;
+                end;
+            end;
             if Score < BestScore then
             begin
                 BestScore := Score;
@@ -294,9 +390,17 @@ begin
                 BestY := CandY;
                 Best90 := Use90;
             end;
-            if BestScore = 0 then Break;
+            if HaveFree and (BestFreeScore = 0) then Break;
         end;
-        if BestScore = 0 then Break;
+        if HaveFree and (BestFreeScore = 0) then Break;
+    end;
+
+    if HaveFree then
+    begin
+        BestX := BestFreeX;
+        BestY := BestFreeY;
+        Best90 := BestFree90;
+        BestScore := BestFreeScore;
     end;
 
     Txt.BeginModify;

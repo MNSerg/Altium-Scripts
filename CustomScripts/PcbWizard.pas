@@ -193,10 +193,38 @@ begin
     WizBoard.BoardIterator_Destroy(WizIter);
 end;
 
-procedure AddGndPoly(WizALayer : TLayer; WizX0, WizY0, WizX1, WizY1 : TCoord);
+procedure WizCopyOutlineToPolygon(WizPoly : IPCB_Polygon);
+var
+    Wizi, Wizn : Integer;
+    WizSeg : TPolySegment;
+    WizRect : TCoordRect;
+begin
+    { Как GroundPolygons: копия BoardOutline.Segments, без .Kind. }
+    try
+        Wizn := WizBoard.BoardOutline.PointCount;
+        if Wizn > 1 then
+        begin
+            WizPoly.PointCount := Wizn;
+            for Wizi := 0 to Wizn - 1 do
+            begin
+                WizSeg := WizBoard.BoardOutline.Segments[Wizi];
+                WizPoly.Segments[Wizi] := WizSeg;
+            end;
+            Exit;
+        end;
+    except
+    end;
+    WizRect := WizBoard.BoardOutline.BoundingRectangle;
+    WizPoly.PointCount := 4;
+    WizSeg.vx := WizRect.Left;  WizSeg.vy := WizRect.Bottom; WizPoly.Segments[0] := WizSeg;
+    WizSeg.vx := WizRect.Right; WizSeg.vy := WizRect.Bottom; WizPoly.Segments[1] := WizSeg;
+    WizSeg.vx := WizRect.Right; WizSeg.vy := WizRect.Top;    WizPoly.Segments[2] := WizSeg;
+    WizSeg.vx := WizRect.Left;  WizSeg.vy := WizRect.Top;    WizPoly.Segments[3] := WizSeg;
+end;
+
+procedure AddGndPoly(WizALayer : TLayer);
 var
     WizPoly : IPCB_Polygon;
-    WizSeg : TPolySegment;
     WizN : IPCB_Net;
 begin
     WizPoly := PCBServer.PCBObjectFactory(ePolyObject, eNoDimension, eCreate_Default);
@@ -204,13 +232,7 @@ begin
     WizPoly.PolyHatchStyle := ePolySolid;
     WizN := FindNetGnd;
     if WizN <> nil then WizPoly.Net := WizN;
-    { Зазоры полигона — из правил проектирования, не из скрипта. }
-    WizPoly.PointCount := 4;
-    WizSeg.Kind := ePolySegmentLine;
-    WizSeg.vx := WizX0; WizSeg.vy := WizY0; WizPoly.Segments[0] := WizSeg;
-    WizSeg.vx := WizX1; WizSeg.vy := WizY0; WizPoly.Segments[1] := WizSeg;
-    WizSeg.vx := WizX1; WizSeg.vy := WizY1; WizPoly.Segments[2] := WizSeg;
-    WizSeg.vx := WizX0; WizSeg.vy := WizY1; WizPoly.Segments[3] := WizSeg;
+    WizCopyOutlineToPolygon(WizPoly);
     WizBoard.AddPCBObject(WizPoly);
     try
         WizPoly.Rebuild;
@@ -218,17 +240,20 @@ begin
     end;
 end;
 
-procedure AddMaskOpening(WizALayer : TLayer; WizX0, WizY0, WizX1, WizY1 : TCoord);
+procedure AddMaskOpening;
 var
-    WizFill : IPCB_Fill;
+    WizPoly : IPCB_Polygon;
 begin
-    WizFill := PCBServer.PCBObjectFactory(eFillObject, eNoDimension, eCreate_Default);
-    WizFill.X1Location := WizX0;
-    WizFill.Y1Location := WizY0;
-    WizFill.X2Location := WizX1;
-    WizFill.Y2Location := WizY1;
-    WizFill.Layer := WizALayer;
-    WizBoard.AddPCBObject(WizFill);
+    { Вскрытие маски: полигон по контуру платы только на Bottom Solder. }
+    WizPoly := PCBServer.PCBObjectFactory(ePolyObject, eNoDimension, eCreate_Default);
+    WizPoly.Layer := eBottomSolder;
+    WizPoly.PolyHatchStyle := ePolySolid;
+    WizCopyOutlineToPolygon(WizPoly);
+    WizBoard.AddPCBObject(WizPoly);
+    try
+        WizPoly.Rebuild;
+    except
+    end;
 end;
 
 procedure BuildBoard;
@@ -287,31 +312,28 @@ begin
 
         if MakeGnd then
         begin
-            AddGndPoly(eTopLayer, WizX0, WizY0, WizX1, WizY1);
-            AddGndPoly(eBottomLayer, WizX0, WizY0, WizX1, WizY1);
+            AddGndPoly(eTopLayer);
+            AddGndPoly(eBottomLayer);
             if CopperCount >= 4 then
             begin
                 try
-                    AddGndPoly(eMidLayer1, WizX0, WizY0, WizX1, WizY1);
-                    AddGndPoly(eMidLayer2, WizX0, WizY0, WizX1, WizY1);
+                    AddGndPoly(eMidLayer1);
+                    AddGndPoly(eMidLayer2);
                 except
                 end;
             end;
             if CopperCount >= 6 then
             begin
                 try
-                    AddGndPoly(eMidLayer3, WizX0, WizY0, WizX1, WizY1);
-                    AddGndPoly(eMidLayer4, WizX0, WizY0, WizX1, WizY1);
+                    AddGndPoly(eMidLayer3);
+                    AddGndPoly(eMidLayer4);
                 except
                 end;
             end;
         end;
 
         if MakeMask then
-        begin
-            AddMaskOpening(eTopSolder, WizX0, WizY0, WizX1, WizY1);
-            AddMaskOpening(eBottomSolder, WizX0, WizY0, WizX1, WizY1);
-        end;
+            AddMaskOpening;
     finally
         PCBServer.PostProcess;
     end;

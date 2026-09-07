@@ -43,10 +43,10 @@
 
 | Тема | Решение |
 | --- | --- |
-| Формат | **Excel**: SpreadsheetML, файл **`.xls`**, без Excel COM. |
-| Столбцы | Точно: `Comment`, `Designator`, `Description`, `Quantity`, `Value`. |
+| Формат | **Excel `.xlsx`** (как `BOM_UniBrain.xlsx`) + `.csv` UTF-8 BOM. Без HTML-`.xls`. |
+| Столбцы | Точно: `Comment`, `Description`, `Designator`, `Value`, `Quantity`. |
 | Исключения | **Нет** — включать DNP, графику, NoBOM, механику. |
-| Группировка | Comment + Value + Description (+ footprint внутри). Designator — склейка. |
+| Группировка | **По Value** (+ Comment/Description, footprint внутри). Designator — склейка. |
 
 ## 6. Полигоны GND (`GroundPolygons`) — отвечено
 

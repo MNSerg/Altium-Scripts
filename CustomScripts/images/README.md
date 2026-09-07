@@ -1,6 +1,6 @@
 # Dialog pictures
 
-Restored from git commit `3e7d76e` (the set before the DFM-embed commit). PNG is the original art; BMP is the 320×214 dialog copy. Both live in `images/` and next to each `.pas`.
+All eight illustrations are **320×214** pixels — the same size as `TImage` (`Width = 320`, `Height = 214`) in every `.dfm`. PNG and BMP match. Scripts still set `Stretch := True` after a successful `LoadFromFile`.
 
 `TImage` in `.dfm` is empty (Left/Top/Width/Height only). Scripts `LoadFromFile` only if `FileExists`: this `.PrjScr` folder first, then `images\`. Missing file = caption hint, no crash.
 
@@ -14,3 +14,5 @@ Restored from git commit `3e7d76e` (the set before the DFM-embed commit). PNG is
 | GroundPolygons.png / GroundPolygons.bmp | GroundPolygons |
 | PcbWizard.png / PcbWizard.bmp | PcbWizard |
 | PlaceDesignators.png / PlaceDesignators.bmp | PlaceDesignators |
+
+Toolbar icons (24×24 / 32×32 BMP) are in [`../Shortcuts/`](../Shortcuts/).
