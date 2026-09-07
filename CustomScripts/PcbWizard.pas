@@ -4,103 +4,104 @@
 {..............................................................................}
 
 var
-    Board : IPCB_Board;
+    WizBoard : IPCB_Board;
     Wmm, Hmm, FilletMM, HoleMM, PadMM, MarginMM, GridMM : Double;
     FourHoles, MakeGnd, MakeMask, NewDoc : Boolean;
     CopperCount : Integer;
 
-procedure Start; forward;
-procedure _Start; forward;
-procedure TFormWizard.ButtonOKClick(Sender: TObject); forward;
-procedure TFormWizard.ButtonCancelClick(Sender: TObject); forward;
-procedure TFormWizard.FormWizardShow(Sender: TObject); forward;
+{ Run Script: choose procedure StartPcbWizard (project compiles only this .pas). }
+procedure StartPcbWizard; forward;
+procedure _StartPcbWizard; forward;
+procedure TFormWizard.ButtonOKClick(WizSender: TObject); forward;
+procedure TFormWizard.ButtonCancelClick(WizSender: TObject); forward;
+procedure TFormWizard.FormWizardShow(WizSender: TObject); forward;
 
-function AddTrackL(X1, Y1, X2, Y2 : TCoord; ALayer : TLayer; Width : TCoord) : IPCB_Track;
+function AddTrackL(WizX1, WizY1, WizX2, WizY2 : TCoord; WizALayer : TLayer; Width : TCoord) : IPCB_Track;
 begin
     Result := PCBServer.PCBObjectFactory(eTrackObject, eNoDimension, eCreate_Default);
-    Result.X1 := X1; Result.Y1 := Y1;
-    Result.X2 := X2; Result.Y2 := Y2;
-    Result.Layer := ALayer;
+    Result.X1 := WizX1; Result.Y1 := WizY1;
+    Result.X2 := WizX2; Result.Y2 := WizY2;
+    Result.Layer := WizALayer;
     Result.Width := Width;
-    Board.AddPCBObject(Result);
+    WizBoard.AddPCBObject(Result);
     Result.Selected := True;
 end;
 
-function AddArcL(CX, CY, R : TCoord; Sa, Ea : Double; ALayer : TLayer; Width : TCoord) : IPCB_Arc;
+function AddArcL(WizCX, WizCY, WizR : TCoord; WizSa, WizEa : Double; WizALayer : TLayer; Width : TCoord) : IPCB_Arc;
 begin
     Result := PCBServer.PCBObjectFactory(eArcObject, eNoDimension, eCreate_Default);
-    Result.XCenter := CX; Result.YCenter := CY;
-    Result.Radius := R;
-    Result.StartAngle := Sa; Result.EndAngle := Ea;
-    Result.Layer := ALayer;
+    Result.XCenter := WizCX; Result.YCenter := WizCY;
+    Result.Radius := WizR;
+    Result.StartAngle := WizSa; Result.EndAngle := WizEa;
+    Result.Layer := WizALayer;
     Result.LineWidth := Width;
-    Board.AddPCBObject(Result);
+    WizBoard.AddPCBObject(Result);
     Result.Selected := True;
 end;
 
-procedure DrawRoundedKeepout(X0, Y0, X1, Y1, R, Width : TCoord);
+procedure DrawRoundedKeepout(WizX0, WizY0, WizX1, WizY1, WizR, Width : TCoord);
 var
-    L : TLayer;
+    WizL : TLayer;
 begin
-    L := eKeepOutLayer;
-    if R <= 0 then
+    WizL := eKeepOutLayer;
+    if WizR <= 0 then
     begin
-        AddTrackL(X0, Y0, X1, Y0, L, Width);
-        AddTrackL(X1, Y0, X1, Y1, L, Width);
-        AddTrackL(X1, Y1, X0, Y1, L, Width);
-        AddTrackL(X0, Y1, X0, Y0, L, Width);
+        AddTrackL(WizX0, WizY0, WizX1, WizY0, WizL, Width);
+        AddTrackL(WizX1, WizY0, WizX1, WizY1, WizL, Width);
+        AddTrackL(WizX1, WizY1, WizX0, WizY1, WizL, Width);
+        AddTrackL(WizX0, WizY1, WizX0, WizY0, WizL, Width);
         Exit;
     end;
-    AddTrackL(X0 + R, Y0, X1 - R, Y0, L, Width);
-    AddTrackL(X1, Y0 + R, X1, Y1 - R, L, Width);
-    AddTrackL(X1 - R, Y1, X0 + R, Y1, L, Width);
-    AddTrackL(X0, Y1 - R, X0, Y0 + R, L, Width);
-    AddArcL(X0 + R, Y0 + R, R, 180, 270, L, Width);
-    AddArcL(X1 - R, Y0 + R, R, 270, 0, L, Width);
-    AddArcL(X1 - R, Y1 - R, R, 0, 90, L, Width);
-    AddArcL(X0 + R, Y1 - R, R, 90, 180, L, Width);
+    AddTrackL(WizX0 + WizR, WizY0, WizX1 - WizR, WizY0, WizL, Width);
+    AddTrackL(WizX1, WizY0 + WizR, WizX1, WizY1 - WizR, WizL, Width);
+    AddTrackL(WizX1 - WizR, WizY1, WizX0 + WizR, WizY1, WizL, Width);
+    AddTrackL(WizX0, WizY1 - WizR, WizX0, WizY0 + WizR, WizL, Width);
+    AddArcL(WizX0 + WizR, WizY0 + WizR, WizR, 180, 270, WizL, Width);
+    AddArcL(WizX1 - WizR, WizY0 + WizR, WizR, 270, 0, WizL, Width);
+    AddArcL(WizX1 - WizR, WizY1 - WizR, WizR, 0, 90, WizL, Width);
+    AddArcL(WizX0 + WizR, WizY1 - WizR, WizR, 90, 180, WizL, Width);
 end;
 
-procedure PlaceHole(X, Y, Hole, Pad : TCoord);
+procedure PlaceHole(WizX, WizY, Hole, WizPad : TCoord);
 var
-    P : IPCB_Pad;
+    WizP : IPCB_Pad;
 begin
-    P := PCBServer.PCBObjectFactory(ePadObject, eNoDimension, eCreate_Default);
-    P.X := X;
-    P.Y := Y;
-    P.HoleSize := Hole;
-    P.TopXSize := Pad;
-    P.TopYSize := Pad;
-    P.BotXSize := Pad;
-    P.BotYSize := Pad;
-    P.Layer := eMultiLayer;
+    WizP := PCBServer.PCBObjectFactory(ePadObject, eNoDimension, eCreate_Default);
+    WizP.X := WizX;
+    WizP.Y := WizY;
+    WizP.HoleSize := Hole;
+    WizP.TopXSize := WizPad;
+    WizP.TopYSize := WizPad;
+    WizP.BotXSize := WizPad;
+    WizP.BotYSize := WizPad;
+    WizP.Layer := eMultiLayer;
     try
-        P.Name := 'MH';
+        WizP.Name := 'MH';
     except
     end;
-    Board.AddPCBObject(P);
+    WizBoard.AddPCBObject(WizP);
 end;
 
-procedure PlaceMountingHoles(X0, Y0, X1, Y1, Margin, Hole, Pad : TCoord);
+procedure PlaceMountingHoles(WizX0, WizY0, WizX1, WizY1, WizMargin, Hole, WizPad : TCoord);
 begin
     if FourHoles then
     begin
-        PlaceHole(X0 + Margin, Y0 + Margin, Hole, Pad);
-        PlaceHole(X1 - Margin, Y0 + Margin, Hole, Pad);
-        PlaceHole(X1 - Margin, Y1 - Margin, Hole, Pad);
-        PlaceHole(X0 + Margin, Y1 - Margin, Hole, Pad);
+        PlaceHole(WizX0 + WizMargin, WizY0 + WizMargin, Hole, WizPad);
+        PlaceHole(WizX1 - WizMargin, WizY0 + WizMargin, Hole, WizPad);
+        PlaceHole(WizX1 - WizMargin, WizY1 - WizMargin, Hole, WizPad);
+        PlaceHole(WizX0 + WizMargin, WizY1 - WizMargin, Hole, WizPad);
     end
     else
-        PlaceHole(X0 + Margin, Y0 + Margin, Hole, Pad);
+        PlaceHole(WizX0 + WizMargin, WizY0 + WizMargin, Hole, WizPad);
 end;
 
 procedure TrySetGrid(Grid : TCoord);
 begin
     try
-        Board.SnapGridSize := Grid;
+        WizBoard.SnapGridSize := Grid;
     except
         try
-            Board.SetState_SnapGridSize(Grid);
+            WizBoard.SetState_SnapGridSize(Grid);
         except
         end;
     end;
@@ -108,95 +109,95 @@ end;
 
 function FindNetGnd : IPCB_Net;
 var
-    Iter : IPCB_BoardIterator;
-    N : IPCB_Net;
+    WizIter : IPCB_BoardIterator;
+    WizN : IPCB_Net;
 begin
     Result := nil;
-    Iter := Board.BoardIterator_Create;
-    Iter.AddFilter_ObjectSet(MkSet(eNetObject));
-    Iter.AddFilter_LayerSet(AllLayers);
-    Iter.AddFilter_Method(eProcessAll);
-    N := Iter.FirstPCBObject;
-    while N <> nil do
+    WizIter := WizBoard.BoardIterator_Create;
+    WizIter.AddFilter_ObjectSet(MkSet(eNetObject));
+    WizIter.AddFilter_LayerSet(AllLayers);
+    WizIter.AddFilter_Method(eProcessAll);
+    WizN := WizIter.FirstPCBObject;
+    while WizN <> nil do
     begin
-        if UpperCase(N.Name) = 'GND' then
+        if UpperCase(WizN.Name) = 'GND' then
         begin
-            Result := N;
+            Result := WizN;
             Break;
         end;
-        N := Iter.NextPCBObject;
+        WizN := WizIter.NextPCBObject;
     end;
-    Board.BoardIterator_Destroy(Iter);
+    WizBoard.BoardIterator_Destroy(WizIter);
 end;
 
-procedure AddGndPoly(ALayer : TLayer; X0, Y0, X1, Y1 : TCoord);
+procedure AddGndPoly(WizALayer : TLayer; WizX0, WizY0, WizX1, WizY1 : TCoord);
 var
-    Poly : IPCB_Polygon;
-    Seg : TPolySegment;
-    N : IPCB_Net;
+    WizPoly : IPCB_Polygon;
+    WizSeg : TPolySegment;
+    WizN : IPCB_Net;
 begin
-    Poly := PCBServer.PCBObjectFactory(ePolyObject, eNoDimension, eCreate_Default);
-    Poly.Layer := ALayer;
-    Poly.PolyHatchStyle := ePolySolid;
-    N := FindNetGnd;
-    if N <> nil then Poly.Net := N;
+    WizPoly := PCBServer.PCBObjectFactory(ePolyObject, eNoDimension, eCreate_Default);
+    WizPoly.Layer := WizALayer;
+    WizPoly.PolyHatchStyle := ePolySolid;
+    WizN := FindNetGnd;
+    if WizN <> nil then WizPoly.Net := WizN;
     { Зазоры полигона — из правил проектирования, не из скрипта. }
-    Poly.PointCount := 4;
-    Seg.Kind := ePolySegmentLine;
-    Seg.vx := X0; Seg.vy := Y0; Poly.Segments[0] := Seg;
-    Seg.vx := X1; Seg.vy := Y0; Poly.Segments[1] := Seg;
-    Seg.vx := X1; Seg.vy := Y1; Poly.Segments[2] := Seg;
-    Seg.vx := X0; Seg.vy := Y1; Poly.Segments[3] := Seg;
-    Board.AddPCBObject(Poly);
+    WizPoly.PointCount := 4;
+    WizSeg.Kind := ePolySegmentLine;
+    WizSeg.vx := WizX0; WizSeg.vy := WizY0; WizPoly.Segments[0] := WizSeg;
+    WizSeg.vx := WizX1; WizSeg.vy := WizY0; WizPoly.Segments[1] := WizSeg;
+    WizSeg.vx := WizX1; WizSeg.vy := WizY1; WizPoly.Segments[2] := WizSeg;
+    WizSeg.vx := WizX0; WizSeg.vy := WizY1; WizPoly.Segments[3] := WizSeg;
+    WizBoard.AddPCBObject(WizPoly);
     try
-        Poly.Rebuild;
+        WizPoly.Rebuild;
     except
     end;
 end;
 
-procedure AddMaskOpening(ALayer : TLayer; X0, Y0, X1, Y1 : TCoord);
+procedure AddMaskOpening(WizALayer : TLayer; WizX0, WizY0, WizX1, WizY1 : TCoord);
 var
-    Fill : IPCB_Fill;
+    WizFill : IPCB_Fill;
 begin
-    Fill := PCBServer.PCBObjectFactory(eFillObject, eNoDimension, eCreate_Default);
-    Fill.X1Location := X0;
-    Fill.Y1Location := Y0;
-    Fill.X2Location := X1;
-    Fill.Y2Location := Y1;
-    Fill.Layer := ALayer;
-    Board.AddPCBObject(Fill);
+    WizFill := PCBServer.PCBObjectFactory(eFillObject, eNoDimension, eCreate_Default);
+    WizFill.X1Location := WizX0;
+    WizFill.Y1Location := WizY0;
+    WizFill.X2Location := WizX1;
+    WizFill.Y2Location := WizY1;
+    WizFill.Layer := WizALayer;
+    WizBoard.AddPCBObject(WizFill);
 end;
 
 procedure BuildBoard;
 var
-    X0, Y0, X1, Y1, R, Width : TCoord;
+    WizX0, WizY0, WizX1, WizY1, WizR, Width : TCoord;
     OriginOff : TCoord;
-    WS : IWorkspace;
+    WizWS : IWorkspace;
 begin
     if NewDoc then
     begin
-        WS := GetWorkspace;
-        if WS = nil then Exit;
-        WS.DM_CreateNewDocument('PCB');
+        WizWS := GetWorkspace;
+        if WizWS = nil then Exit;
+        WizWS.DM_CreateNewDocument('PCB');
     end;
     if PCBServer = nil then
     begin
         ShowError('PCB-server is not available.');
         Exit;
     end;
-    Board := PCBServer.GetCurrentPCBBoard;
-    if Board = nil then
+    WizBoard := PCBServer.GetCurrentPCBBoard;
+    if WizBoard = nil then
     begin
         ShowError('Нет PCB-документа для записи.');
         Exit;
     end;
 
     OriginOff := MMsToCoord(10);
-    X0 := OriginOff;
-    Y0 := OriginOff;
-    X1 := OriginOff + MMsToCoord(Wmm);
-    Y1 := OriginOff + MMsToCoord(Hmm);
-    R := MMsToCoord(FilletMM);
+    WizX0 := OriginOff;
+    WizY0 := OriginOff;
+    WizX1 := OriginOff + MMsToCoord(Wmm);
+    WizY1 := OriginOff + MMsToCoord(Hmm);
+    WizR := MMsToCoord(FilletMM);
     Width := MMsToCoord(0.2);
 
     PCBServer.PreProcess;
@@ -205,7 +206,7 @@ begin
         AddStringParameter('Scope', 'All');
         RunProcess('PCB:DeSelect');
 
-        DrawRoundedKeepout(X0, Y0, X1, Y1, R, Width);
+        DrawRoundedKeepout(WizX0, WizY0, WizX1, WizY1, WizR, Width);
 
         ResetParameters;
         AddStringParameter('MODE', 'BOARDOUTLINE_FROM_SEL_PRIMS');
@@ -215,26 +216,26 @@ begin
         AddStringParameter('Scope', 'All');
         RunProcess('PCB:DeSelect');
 
-        PlaceMountingHoles(X0, Y0, X1, Y1, MMsToCoord(MarginMM), MMsToCoord(HoleMM), MMsToCoord(PadMM));
+        PlaceMountingHoles(WizX0, WizY0, WizX1, WizY1, MMsToCoord(MarginMM), MMsToCoord(HoleMM), MMsToCoord(PadMM));
         TrySetGrid(MMsToCoord(GridMM));
 
         if MakeGnd then
         begin
-            AddGndPoly(eTopLayer, X0, Y0, X1, Y1);
-            AddGndPoly(eBottomLayer, X0, Y0, X1, Y1);
+            AddGndPoly(eTopLayer, WizX0, WizY0, WizX1, WizY1);
+            AddGndPoly(eBottomLayer, WizX0, WizY0, WizX1, WizY1);
             if CopperCount >= 4 then
             begin
                 try
-                    AddGndPoly(eMidLayer1, X0, Y0, X1, Y1);
-                    AddGndPoly(eMidLayer2, X0, Y0, X1, Y1);
+                    AddGndPoly(eMidLayer1, WizX0, WizY0, WizX1, WizY1);
+                    AddGndPoly(eMidLayer2, WizX0, WizY0, WizX1, WizY1);
                 except
                 end;
             end;
             if CopperCount >= 6 then
             begin
                 try
-                    AddGndPoly(eMidLayer3, X0, Y0, X1, Y1);
-                    AddGndPoly(eMidLayer4, X0, Y0, X1, Y1);
+                    AddGndPoly(eMidLayer3, WizX0, WizY0, WizX1, WizY1);
+                    AddGndPoly(eMidLayer4, WizX0, WizY0, WizX1, WizY1);
                 except
                 end;
             end;
@@ -242,8 +243,8 @@ begin
 
         if MakeMask then
         begin
-            AddMaskOpening(eTopSolder, X0, Y0, X1, Y1);
-            AddMaskOpening(eBottomSolder, X0, Y0, X1, Y1);
+            AddMaskOpening(eTopSolder, WizX0, WizY0, WizX1, WizY1);
+            AddMaskOpening(eBottomSolder, WizX0, WizY0, WizX1, WizY1);
         end;
     finally
         PCBServer.PostProcess;
@@ -256,17 +257,17 @@ begin
              'Мастер PCB');
 end;
 
-function ReadPositive(const S : String; var V : Double) : Boolean;
+function ReadPositive(const WizS : String; var WizV : Double) : Boolean;
 begin
     Result := False;
     try
-        V := StrToFloat(S);
-        Result := V > 0;
+        WizV := StrToFloat(WizS);
+        Result := WizV > 0;
     except
     end;
 end;
 
-procedure TFormWizard.ButtonOKClick(Sender: TObject);
+procedure TFormWizard.ButtonOKClick(WizSender: TObject);
 begin
     if not ReadPositive(EditW.Text, Wmm) then begin ShowError('Некорректная ширина.'); Exit; end;
     if not ReadPositive(EditH.Text, Hmm) then begin ShowError('Некорректная высота.'); Exit; end;
@@ -291,7 +292,7 @@ begin
     BuildBoard;
 end;
 
-procedure TFormWizard.ButtonCancelClick(Sender: TObject);
+procedure TFormWizard.ButtonCancelClick(WizSender: TObject);
 begin
     FormWizard.Close;
 end;
@@ -299,36 +300,36 @@ end;
 { ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
-function CS_ScriptFolder : String;
+function WizCS_ScriptFolder : String;
 var
-    WS  : IWorkspace;
-    Prj : IProject;
-    i   : Integer;
-    P   : String;
+    WizWS  : IWorkspace;
+    WizPrj : IProject;
+    Wizi   : Integer;
+    WizP   : String;
 begin
     Result := '';
     try
-        WS := GetWorkspace;
-        if WS = nil then Exit;
-        Prj := WS.DM_FocusedProject;
-        if Prj <> nil then
+        WizWS := GetWorkspace;
+        if WizWS = nil then Exit;
+        WizPrj := WizWS.DM_FocusedProject;
+        if WizPrj <> nil then
         begin
-            P := ExtractFilePath(Prj.DM_ProjectFullPath);
-            if P <> '' then
+            WizP := ExtractFilePath(WizPrj.DM_ProjectFullPath);
+            if WizP <> '' then
             begin
-                Result := P;
+                Result := WizP;
                 Exit;
             end;
         end;
-        for i := 0 to WS.DM_ProjectCount - 1 do
+        for Wizi := 0 to WizWS.DM_ProjectCount - 1 do
         begin
-            Prj := WS.DM_Projects(i);
-            if Prj <> nil then
+            WizPrj := WizWS.DM_Projects(Wizi);
+            if WizPrj <> nil then
             begin
-                P := Prj.DM_ProjectFullPath;
-                if Pos('CustomScripts', P) > 0 then
+                WizP := WizPrj.DM_ProjectFullPath;
+                if Pos('CustomScripts', WizP) > 0 then
                 begin
-                    Result := ExtractFilePath(P);
+                    Result := ExtractFilePath(WizP);
                     Exit;
                 end;
             end;
@@ -338,46 +339,46 @@ begin
     end;
 end;
 
-function CS_FindImageFile(const FileName : String) : String;
+function WizCS_FindImageFile(const WizFileName : String) : String;
 var
-    Dir, P : String;
+    WizDir, WizP : String;
 begin
     Result := '';
-    Dir := CS_ScriptFolder;
-    if Dir <> '' then
+    WizDir := WizCS_ScriptFolder;
+    if WizDir <> '' then
     begin
-        P := Dir + 'images\' + FileName;
-        if FileExists(P) then
+        WizP := WizDir + 'images\' + WizFileName;
+        if FileExists(WizP) then
         begin
-            Result := P;
+            Result := WizP;
             Exit;
         end;
-        P := Dir + FileName;
-        if FileExists(P) then
+        WizP := WizDir + WizFileName;
+        if FileExists(WizP) then
         begin
-            Result := P;
+            Result := WizP;
             Exit;
         end;
     end;
-    P := 'images\' + FileName;
-    if FileExists(P) then Result := P;
+    WizP := 'images\' + WizFileName;
+    if FileExists(WizP) then Result := WizP;
 end;
 
-procedure CS_TryLoadHelpImage(const BmpName : String; const PngName : String);
+procedure WizCS_TryLoadHelpImage(const WizBmpName : String; const WizPngName : String);
 var
-    P : String;
+    WizP : String;
 begin
     try
-        P := CS_FindImageFile(BmpName);
-        if P = '' then
-            P := CS_FindImageFile(PngName);
-        if (P <> '') and FileExists(P) then
+        WizP := WizCS_FindImageFile(WizBmpName);
+        if WizP = '' then
+            WizP := WizCS_FindImageFile(WizPngName);
+        if (WizP <> '') and FileExists(WizP) then
         begin
-            ImageHelp.Picture.LoadFromFile(P);
-            LabelImageHint.Caption := 'Replace image: images\' + BmpName;
+            ImageHelp.Picture.LoadFromFile(WizP);
+            LabelImageHint.Caption := 'Replace image: images\' + WizBmpName;
         end
         else
-            LabelImageHint.Caption := 'No image. Put ' + BmpName + ' in images\ next to the scripts.';
+            LabelImageHint.Caption := 'No image. Put ' + WizBmpName + ' in images\ next to the scripts.';
     except
         try
             LabelImageHint.Caption := 'Image not loaded.';
@@ -387,10 +388,10 @@ begin
 end;
 
 
-procedure TFormWizard.FormWizardShow(Sender: TObject);
+procedure TFormWizard.FormWizardShow(WizSender: TObject);
 begin
     try
-        CS_TryLoadHelpImage('PcbWizard.bmp', 'PcbWizard.png');
+        WizCS_TryLoadHelpImage('PcbWizard.bmp', 'PcbWizard.png');
     except
     end;
     EditGrid.Text := '0.1';
@@ -399,12 +400,12 @@ begin
     CheckFourHoles.Checked := True;
 end;
 
-procedure Start;
+procedure StartPcbWizard;
 begin
     FormWizard.ShowModal;
 end;
 
-procedure _Start;
+procedure _StartPcbWizard;
 begin
-    Start;
+    StartPcbWizard;
 end;

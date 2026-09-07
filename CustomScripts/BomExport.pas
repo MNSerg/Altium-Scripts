@@ -10,51 +10,52 @@ var
     DesLists    : TStringList; { key -> concatenated designators }
     ExtraFields : TStringList; { key -> Comment|Description|Value }
 
-procedure Start; forward;
-procedure _Start; forward;
-procedure TFormBom.ButtonBrowseClick(Sender: TObject); forward;
-procedure TFormBom.ButtonOKClick(Sender: TObject); forward;
-procedure TFormBom.ButtonCancelClick(Sender: TObject); forward;
-procedure TFormBom.FormBomShow(Sender: TObject); forward;
+{ Run Script: choose procedure StartBomExport (project compiles only this .pas). }
+procedure StartBomExport; forward;
+procedure _StartBomExport; forward;
+procedure TFormBom.ButtonBrowseClick(BomSender: TObject); forward;
+procedure TFormBom.ButtonOKClick(BomSender: TObject); forward;
+procedure TFormBom.ButtonCancelClick(BomSender: TObject); forward;
+procedure TFormBom.FormBomShow(BomSender: TObject); forward;
 
-function XmlEsc(const S : String) : String;
+function XmlEsc(const BomS : String) : String;
 var
-    T : String;
+    BomT : String;
 begin
-    T := S;
-    T := StringReplace(T, '&', '&amp;', [rfReplaceAll]);
-    T := StringReplace(T, '<', '&lt;', [rfReplaceAll]);
-    T := StringReplace(T, '>', '&gt;', [rfReplaceAll]);
-    T := StringReplace(T, '"', '&quot;', [rfReplaceAll]);
-    Result := T;
+    BomT := BomS;
+    BomT := StringReplace(BomT, '&', '&amp;', [rfReplaceAll]);
+    BomT := StringReplace(BomT, '<', '&lt;', [rfReplaceAll]);
+    BomT := StringReplace(BomT, '>', '&gt;', [rfReplaceAll]);
+    BomT := StringReplace(BomT, '"', '&quot;', [rfReplaceAll]);
+    Result := BomT;
 end;
 
-function ParamVal(Comp : ISch_Component; const Names : String) : String;
+function ParamVal(BomComp : ISch_Component; const BomNames : String) : String;
 var
-    P : ISch_Parameter;
-    Rest, Name : String;
+    BomP : ISch_Parameter;
+    Rest, BomName : String;
     PosSep : Integer;
 begin
     Result := '';
-    Rest := Names;
+    Rest := BomNames;
     while Rest <> '' do
     begin
         PosSep := Pos('|', Rest);
         if PosSep > 0 then
         begin
-            Name := Copy(Rest, 1, PosSep - 1);
+            BomName := Copy(Rest, 1, PosSep - 1);
             Rest := Copy(Rest, PosSep + 1, Length(Rest));
         end
         else
         begin
-            Name := Rest;
+            BomName := Rest;
             Rest := '';
         end;
         try
-            P := Comp.GetSchParameterByName(Name);
-            if P <> nil then
+            BomP := BomComp.GetSchParameterByName(BomName);
+            if BomP <> nil then
             begin
-                Result := P.Text;
+                Result := BomP.Text;
                 if Result <> '' then Exit;
             end;
         except
@@ -62,17 +63,17 @@ begin
     end;
 end;
 
-function FootprintOf(Comp : ISch_Component) : String;
+function FootprintOf(BomComp : ISch_Component) : String;
 var
     Impl : ISch_Implementation;
-    i : Integer;
+    Bomi : Integer;
 begin
-    Result := ParamVal(Comp, 'Footprint|PCBFootprint');
+    Result := ParamVal(BomComp, 'Footprint|PCBFootprint');
     if Result <> '' then Exit;
     try
-        for i := 0 to Comp.ImplementationCount - 1 do
+        for Bomi := 0 to BomComp.ImplementationCount - 1 do
         begin
-            Impl := Comp.Implementations[i];
+            Impl := BomComp.Implementations[Bomi];
             if Impl.ModelType = 'PCB' then
             begin
                 Result := Impl.ModelName;
@@ -83,99 +84,99 @@ begin
     end;
 end;
 
-procedure AddPart(const Des, Comment, Description, Footprint, Value : String);
+procedure AddPart(const BomDes, Comment, Description, Footprint, Value : String);
 var
-    Key, Fields : String;
-    Idx, Qty : Integer;
+    BomKey, Fields : String;
+    BomIdx, Qty : Integer;
 begin
     { Ключ группировки: Comment+Value+Description; footprint только внутри, без столбца. }
-    Key := UpperCase(Comment) + '||' + UpperCase(Value) + '||' +
+    BomKey := UpperCase(Comment) + '||' + UpperCase(Value) + '||' +
            UpperCase(Description) + '||' + UpperCase(Footprint);
     Fields := Comment + '|' + Description + '|' + Value;
 
-    Idx := Groups.IndexOf(Key);
-    if Idx < 0 then
+    BomIdx := Groups.IndexOf(BomKey);
+    if BomIdx < 0 then
     begin
-        Groups.Add(Key);
+        Groups.Add(BomKey);
         Groups.Objects[Groups.Count - 1] := TObject(1);
-        DesLists.Add(Des);
+        DesLists.Add(BomDes);
         ExtraFields.Add(Fields);
     end
     else
     begin
-        Qty := Integer(Groups.Objects[Idx]) + 1;
-        Groups.Objects[Idx] := TObject(Qty);
-        if DesLists[Idx] = '' then
-            DesLists[Idx] := Des
-        else if Des <> '' then
-            DesLists[Idx] := DesLists[Idx] + ', ' + Des;
+        Qty := Integer(Groups.Objects[BomIdx]) + 1;
+        Groups.Objects[BomIdx] := TObject(Qty);
+        if DesLists[BomIdx] = '' then
+            DesLists[BomIdx] := BomDes
+        else if BomDes <> '' then
+            DesLists[BomIdx] := DesLists[BomIdx] + ', ' + BomDes;
     end;
 end;
 
-procedure HarvestSchDoc(Doc : ISch_Document);
+procedure HarvestSchDoc(BomDoc : ISch_Document);
 var
-    Iter : ISch_Iterator;
-    Comp : ISch_Component;
-    Des, Comment, Desc, Fp, Val : String;
+    BomIter : ISch_Iterator;
+    BomComp : ISch_Component;
+    BomDes, Comment, Desc, Fp, BomVal : String;
 begin
-    if Doc = nil then Exit;
-    Iter := Doc.SchIterator_Create;
-    Iter.AddFilter_ObjectSet(MkSet(eSchComponent));
-    Comp := Iter.FirstSchObject;
-    while Comp <> nil do
+    if BomDoc = nil then Exit;
+    BomIter := BomDoc.SchIterator_Create;
+    BomIter.AddFilter_ObjectSet(MkSet(eSchComponent));
+    BomComp := BomIter.FirstSchObject;
+    while BomComp <> nil do
     begin
         { Ничего не исключаем: DNP, графические, NoBOM, механические — всё. }
         try
-            Des := Comp.Designator.Text;
+            BomDes := BomComp.Designator.Text;
         except
-            Des := '';
+            BomDes := '';
         end;
         try
-            Comment := Comp.Comment.Text;
+            Comment := BomComp.Comment.Text;
         except
-            Comment := ParamVal(Comp, 'Comment');
+            Comment := ParamVal(BomComp, 'Comment');
         end;
-        Desc := ParamVal(Comp, 'Description|Part Description');
-        Fp := FootprintOf(Comp);
-        Val := ParamVal(Comp, 'Value');
-        if Val = '' then Val := Comment;
-        AddPart(Des, Comment, Desc, Fp, Val);
-        Comp := Iter.NextSchObject;
+        Desc := ParamVal(BomComp, 'Description|Part Description');
+        Fp := FootprintOf(BomComp);
+        BomVal := ParamVal(BomComp, 'Value');
+        if BomVal = '' then BomVal := Comment;
+        AddPart(BomDes, Comment, Desc, Fp, BomVal);
+        BomComp := BomIter.NextSchObject;
     end;
-    Doc.SchIterator_Destroy(Iter);
+    BomDoc.SchIterator_Destroy(BomIter);
 end;
 
 procedure HarvestFromProject;
 var
-    WS : IWorkspace;
-    Project : IProject;
-    i : Integer;
-    LogDoc : IDocument;
-    SchDoc : ISch_Document;
-    Board : IPCB_Board;
-    Cmp : IPCB_Component;
-    Iter : IPCB_BoardIterator;
-    Des, Comment, Fp : String;
+    BomWS : IWorkspace;
+    BomProject : IProject;
+    Bomi : Integer;
+    BomLogDoc : IDocument;
+    BomSchDoc : ISch_Document;
+    BomBoard : IPCB_Board;
+    BomCmp : IPCB_Component;
+    BomIter : IPCB_BoardIterator;
+    BomDes, Comment, Fp : String;
 begin
-    WS := GetWorkspace;
-    if WS = nil then Exit;
-    Project := WS.DM_FocusedProject;
+    BomWS := GetWorkspace;
+    if BomWS = nil then Exit;
+    BomProject := BomWS.DM_FocusedProject;
 
     if SchServer <> nil then
     begin
-        if Project <> nil then
+        if BomProject <> nil then
         begin
-            for i := 0 to Project.DM_LogicalDocumentCount - 1 do
+            for Bomi := 0 to BomProject.DM_LogicalDocumentCount - 1 do
             begin
-                LogDoc := Project.DM_LogicalDocuments(i);
-                if (LogDoc.DM_DocumentKind = 'SCH') or (LogDoc.DM_DocumentKind = 'SCHDOC') then
+                BomLogDoc := BomProject.DM_LogicalDocuments(Bomi);
+                if (BomLogDoc.DM_DocumentKind = 'SCH') or (BomLogDoc.DM_DocumentKind = 'SCHDOC') then
                 begin
                     try
-                        SchServer.LoadSchDocumentByPath(LogDoc.DM_FullPath);
+                        SchServer.LoadSchDocumentByPath(BomLogDoc.DM_FullPath);
                     except
                     end;
-                    SchDoc := SchServer.GetSchDocumentByPath(LogDoc.DM_FullPath);
-                    if SchDoc <> nil then HarvestSchDoc(SchDoc);
+                    BomSchDoc := SchServer.GetSchDocumentByPath(BomLogDoc.DM_FullPath);
+                    if BomSchDoc <> nil then HarvestSchDoc(BomSchDoc);
                 end;
             end;
         end
@@ -187,27 +188,27 @@ begin
 
     { Fallback: компоненты PCB. }
     if PCBServer = nil then Exit;
-    Board := PCBServer.GetCurrentPCBBoard;
-    if Board = nil then Exit;
-    Iter := Board.BoardIterator_Create;
-    Iter.AddFilter_ObjectSet(MkSet(eComponentObject));
-    Iter.AddFilter_LayerSet(AllLayers);
-    Iter.AddFilter_Method(eProcessAll);
-    Cmp := Iter.FirstPCBObject;
-    while Cmp <> nil do
+    BomBoard := PCBServer.GetCurrentPCBBoard;
+    if BomBoard = nil then Exit;
+    BomIter := BomBoard.BoardIterator_Create;
+    BomIter.AddFilter_ObjectSet(MkSet(eComponentObject));
+    BomIter.AddFilter_LayerSet(AllLayers);
+    BomIter.AddFilter_Method(eProcessAll);
+    BomCmp := BomIter.FirstPCBObject;
+    while BomCmp <> nil do
     begin
-        Des := '';
+        BomDes := '';
         Comment := '';
         Fp := '';
-        try Des := Cmp.Name.Text; except Des := ''; end;
-        try Comment := Cmp.Comment.Text; except Comment := ''; end;
+        try BomDes := BomCmp.Name.Text; except BomDes := ''; end;
+        try Comment := BomCmp.Comment.Text; except Comment := ''; end;
         if Comment = '' then
-        try Comment := Cmp.SourceLibReference; except Comment := ''; end;
-        try Fp := Cmp.Pattern; except Fp := ''; end;
-        AddPart(Des, Comment, '', Fp, Comment);
-        Cmp := Iter.NextPCBObject;
+        try Comment := BomCmp.SourceLibReference; except Comment := ''; end;
+        try Fp := BomCmp.Pattern; except Fp := ''; end;
+        AddPart(BomDes, Comment, '', Fp, Comment);
+        BomCmp := BomIter.NextPCBObject;
     end;
-    Board.BoardIterator_Destroy(Iter);
+    BomBoard.BoardIterator_Destroy(BomIter);
 end;
 
 procedure WriteSettingsXml(const XlsPath : String);
@@ -236,7 +237,7 @@ end;
 procedure WriteExcel;
 var
     Lines : TStringList;
-    i : Integer;
+    Bomi : Integer;
     Parts : TStringList;
     Qty : Integer;
 begin
@@ -260,14 +261,14 @@ begin
         Lines.Add('    <Cell><Data ss:Type="String">Quantity</Data></Cell>');
         Lines.Add('    <Cell><Data ss:Type="String">Value</Data></Cell>');
         Lines.Add('   </Row>');
-        for i := 0 to Groups.Count - 1 do
+        for Bomi := 0 to Groups.Count - 1 do
         begin
-            Qty := Integer(Groups.Objects[i]);
-            Parts.DelimitedText := ExtraFields[i];
+            Qty := Integer(Groups.Objects[Bomi]);
+            Parts.DelimitedText := ExtraFields[Bomi];
             while Parts.Count < 3 do Parts.Add('');
             Lines.Add('   <Row>');
             Lines.Add('    <Cell><Data ss:Type="String">' + XmlEsc(Parts[0]) + '</Data></Cell>');
-            Lines.Add('    <Cell><Data ss:Type="String">' + XmlEsc(DesLists[i]) + '</Data></Cell>');
+            Lines.Add('    <Cell><Data ss:Type="String">' + XmlEsc(DesLists[Bomi]) + '</Data></Cell>');
             Lines.Add('    <Cell><Data ss:Type="String">' + XmlEsc(Parts[1]) + '</Data></Cell>');
             Lines.Add('    <Cell><Data ss:Type="Number">' + IntToStr(Qty) + '</Data></Cell>');
             Lines.Add('    <Cell><Data ss:Type="String">' + XmlEsc(Parts[2]) + '</Data></Cell>');
@@ -292,36 +293,36 @@ end;
 { ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
-function CS_ScriptFolder : String;
+function BomCS_ScriptFolder : String;
 var
-    WS  : IWorkspace;
-    Prj : IProject;
-    i   : Integer;
-    P   : String;
+    BomWS  : IWorkspace;
+    BomPrj : IProject;
+    Bomi   : Integer;
+    BomP   : String;
 begin
     Result := '';
     try
-        WS := GetWorkspace;
-        if WS = nil then Exit;
-        Prj := WS.DM_FocusedProject;
-        if Prj <> nil then
+        BomWS := GetWorkspace;
+        if BomWS = nil then Exit;
+        BomPrj := BomWS.DM_FocusedProject;
+        if BomPrj <> nil then
         begin
-            P := ExtractFilePath(Prj.DM_ProjectFullPath);
-            if P <> '' then
+            BomP := ExtractFilePath(BomPrj.DM_ProjectFullPath);
+            if BomP <> '' then
             begin
-                Result := P;
+                Result := BomP;
                 Exit;
             end;
         end;
-        for i := 0 to WS.DM_ProjectCount - 1 do
+        for Bomi := 0 to BomWS.DM_ProjectCount - 1 do
         begin
-            Prj := WS.DM_Projects(i);
-            if Prj <> nil then
+            BomPrj := BomWS.DM_Projects(Bomi);
+            if BomPrj <> nil then
             begin
-                P := Prj.DM_ProjectFullPath;
-                if Pos('CustomScripts', P) > 0 then
+                BomP := BomPrj.DM_ProjectFullPath;
+                if Pos('CustomScripts', BomP) > 0 then
                 begin
-                    Result := ExtractFilePath(P);
+                    Result := ExtractFilePath(BomP);
                     Exit;
                 end;
             end;
@@ -331,46 +332,46 @@ begin
     end;
 end;
 
-function CS_FindImageFile(const FileName : String) : String;
+function BomCS_FindImageFile(const BomFileName : String) : String;
 var
-    Dir, P : String;
+    BomDir, BomP : String;
 begin
     Result := '';
-    Dir := CS_ScriptFolder;
-    if Dir <> '' then
+    BomDir := BomCS_ScriptFolder;
+    if BomDir <> '' then
     begin
-        P := Dir + 'images\' + FileName;
-        if FileExists(P) then
+        BomP := BomDir + 'images\' + BomFileName;
+        if FileExists(BomP) then
         begin
-            Result := P;
+            Result := BomP;
             Exit;
         end;
-        P := Dir + FileName;
-        if FileExists(P) then
+        BomP := BomDir + BomFileName;
+        if FileExists(BomP) then
         begin
-            Result := P;
+            Result := BomP;
             Exit;
         end;
     end;
-    P := 'images\' + FileName;
-    if FileExists(P) then Result := P;
+    BomP := 'images\' + BomFileName;
+    if FileExists(BomP) then Result := BomP;
 end;
 
-procedure CS_TryLoadHelpImage(const BmpName : String; const PngName : String);
+procedure BomCS_TryLoadHelpImage(const BomBmpName : String; const BomPngName : String);
 var
-    P : String;
+    BomP : String;
 begin
     try
-        P := CS_FindImageFile(BmpName);
-        if P = '' then
-            P := CS_FindImageFile(PngName);
-        if (P <> '') and FileExists(P) then
+        BomP := BomCS_FindImageFile(BomBmpName);
+        if BomP = '' then
+            BomP := BomCS_FindImageFile(BomPngName);
+        if (BomP <> '') and FileExists(BomP) then
         begin
-            ImageHelp.Picture.LoadFromFile(P);
-            LabelImageHint.Caption := 'Replace image: images\' + BmpName;
+            ImageHelp.Picture.LoadFromFile(BomP);
+            LabelImageHint.Caption := 'Replace image: images\' + BomBmpName;
         end
         else
-            LabelImageHint.Caption := 'No image. Put ' + BmpName + ' in images\ next to the scripts.';
+            LabelImageHint.Caption := 'No image. Put ' + BomBmpName + ' in images\ next to the scripts.';
     except
         try
             LabelImageHint.Caption := 'Image not loaded.';
@@ -380,34 +381,34 @@ begin
 end;
 
 
-procedure TFormBom.FormBomShow(Sender: TObject);
+procedure TFormBom.FormBomShow(BomSender: TObject);
 begin
     try
-        CS_TryLoadHelpImage('BomExport.bmp', 'BomExport.png');
+        BomCS_TryLoadHelpImage('BomExport.bmp', 'BomExport.png');
     except
     end;
     if EditPath.Text = '' then
         EditPath.Text := 'bom.xls';
 end;
 
-procedure TFormBom.ButtonBrowseClick(Sender: TObject);
+procedure TFormBom.ButtonBrowseClick(BomSender: TObject);
 var
-    Dlg : TSaveDialog;
+    BomDlg : TSaveDialog;
 begin
-    Dlg := TSaveDialog.Create(nil);
+    BomDlg := TSaveDialog.Create(nil);
     try
-        Dlg.Title := 'Сохранить BOM Excel';
-        Dlg.Filter := 'Excel (*.xls)|*.xls|Все файлы (*.*)|*.*';
-        Dlg.DefaultExt := 'xls';
-        Dlg.FileName := 'bom.xls';
-        if Dlg.Execute then
-            EditPath.Text := Dlg.FileName;
+        BomDlg.Title := 'Сохранить BOM Excel';
+        BomDlg.Filter := 'Excel (*.xls)|*.xls|Все файлы (*.*)|*.*';
+        BomDlg.DefaultExt := 'xls';
+        BomDlg.FileName := 'bom.xls';
+        if BomDlg.Execute then
+            EditPath.Text := BomDlg.FileName;
     finally
-        Dlg.Free;
+        BomDlg.Free;
     end;
 end;
 
-procedure TFormBom.ButtonOKClick(Sender: TObject);
+procedure TFormBom.ButtonOKClick(BomSender: TObject);
 begin
     OutPath := EditPath.Text;
     if OutPath = '' then
@@ -437,17 +438,17 @@ begin
     end;
 end;
 
-procedure TFormBom.ButtonCancelClick(Sender: TObject);
+procedure TFormBom.ButtonCancelClick(BomSender: TObject);
 begin
     FormBom.Close;
 end;
 
-procedure Start;
+procedure StartBomExport;
 begin
     FormBom.ShowModal;
 end;
 
-procedure _Start;
+procedure _StartBomExport;
 begin
-    Start;
+    StartBomExport;
 end;

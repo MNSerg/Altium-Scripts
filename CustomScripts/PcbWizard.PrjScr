@@ -1,0 +1,8 @@
+[Design]
+Version=1.0
+
+[Document1]
+DocumentPath=PcbWizard.pas
+
+[Generic_ScriptingSystem]
+StartProcName=PcbWizard.pas>StartPcbWizard

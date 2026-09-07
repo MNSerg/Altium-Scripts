@@ -9,135 +9,136 @@ const
     cSilkClear = 10000; { ~1 mil extra }
 
 var
-    Board : IPCB_Board;
+    SilBoard : IPCB_Board;
     SkipHidden : Boolean;
     FixedHeight : TCoord;
     MovedCnt, FailCnt, SkipCnt : Integer;
 
-procedure Start; forward;
-procedure _Start; forward;
-procedure TFormSilk.ButtonOKClick(Sender: TObject); forward;
-procedure TFormSilk.ButtonCancelClick(Sender: TObject); forward;
-procedure TFormSilk.FormSilkShow(Sender: TObject); forward;
+{ Run Script: choose procedure StartPlaceDesignators (project compiles only this .pas). }
+procedure StartPlaceDesignators; forward;
+procedure _StartPlaceDesignators; forward;
+procedure TFormSilk.ButtonOKClick(SilSender: TObject); forward;
+procedure TFormSilk.ButtonCancelClick(SilSender: TObject); forward;
+procedure TFormSilk.FormSilkShow(SilSender: TObject); forward;
 
-function RectsOverlap(L1, B1, R1, T1, L2, B2, R2, T2 : TCoord) : Boolean;
+function RectsOverlap(L1, B1, R1, SilT1, L2, B2, R2, SilT2 : TCoord) : Boolean;
 begin
-    Result := not ((R1 < L2) or (R2 < L1) or (T1 < B2) or (T2 < B1));
+    Result := not ((R1 < L2) or (R2 < L1) or (SilT1 < B2) or (SilT2 < B1));
 end;
 
-function OverlayLayer(Cmp : IPCB_Component) : TLayer;
+function OverlayLayer(SilCmp : IPCB_Component) : TLayer;
 begin
-    if Cmp.Layer = eBottomLayer then
+    if SilCmp.Layer = eBottomLayer then
         Result := eBottomOverlay
     else
         Result := eTopOverlay;
 end;
 
-function IsHiddenName(Cmp : IPCB_Component) : Boolean;
+function IsHiddenName(SilCmp : IPCB_Component) : Boolean;
 begin
     Result := False;
     try
-        if Cmp.NameOn = False then Result := True;
+        if SilCmp.NameOn = False then Result := True;
     except
     end;
 end;
 
-function GetCourtyard(Cmp : IPCB_Component) : TCoordRect;
+function GetCourtyard(SilCmp : IPCB_Component) : TCoordRect;
 begin
     try
-        Result := Cmp.BoundingRectangleNoNameCommentForSignals;
+        Result := SilCmp.BoundingRectangleNoNameCommentForSignals;
     except
         try
-            Result := Cmp.BoundingRectangleNoNameComment;
+            Result := SilCmp.BoundingRectangleNoNameComment;
         except
-            Result := Cmp.BoundingRectangle;
+            Result := SilCmp.BoundingRectangle;
         end;
     end;
 end;
 
-function CollisionScore(L, B, R, T : TCoord; SkipCmp : IPCB_Component; SilkLayer : TLayer) : Integer;
+function CollisionScore(SilL, SilB, SilR, SilT : TCoord; SkipCmp : IPCB_Component; SilkLayer : TLayer) : Integer;
 var
-    Iter : IPCB_SpatialIterator;
-    Prim : IPCB_Primitive;
+    SilIter : IPCB_SpatialIterator;
+    SilPrim : IPCB_Primitive;
     RR : TCoordRect;
     Extra : TCoord;
 begin
     Result := 0;
     Extra := MMsToCoord(cGapMM);
-    L := L - Extra; B := B - Extra; R := R + Extra; T := T + Extra;
+    SilL := SilL - Extra; SilB := SilB - Extra; SilR := SilR + Extra; SilT := SilT + Extra;
 
-    Iter := Board.SpatialIterator_Create;
-    Iter.AddFilter_ObjectSet(MkSet(ePadObject, eViaObject, eTrackObject, eArcObject, eTextObject, eComponentBodyObject));
-    Iter.AddFilter_LayerSet(MkSet(SilkLayer, eMultiLayer, eTopLayer, eBottomLayer));
-    Iter.AddFilter_Area(L, B, R, T);
-    Prim := Iter.FirstPCBObject;
-    while Prim <> nil do
+    SilIter := SilBoard.SpatialIterator_Create;
+    SilIter.AddFilter_ObjectSet(MkSet(ePadObject, eViaObject, eTrackObject, eArcObject, eTextObject, eComponentBodyObject));
+    SilIter.AddFilter_LayerSet(MkSet(SilkLayer, eMultiLayer, eTopLayer, eBottomLayer));
+    SilIter.AddFilter_Area(SilL, SilB, SilR, SilT);
+    SilPrim := SilIter.FirstPCBObject;
+    while SilPrim <> nil do
     begin
-        if (SkipCmp <> nil) and (Prim.I_ObjectAddress = SkipCmp.I_ObjectAddress) then
+        if (SkipCmp <> nil) and (SilPrim.I_ObjectAddress = SkipCmp.I_ObjectAddress) then
         begin
-            Prim := Iter.NextPCBObject;
+            SilPrim := SilIter.NextPCBObject;
             Continue;
         end;
-        if Prim.ObjectId = eTextObject then
+        if SilPrim.ObjectId = eTextObject then
         begin
-            if Prim.Component = SkipCmp then
+            if SilPrim.Component = SkipCmp then
             begin
-                Prim := Iter.NextPCBObject;
+                SilPrim := SilIter.NextPCBObject;
                 Continue;
             end;
         end;
-        RR := Prim.BoundingRectangle;
-        if RectsOverlap(L, B, R, T, RR.Left, RR.Bottom, RR.Right, RR.Top) then
+        RR := SilPrim.BoundingRectangle;
+        if RectsOverlap(SilL, SilB, SilR, SilT, RR.Left, RR.Bottom, RR.Right, RR.Top) then
             Inc(Result);
-        Prim := Iter.NextPCBObject;
+        SilPrim := SilIter.NextPCBObject;
     end;
-    Board.SpatialIterator_Destroy(Iter);
+    SilBoard.SpatialIterator_Destroy(SilIter);
 
     { Край платы. }
-    RR := Board.BoardOutline.BoundingRectangle;
-    if (L < RR.Left) or (B < RR.Bottom) or (R > RR.Right) or (T > RR.Top) then
+    RR := SilBoard.BoardOutline.BoundingRectangle;
+    if (SilL < RR.Left) or (SilB < RR.Bottom) or (SilR > RR.Right) or (SilT > RR.Top) then
         Result := Result + 50;
 end;
 
-procedure ApplyRotationForReadability(Txt : IPCB_Text; Cmp : IPCB_Component; Use90 : Boolean);
+procedure ApplyRotationForReadability(Txt : IPCB_Text; SilCmp : IPCB_Component; Use90 : Boolean);
 var
-    Rot : Double;
+    SilRot : Double;
 begin
-    if Use90 then Rot := 90 else Rot := 0;
-    if Cmp.Layer = eBottomLayer then
+    if Use90 then SilRot := 90 else SilRot := 0;
+    if SilCmp.Layer = eBottomLayer then
     begin
         { На нижней шелкографии текст зеркален слоем; угол 0/90 сохраняем читаемым. }
         Txt.MirrorFlag := True;
     end
     else
         Txt.MirrorFlag := False;
-    Txt.Rotation := Rot;
+    Txt.Rotation := SilRot;
 end;
 
-procedure PlaceOne(Cmp : IPCB_Component);
+procedure PlaceOne(SilCmp : IPCB_Component);
 var
     Txt : IPCB_Text;
     Court : TCoordRect;
-    BestScore, Score, i : Integer;
+    BestScore, Score, Sili : Integer;
     BestX, BestY : TCoord;
     Best90 : Boolean;
     TW, TH : TCoord;
-    L, B, R, T : TCoord;
+    SilL, SilB, SilR, SilT : TCoord;
     Gap : TCoord;
-    CX, CY : TCoord;
+    SilCX, SilCY : TCoord;
     CandsX, CandsY : array[0..7] of TCoord;
     Cands90 : array[0..7] of Boolean;
     SilkLayer : TLayer;
 begin
-    Txt := Cmp.Name;
+    Txt := SilCmp.Name;
     if Txt = nil then Exit;
-    if SkipHidden and IsHiddenName(Cmp) then
+    if SkipHidden and IsHiddenName(SilCmp) then
     begin
         Inc(SkipCnt);
         Exit;
     end;
 
-    SilkLayer := OverlayLayer(Cmp);
+    SilkLayer := OverlayLayer(SilCmp);
     Txt.Layer := SilkLayer;
 
     if FixedHeight > 0 then
@@ -149,22 +150,22 @@ begin
         end;
     end;
 
-    Court := GetCourtyard(Cmp);
+    Court := GetCourtyard(SilCmp);
     Gap := MMsToCoord(cGapMM);
     TW := Txt.BoundingRectangle.Right - Txt.BoundingRectangle.Left;
     TH := Txt.BoundingRectangle.Top - Txt.BoundingRectangle.Bottom;
     if TW < 1 then TW := MMsToCoord(1);
     if TH < 1 then TH := MMsToCoord(0.8);
 
-    CX := (Court.Left + Court.Right) div 2;
-    CY := (Court.Bottom + Court.Top) div 2;
+    SilCX := (Court.Left + Court.Right) div 2;
+    SilCY := (Court.Bottom + Court.Top) div 2;
 
     { 0: сверху 0°, 1: снизу 0°, 2: слева 90°, 3: справа 90°,
       4..7 те же со сдвигом. }
-    CandsX[0] := CX; CandsY[0] := Court.Top + Gap + TH div 2; Cands90[0] := False;
-    CandsX[1] := CX; CandsY[1] := Court.Bottom - Gap - TH div 2; Cands90[1] := False;
-    CandsX[2] := Court.Left - Gap - TH div 2; CandsY[2] := CY; Cands90[2] := True;
-    CandsX[3] := Court.Right + Gap + TH div 2; CandsY[3] := CY; Cands90[3] := True;
+    CandsX[0] := SilCX; CandsY[0] := Court.Top + Gap + TH div 2; Cands90[0] := False;
+    CandsX[1] := SilCX; CandsY[1] := Court.Bottom - Gap - TH div 2; Cands90[1] := False;
+    CandsX[2] := Court.Left - Gap - TH div 2; CandsY[2] := SilCY; Cands90[2] := True;
+    CandsX[3] := Court.Right + Gap + TH div 2; CandsY[3] := SilCY; Cands90[3] := True;
     CandsX[4] := Court.Left + TW div 2; CandsY[4] := Court.Top + Gap + TH div 2; Cands90[4] := False;
     CandsX[5] := Court.Right - TW div 2; CandsY[5] := Court.Bottom - Gap - TH div 2; Cands90[5] := False;
     CandsX[6] := Court.Left - Gap - TH div 2; CandsY[6] := Court.Top - TH; Cands90[6] := True;
@@ -175,33 +176,33 @@ begin
     BestY := Txt.YLocation;
     Best90 := False;
 
-    for i := 0 to 7 do
+    for Sili := 0 to 7 do
     begin
-        L := CandsX[i] - TW div 2;
-        R := CandsX[i] + TW div 2;
-        B := CandsY[i] - TH div 2;
-        T := CandsY[i] + TH div 2;
-        if Cands90[i] then
+        SilL := CandsX[Sili] - TW div 2;
+        SilR := CandsX[Sili] + TW div 2;
+        SilB := CandsY[Sili] - TH div 2;
+        SilT := CandsY[Sili] + TH div 2;
+        if Cands90[Sili] then
         begin
-            L := CandsX[i] - TH div 2;
-            R := CandsX[i] + TH div 2;
-            B := CandsY[i] - TW div 2;
-            T := CandsY[i] + TW div 2;
+            SilL := CandsX[Sili] - TH div 2;
+            SilR := CandsX[Sili] + TH div 2;
+            SilB := CandsY[Sili] - TW div 2;
+            SilT := CandsY[Sili] + TW div 2;
         end;
-        Score := CollisionScore(L, B, R, T, Cmp, SilkLayer);
+        Score := CollisionScore(SilL, SilB, SilR, SilT, SilCmp, SilkLayer);
         { Предпочитаем верх/право при равенстве. }
         if Score < BestScore then
         begin
             BestScore := Score;
-            BestX := CandsX[i];
-            BestY := CandsY[i];
-            Best90 := Cands90[i];
+            BestX := CandsX[Sili];
+            BestY := CandsY[Sili];
+            Best90 := Cands90[Sili];
         end;
     end;
 
     Txt.BeginModify;
-    Cmp.ChangeNameAutoposition := eAutoPos_Manual;
-    ApplyRotationForReadability(Txt, Cmp, Best90);
+    SilCmp.ChangeNameAutoposition := eAutoPos_Manual;
+    ApplyRotationForReadability(Txt, SilCmp, Best90);
     Txt.XLocation := BestX;
     Txt.YLocation := BestY;
     Txt.EndModify;
@@ -212,11 +213,11 @@ end;
 
 procedure DoPlace;
 var
-    Iter : IPCB_BoardIterator;
-    Cmp : IPCB_Component;
+    SilIter : IPCB_BoardIterator;
+    SilCmp : IPCB_Component;
     AnySelected : Boolean;
-    i : Integer;
-    Prim : IPCB_Primitive;
+    Sili : Integer;
+    SilPrim : IPCB_Primitive;
 begin
     MovedCnt := 0;
     FailCnt := 0;
@@ -224,10 +225,10 @@ begin
 
     { Если выделены компоненты — только они; иначе все. }
     AnySelected := False;
-    for i := 0 to Board.SelectecObjectCount - 1 do
+    for Sili := 0 to SilBoard.SelectecObjectCount - 1 do
     begin
-        Prim := Board.SelectecObject(i);
-        if Prim.ObjectId = eComponentObject then
+        SilPrim := SilBoard.SelectecObject(Sili);
+        if SilPrim.ObjectId = eComponentObject then
             AnySelected := True;
     end;
 
@@ -235,26 +236,26 @@ begin
     try
         if AnySelected then
         begin
-            for i := 0 to Board.SelectecObjectCount - 1 do
+            for Sili := 0 to SilBoard.SelectecObjectCount - 1 do
             begin
-                Prim := Board.SelectecObject(i);
-                if Prim.ObjectId = eComponentObject then
-                    PlaceOne(Prim);
+                SilPrim := SilBoard.SelectecObject(Sili);
+                if SilPrim.ObjectId = eComponentObject then
+                    PlaceOne(SilPrim);
             end;
         end
         else
         begin
-            Iter := Board.BoardIterator_Create;
-            Iter.AddFilter_ObjectSet(MkSet(eComponentObject));
-            Iter.AddFilter_LayerSet(AllLayers);
-            Iter.AddFilter_Method(eProcessAll);
-            Cmp := Iter.FirstPCBObject;
-            while Cmp <> nil do
+            SilIter := SilBoard.BoardIterator_Create;
+            SilIter.AddFilter_ObjectSet(MkSet(eComponentObject));
+            SilIter.AddFilter_LayerSet(AllLayers);
+            SilIter.AddFilter_Method(eProcessAll);
+            SilCmp := SilIter.FirstPCBObject;
+            while SilCmp <> nil do
             begin
-                PlaceOne(Cmp);
-                Cmp := Iter.NextPCBObject;
+                PlaceOne(SilCmp);
+                SilCmp := SilIter.NextPCBObject;
             end;
-            Board.BoardIterator_Destroy(Iter);
+            SilBoard.BoardIterator_Destroy(SilIter);
         end;
     finally
         PCBServer.PostProcess;
@@ -270,36 +271,36 @@ end;
 { ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
-function CS_ScriptFolder : String;
+function SilCS_ScriptFolder : String;
 var
-    WS  : IWorkspace;
-    Prj : IProject;
-    i   : Integer;
-    P   : String;
+    SilWS  : IWorkspace;
+    SilPrj : IProject;
+    Sili   : Integer;
+    SilP   : String;
 begin
     Result := '';
     try
-        WS := GetWorkspace;
-        if WS = nil then Exit;
-        Prj := WS.DM_FocusedProject;
-        if Prj <> nil then
+        SilWS := GetWorkspace;
+        if SilWS = nil then Exit;
+        SilPrj := SilWS.DM_FocusedProject;
+        if SilPrj <> nil then
         begin
-            P := ExtractFilePath(Prj.DM_ProjectFullPath);
-            if P <> '' then
+            SilP := ExtractFilePath(SilPrj.DM_ProjectFullPath);
+            if SilP <> '' then
             begin
-                Result := P;
+                Result := SilP;
                 Exit;
             end;
         end;
-        for i := 0 to WS.DM_ProjectCount - 1 do
+        for Sili := 0 to SilWS.DM_ProjectCount - 1 do
         begin
-            Prj := WS.DM_Projects(i);
-            if Prj <> nil then
+            SilPrj := SilWS.DM_Projects(Sili);
+            if SilPrj <> nil then
             begin
-                P := Prj.DM_ProjectFullPath;
-                if Pos('CustomScripts', P) > 0 then
+                SilP := SilPrj.DM_ProjectFullPath;
+                if Pos('CustomScripts', SilP) > 0 then
                 begin
-                    Result := ExtractFilePath(P);
+                    Result := ExtractFilePath(SilP);
                     Exit;
                 end;
             end;
@@ -309,46 +310,46 @@ begin
     end;
 end;
 
-function CS_FindImageFile(const FileName : String) : String;
+function SilCS_FindImageFile(const SilFileName : String) : String;
 var
-    Dir, P : String;
+    SilDir, SilP : String;
 begin
     Result := '';
-    Dir := CS_ScriptFolder;
-    if Dir <> '' then
+    SilDir := SilCS_ScriptFolder;
+    if SilDir <> '' then
     begin
-        P := Dir + 'images\' + FileName;
-        if FileExists(P) then
+        SilP := SilDir + 'images\' + SilFileName;
+        if FileExists(SilP) then
         begin
-            Result := P;
+            Result := SilP;
             Exit;
         end;
-        P := Dir + FileName;
-        if FileExists(P) then
+        SilP := SilDir + SilFileName;
+        if FileExists(SilP) then
         begin
-            Result := P;
+            Result := SilP;
             Exit;
         end;
     end;
-    P := 'images\' + FileName;
-    if FileExists(P) then Result := P;
+    SilP := 'images\' + SilFileName;
+    if FileExists(SilP) then Result := SilP;
 end;
 
-procedure CS_TryLoadHelpImage(const BmpName : String; const PngName : String);
+procedure SilCS_TryLoadHelpImage(const SilBmpName : String; const SilPngName : String);
 var
-    P : String;
+    SilP : String;
 begin
     try
-        P := CS_FindImageFile(BmpName);
-        if P = '' then
-            P := CS_FindImageFile(PngName);
-        if (P <> '') and FileExists(P) then
+        SilP := SilCS_FindImageFile(SilBmpName);
+        if SilP = '' then
+            SilP := SilCS_FindImageFile(SilPngName);
+        if (SilP <> '') and FileExists(SilP) then
         begin
-            ImageHelp.Picture.LoadFromFile(P);
-            LabelImageHint.Caption := 'Replace image: images\' + BmpName;
+            ImageHelp.Picture.LoadFromFile(SilP);
+            LabelImageHint.Caption := 'Replace image: images\' + SilBmpName;
         end
         else
-            LabelImageHint.Caption := 'No image. Put ' + BmpName + ' in images\ next to the scripts.';
+            LabelImageHint.Caption := 'No image. Put ' + SilBmpName + ' in images\ next to the scripts.';
     except
         try
             LabelImageHint.Caption := 'Image not loaded.';
@@ -358,40 +359,40 @@ begin
 end;
 
 
-procedure TFormSilk.FormSilkShow(Sender: TObject);
+procedure TFormSilk.FormSilkShow(SilSender: TObject);
 begin
     try
-        CS_TryLoadHelpImage('PlaceDesignators.bmp', 'PlaceDesignators.png');
+        SilCS_TryLoadHelpImage('PlaceDesignators.bmp', 'PlaceDesignators.png');
     except
     end;
     EditH.Text := '0';
     CheckSkipHidden.Checked := True;
 end;
 
-procedure TFormSilk.ButtonOKClick(Sender: TObject);
+procedure TFormSilk.ButtonOKClick(SilSender: TObject);
 var
-    H : Double;
+    SilH : Double;
 begin
     SkipHidden := CheckSkipHidden.Checked;
     try
-        H := StrToFloat(EditH.Text);
+        SilH := StrToFloat(EditH.Text);
     except
         ShowError('Некорректная высота текста.');
         Exit;
     end;
-    if H < 0 then
+    if SilH < 0 then
     begin
         ShowError('Высота не может быть отрицательной.');
         Exit;
     end;
-    if H = 0 then FixedHeight := 0 else FixedHeight := MMsToCoord(H);
+    if SilH = 0 then FixedHeight := 0 else FixedHeight := MMsToCoord(SilH);
     if PCBServer = nil then
     begin
         ShowError('PCB-server is not available.');
         Exit;
     end;
-    Board := PCBServer.GetCurrentPCBBoard;
-    if Board = nil then
+    SilBoard := PCBServer.GetCurrentPCBBoard;
+    if SilBoard = nil then
     begin
         ShowError('Open a PCB document.');
         Exit;
@@ -400,17 +401,17 @@ begin
     DoPlace;
 end;
 
-procedure TFormSilk.ButtonCancelClick(Sender: TObject);
+procedure TFormSilk.ButtonCancelClick(SilSender: TObject);
 begin
     FormSilk.Close;
 end;
 
-procedure Start;
+procedure StartPlaceDesignators;
 begin
     FormSilk.ShowModal;
 end;
 
-procedure _Start;
+procedure _StartPlaceDesignators;
 begin
-    Start;
+    StartPlaceDesignators;
 end;

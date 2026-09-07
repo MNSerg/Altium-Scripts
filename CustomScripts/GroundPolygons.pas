@@ -5,177 +5,178 @@
 {..............................................................................}
 
 var
-    Board     : IPCB_Board;
+    GndBoard     : IPCB_Board;
     NetName   : String;
     UseSolid  : Boolean;
     ReplaceAll: Integer; { -1 не спрашивали, 0 skip, 1 replace }
     Created   : Integer;
     Skipped   : Integer;
 
-procedure Start; forward;
-procedure _Start; forward;
-procedure TFormGnd.ButtonOKClick(Sender: TObject); forward;
-procedure TFormGnd.ButtonCancelClick(Sender: TObject); forward;
-procedure TFormGnd.FormGndShow(Sender: TObject); forward;
+{ Run Script: choose procedure StartGroundPolygons (project compiles only this .pas). }
+procedure StartGroundPolygons; forward;
+procedure _StartGroundPolygons; forward;
+procedure TFormGnd.ButtonOKClick(GndSender: TObject); forward;
+procedure TFormGnd.ButtonCancelClick(GndSender: TObject); forward;
+procedure TFormGnd.FormGndShow(GndSender: TObject); forward;
 
-function FindNet(const Name : String) : IPCB_Net;
+function FindNet(const GndName : String) : IPCB_Net;
 var
-    Iter : IPCB_BoardIterator;
-    N : IPCB_Net;
+    GndIter : IPCB_BoardIterator;
+    GndN : IPCB_Net;
 begin
     Result := nil;
-    Iter := Board.BoardIterator_Create;
-    Iter.AddFilter_ObjectSet(MkSet(eNetObject));
-    Iter.AddFilter_LayerSet(AllLayers);
-    Iter.AddFilter_Method(eProcessAll);
-    N := Iter.FirstPCBObject;
-    while N <> nil do
+    GndIter := GndBoard.BoardIterator_Create;
+    GndIter.AddFilter_ObjectSet(MkSet(eNetObject));
+    GndIter.AddFilter_LayerSet(AllLayers);
+    GndIter.AddFilter_Method(eProcessAll);
+    GndN := GndIter.FirstPCBObject;
+    while GndN <> nil do
     begin
-        if UpperCase(N.Name) = UpperCase(Name) then
+        if UpperCase(GndN.Name) = UpperCase(GndName) then
         begin
-            Result := N;
+            Result := GndN;
             Break;
         end;
-        N := Iter.NextPCBObject;
+        GndN := GndIter.NextPCBObject;
     end;
-    Board.BoardIterator_Destroy(Iter);
+    GndBoard.BoardIterator_Destroy(GndIter);
 end;
 
-function ExistingPourOnLayer(ALayer : TLayer; ANet : IPCB_Net) : IPCB_Polygon;
+function ExistingPourOnLayer(GndALayer : TLayer; ANet : IPCB_Net) : IPCB_Polygon;
 var
-    Iter : IPCB_BoardIterator;
-    P : IPCB_Polygon;
+    GndIter : IPCB_BoardIterator;
+    GndP : IPCB_Polygon;
 begin
     Result := nil;
-    Iter := Board.BoardIterator_Create;
-    Iter.AddFilter_ObjectSet(MkSet(ePolyObject));
-    Iter.AddFilter_LayerSet(MkSet(ALayer));
-    Iter.AddFilter_Method(eProcessAll);
-    P := Iter.FirstPCBObject;
-    while P <> nil do
+    GndIter := GndBoard.BoardIterator_Create;
+    GndIter.AddFilter_ObjectSet(MkSet(ePolyObject));
+    GndIter.AddFilter_LayerSet(MkSet(GndALayer));
+    GndIter.AddFilter_Method(eProcessAll);
+    GndP := GndIter.FirstPCBObject;
+    while GndP <> nil do
     begin
-        if P.InNet and (ANet <> nil) then
+        if GndP.InNet and (ANet <> nil) then
         begin
-            if P.Net = ANet then
+            if GndP.Net = ANet then
             begin
-                Result := P;
+                Result := GndP;
                 Break;
             end;
         end;
-        P := Iter.NextPCBObject;
+        GndP := GndIter.NextPCBObject;
     end;
-    Board.BoardIterator_Destroy(Iter);
+    GndBoard.BoardIterator_Destroy(GndIter);
 end;
 
-procedure CopyOutlineToPolygon(Poly : IPCB_Polygon);
+procedure CopyOutlineToPolygon(GndPoly : IPCB_Polygon);
 var
-    i, n : Integer;
-    Seg : TPolySegment;
-    Rect : TCoordRect;
+    Gndi, Gndn : Integer;
+    GndSeg : TPolySegment;
+    GndRect : TCoordRect;
 begin
     try
-        n := Board.BoardOutline.PointCount;
-        if n > 1 then
+        Gndn := GndBoard.BoardOutline.PointCount;
+        if Gndn > 1 then
         begin
-            Poly.PointCount := n;
-            for i := 0 to n - 1 do
+            GndPoly.PointCount := Gndn;
+            for Gndi := 0 to Gndn - 1 do
             begin
-                Seg := Board.BoardOutline.Segments[i];
-                Poly.Segments[i] := Seg;
+                GndSeg := GndBoard.BoardOutline.Segments[Gndi];
+                GndPoly.Segments[Gndi] := GndSeg;
             end;
             Exit;
         end;
     except
     end;
-    Rect := Board.BoardOutline.BoundingRectangle;
-    Poly.PointCount := 4;
+    GndRect := GndBoard.BoardOutline.BoundingRectangle;
+    GndPoly.PointCount := 4;
     { Прямоугольник по bounding box. }
-    Seg.Kind := ePolySegmentLine;
-    Seg.vx := Rect.Left;  Seg.vy := Rect.Bottom; Poly.Segments[0] := Seg;
-    Seg.vx := Rect.Right; Seg.vy := Rect.Bottom; Poly.Segments[1] := Seg;
-    Seg.vx := Rect.Right; Seg.vy := Rect.Top;    Poly.Segments[2] := Seg;
-    Seg.vx := Rect.Left;  Seg.vy := Rect.Top;    Poly.Segments[3] := Seg;
+    GndSeg.Kind := ePolySegmentLine;
+    GndSeg.vx := GndRect.Left;  GndSeg.vy := GndRect.Bottom; GndPoly.Segments[0] := GndSeg;
+    GndSeg.vx := GndRect.Right; GndSeg.vy := GndRect.Bottom; GndPoly.Segments[1] := GndSeg;
+    GndSeg.vx := GndRect.Right; GndSeg.vy := GndRect.Top;    GndPoly.Segments[2] := GndSeg;
+    GndSeg.vx := GndRect.Left;  GndSeg.vy := GndRect.Top;    GndPoly.Segments[3] := GndSeg;
 end;
 
-procedure CollectCopperLayers(List : TStringList);
+procedure CollectCopperLayers(GndList : TStringList);
 var
-    Stack : IPCB_LayerStack;
-    LS : IPCB_LayerObject;
-    Id : TLayer;
+    GndStack : IPCB_LayerStack;
+    GndLS : IPCB_LayerObject;
+    GndId : TLayer;
 begin
-    List.Clear;
+    GndList.Clear;
     try
-        Stack := Board.LayerStack_V7;
+        GndStack := GndBoard.LayerStack_V7;
     except
-        Stack := nil;
+        GndStack := nil;
     end;
-    if Stack <> nil then
+    if GndStack <> nil then
     begin
         try
-            LS := Stack.First(eLayerClass_Signal);
-            while LS <> nil do
+            GndLS := GndStack.First(eLayerClass_Signal);
+            while GndLS <> nil do
             begin
-                Id := LS.LayerID;
-                List.Add(IntToStr(Id));
-                LS := Stack.Next(eLayerClass_Signal, LS);
+                GndId := GndLS.LayerID;
+                GndList.Add(IntToStr(GndId));
+                GndLS := GndStack.Next(eLayerClass_Signal, GndLS);
             end;
         except
         end;
     end;
-    if List.Count = 0 then
+    if GndList.Count = 0 then
     begin
-        List.Add(IntToStr(eTopLayer));
-        List.Add(IntToStr(eBottomLayer));
+        GndList.Add(IntToStr(eTopLayer));
+        GndList.Add(IntToStr(eBottomLayer));
     end;
 end;
 
-procedure CreatePour(ALayer : TLayer; ANet : IPCB_Net);
+procedure CreatePour(GndALayer : TLayer; ANet : IPCB_Net);
 var
-    Poly : IPCB_Polygon;
+    GndPoly : IPCB_Polygon;
     Old : IPCB_Polygon;
-    Ans : Boolean;
+    GndAns : Boolean;
 begin
-    Old := ExistingPourOnLayer(ALayer, ANet);
+    Old := ExistingPourOnLayer(GndALayer, ANet);
     if Old <> nil then
     begin
         if ReplaceAll < 0 then
         begin
-            Ans := ConfirmNoYes('На слое ' + Layer2String(ALayer) +
+            GndAns := ConfirmNoYes('На слое ' + Layer2String(GndALayer) +
                 ' уже есть полигон цепи ' + NetName + '. Заменять существующие? (Да = все заменить, Нет = пропускать)');
-            if Ans then ReplaceAll := 1 else ReplaceAll := 0;
+            if GndAns then ReplaceAll := 1 else ReplaceAll := 0;
         end;
         if ReplaceAll = 0 then
         begin
             Inc(Skipped);
             Exit;
         end;
-        Board.RemovePCBObject(Old);
+        GndBoard.RemovePCBObject(Old);
     end;
 
-    Poly := PCBServer.PCBObjectFactory(ePolyObject, eNoDimension, eCreate_Default);
-    Poly.Layer := ALayer;
-    if ANet <> nil then Poly.Net := ANet;
+    GndPoly := PCBServer.PCBObjectFactory(ePolyObject, eNoDimension, eCreate_Default);
+    GndPoly.Layer := GndALayer;
+    if ANet <> nil then GndPoly.Net := ANet;
     if UseSolid then
-        Poly.PolyHatchStyle := ePolySolid
+        GndPoly.PolyHatchStyle := ePolySolid
     else
-        Poly.PolyHatchStyle := ePoly90;
+        GndPoly.PolyHatchStyle := ePoly90;
     try
-        Poly.RemoveDead := True;
+        GndPoly.RemoveDead := True;
     except
     end;
     try
-        Poly.RestoreUndersizedPolygons := True;
+        GndPoly.RestoreUndersizedPolygons := True;
     except
     end;
     { ClearanceGap не задаём: зазоры полигона — из правил проектирования. }
     try
-        Poly.MinPrimLength := MMsToCoord(0.1);
+        GndPoly.MinPrimLength := MMsToCoord(0.1);
     except
     end;
-    CopyOutlineToPolygon(Poly);
-    Board.AddPCBObject(Poly);
+    CopyOutlineToPolygon(GndPoly);
+    GndBoard.AddPCBObject(GndPoly);
     try
-        Poly.Rebuild;
+        GndPoly.Rebuild;
     except
     end;
     Inc(Created);
@@ -184,8 +185,8 @@ end;
 procedure DoCreate;
 var
     Layers : TStringList;
-    i : Integer;
-    ALayer : TLayer;
+    Gndi : Integer;
+    GndALayer : TLayer;
     ANet : IPCB_Net;
 begin
     ANet := FindNet(NetName);
@@ -202,10 +203,10 @@ begin
     PCBServer.PreProcess;
     try
         CollectCopperLayers(Layers);
-        for i := 0 to Layers.Count - 1 do
+        for Gndi := 0 to Layers.Count - 1 do
         begin
-            ALayer := StrToInt(Layers[i]);
-            CreatePour(ALayer, ANet);
+            GndALayer := StrToInt(Layers[Gndi]);
+            CreatePour(GndALayer, ANet);
         end;
     finally
         PCBServer.PostProcess;
@@ -221,36 +222,36 @@ end;
 { ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
-function CS_ScriptFolder : String;
+function GndCS_ScriptFolder : String;
 var
-    WS  : IWorkspace;
-    Prj : IProject;
-    i   : Integer;
-    P   : String;
+    GndWS  : IWorkspace;
+    GndPrj : IProject;
+    Gndi   : Integer;
+    GndP   : String;
 begin
     Result := '';
     try
-        WS := GetWorkspace;
-        if WS = nil then Exit;
-        Prj := WS.DM_FocusedProject;
-        if Prj <> nil then
+        GndWS := GetWorkspace;
+        if GndWS = nil then Exit;
+        GndPrj := GndWS.DM_FocusedProject;
+        if GndPrj <> nil then
         begin
-            P := ExtractFilePath(Prj.DM_ProjectFullPath);
-            if P <> '' then
+            GndP := ExtractFilePath(GndPrj.DM_ProjectFullPath);
+            if GndP <> '' then
             begin
-                Result := P;
+                Result := GndP;
                 Exit;
             end;
         end;
-        for i := 0 to WS.DM_ProjectCount - 1 do
+        for Gndi := 0 to GndWS.DM_ProjectCount - 1 do
         begin
-            Prj := WS.DM_Projects(i);
-            if Prj <> nil then
+            GndPrj := GndWS.DM_Projects(Gndi);
+            if GndPrj <> nil then
             begin
-                P := Prj.DM_ProjectFullPath;
-                if Pos('CustomScripts', P) > 0 then
+                GndP := GndPrj.DM_ProjectFullPath;
+                if Pos('CustomScripts', GndP) > 0 then
                 begin
-                    Result := ExtractFilePath(P);
+                    Result := ExtractFilePath(GndP);
                     Exit;
                 end;
             end;
@@ -260,46 +261,46 @@ begin
     end;
 end;
 
-function CS_FindImageFile(const FileName : String) : String;
+function GndCS_FindImageFile(const GndFileName : String) : String;
 var
-    Dir, P : String;
+    GndDir, GndP : String;
 begin
     Result := '';
-    Dir := CS_ScriptFolder;
-    if Dir <> '' then
+    GndDir := GndCS_ScriptFolder;
+    if GndDir <> '' then
     begin
-        P := Dir + 'images\' + FileName;
-        if FileExists(P) then
+        GndP := GndDir + 'images\' + GndFileName;
+        if FileExists(GndP) then
         begin
-            Result := P;
+            Result := GndP;
             Exit;
         end;
-        P := Dir + FileName;
-        if FileExists(P) then
+        GndP := GndDir + GndFileName;
+        if FileExists(GndP) then
         begin
-            Result := P;
+            Result := GndP;
             Exit;
         end;
     end;
-    P := 'images\' + FileName;
-    if FileExists(P) then Result := P;
+    GndP := 'images\' + GndFileName;
+    if FileExists(GndP) then Result := GndP;
 end;
 
-procedure CS_TryLoadHelpImage(const BmpName : String; const PngName : String);
+procedure GndCS_TryLoadHelpImage(const GndBmpName : String; const GndPngName : String);
 var
-    P : String;
+    GndP : String;
 begin
     try
-        P := CS_FindImageFile(BmpName);
-        if P = '' then
-            P := CS_FindImageFile(PngName);
-        if (P <> '') and FileExists(P) then
+        GndP := GndCS_FindImageFile(GndBmpName);
+        if GndP = '' then
+            GndP := GndCS_FindImageFile(GndPngName);
+        if (GndP <> '') and FileExists(GndP) then
         begin
-            ImageHelp.Picture.LoadFromFile(P);
-            LabelImageHint.Caption := 'Replace image: images\' + BmpName;
+            ImageHelp.Picture.LoadFromFile(GndP);
+            LabelImageHint.Caption := 'Replace image: images\' + GndBmpName;
         end
         else
-            LabelImageHint.Caption := 'No image. Put ' + BmpName + ' in images\ next to the scripts.';
+            LabelImageHint.Caption := 'No image. Put ' + GndBmpName + ' in images\ next to the scripts.';
     except
         try
             LabelImageHint.Caption := 'Image not loaded.';
@@ -309,25 +310,25 @@ begin
 end;
 
 
-procedure TFormGnd.FormGndShow(Sender: TObject);
+procedure TFormGnd.FormGndShow(GndSender: TObject);
 begin
     try
-        CS_TryLoadHelpImage('GroundPolygons.bmp', 'GroundPolygons.png');
+        GndCS_TryLoadHelpImage('GroundPolygons.bmp', 'GroundPolygons.png');
     except
     end;
     EditNet.Text := 'GND';
     CheckSolid.Checked := True;
 end;
 
-procedure TFormGnd.ButtonOKClick(Sender: TObject);
+procedure TFormGnd.ButtonOKClick(GndSender: TObject);
 begin
     if PCBServer = nil then
     begin
         ShowError('PCB-server is not available.');
         Exit;
     end;
-    Board := PCBServer.GetCurrentPCBBoard;
-    if Board = nil then
+    GndBoard := PCBServer.GetCurrentPCBBoard;
+    if GndBoard = nil then
     begin
         ShowError('Open a PCB document.');
         Exit;
@@ -339,17 +340,17 @@ begin
     DoCreate;
 end;
 
-procedure TFormGnd.ButtonCancelClick(Sender: TObject);
+procedure TFormGnd.ButtonCancelClick(GndSender: TObject);
 begin
     FormGnd.Close;
 end;
 
-procedure Start;
+procedure StartGroundPolygons;
 begin
     FormGnd.ShowModal;
 end;
 
-procedure _Start;
+procedure _StartGroundPolygons;
 begin
-    Start;
+    StartGroundPolygons;
 end;

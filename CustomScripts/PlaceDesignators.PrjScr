@@ -1,0 +1,8 @@
+[Design]
+Version=1.0
+
+[Document1]
+DocumentPath=PlaceDesignators.pas
+
+[Generic_ScriptingSystem]
+StartProcName=PlaceDesignators.pas>StartPlaceDesignators

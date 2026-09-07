@@ -5,57 +5,58 @@
 {..............................................................................}
 
 const
-    PiValue = 3.141592653589793;
+    DxfPiValue = 3.141592653589793;
 
 var
-    Board       : IPCB_Board;
+    DxfBoard       : IPCB_Board;
     DxfLines    : TStringList;
     HandleCount : Integer;
     LayerItems  : TStringList; { имя для чеклиста = Layer2String }
     LayerIds    : TStringList; { параллельный список IntToStr(TLayer) }
 
-procedure Start; forward;
-procedure _Start; forward;
-procedure TFormDxf.FormDxfShow(Sender: TObject); forward;
-procedure TFormDxf.ButtonOKClick(Sender: TObject); forward;
-procedure TFormDxf.ButtonCancelClick(Sender: TObject); forward;
-procedure TFormDxf.ButtonAllClick(Sender: TObject); forward;
-procedure TFormDxf.ButtonNoneClick(Sender: TObject); forward;
-procedure TFormDxf.ButtonCopperClick(Sender: TObject); forward;
+{ Run Script: choose procedure StartDxfOutlineExport (project compiles only this .pas). }
+procedure StartDxfOutlineExport; forward;
+procedure _StartDxfOutlineExport; forward;
+procedure TFormDxf.FormDxfShow(DxfSender: TObject); forward;
+procedure TFormDxf.ButtonOKClick(DxfSender: TObject); forward;
+procedure TFormDxf.ButtonCancelClick(DxfSender: TObject); forward;
+procedure TFormDxf.ButtonAllClick(DxfSender: TObject); forward;
+procedure TFormDxf.ButtonNoneClick(DxfSender: TObject); forward;
+procedure TFormDxf.ButtonCopperClick(DxfSender: TObject); forward;
 
-function MMX(X : TCoord) : String;
+function MMX(DxfX : TCoord) : String;
 begin
-    Result := FormatFloat('0.######', CoordToMMs(X - Board.XOrigin));
+    Result := FormatFloat('0.######', CoordToMMs(DxfX - DxfBoard.XOrigin));
 end;
 
-function MMY(Y : TCoord) : String;
+function MMY(DxfY : TCoord) : String;
 begin
-    Result := FormatFloat('0.######', CoordToMMs(Y - Board.YOrigin));
+    Result := FormatFloat('0.######', CoordToMMs(DxfY - DxfBoard.YOrigin));
 end;
 
-function MMR(R : TCoord) : String;
+function MMR(DxfR : TCoord) : String;
 begin
-    Result := FormatFloat('0.######', CoordToMMs(R));
+    Result := FormatFloat('0.######', CoordToMMs(DxfR));
 end;
 
-function DxfLayerName(ALayer : TLayer) : String;
+function DxfLayerName(DxfALayer : TLayer) : String;
 var
-    S : String;
-    i : Integer;
-    C : Char;
+    DxfS : String;
+    Dxfi : Integer;
+    DxfC : Char;
 begin
-    S := Layer2String(ALayer);
+    DxfS := Layer2String(DxfALayer);
     Result := '';
-    for i := 1 to Length(S) do
+    for Dxfi := 1 to Length(DxfS) do
     begin
-        C := S[i];
-        if ((C >= 'A') and (C <= 'Z')) or ((C >= 'a') and (C <= 'z')) or
-           ((C >= '0') and (C <= '9')) then
-            Result := Result + C
+        DxfC := DxfS[Dxfi];
+        if ((DxfC >= 'A') and (DxfC <= 'Z')) or ((DxfC >= 'a') and (DxfC <= 'z')) or
+           ((DxfC >= '0') and (DxfC <= '9')) then
+            Result := Result + DxfC
         else
             Result := Result + '_';
     end;
-    if Result = '' then Result := 'L' + IntToStr(ALayer);
+    if Result = '' then Result := 'L' + IntToStr(DxfALayer);
 end;
 
 function NextHandle : String;
@@ -64,83 +65,83 @@ begin
     Result := IntToHex(HandleCount, 2);
 end;
 
-procedure DxfAdd(const S : String);
+procedure DxfAdd(const DxfS : String);
 begin
-    DxfLines.Add(S);
+    DxfLines.Add(DxfS);
 end;
 
-procedure DxfPair(Code : Integer; const Val : String);
+procedure DxfPair(Code : Integer; const DxfVal : String);
 begin
     DxfAdd(IntToStr(Code));
-    DxfAdd(Val);
+    DxfAdd(DxfVal);
 end;
 
-procedure WriteLine(const LName : String; X1, Y1, X2, Y2 : TCoord);
+procedure WriteLine(const LName : String; DxfX1, DxfY1, DxfX2, DxfY2 : TCoord);
 begin
     DxfPair(0, 'LINE');
     DxfPair(5, NextHandle);
     DxfPair(8, LName);
-    DxfPair(10, MMX(X1));
-    DxfPair(20, MMY(Y1));
+    DxfPair(10, MMX(DxfX1));
+    DxfPair(20, MMY(DxfY1));
     DxfPair(30, '0.0');
-    DxfPair(11, MMX(X2));
-    DxfPair(21, MMY(Y2));
+    DxfPair(11, MMX(DxfX2));
+    DxfPair(21, MMY(DxfY2));
     DxfPair(31, '0.0');
 end;
 
-procedure WriteArc(const LName : String; CX, CY, Radius : TCoord; StartDeg, EndDeg : Double);
+procedure WriteArc(const LName : String; DxfCX, DxfCY, DxfRadius : TCoord; StartDeg, EndDeg : Double);
 begin
-    if Radius <= 0 then Exit;
+    if DxfRadius <= 0 then Exit;
     DxfPair(0, 'ARC');
     DxfPair(5, NextHandle);
     DxfPair(8, LName);
-    DxfPair(10, MMX(CX));
-    DxfPair(20, MMY(CY));
+    DxfPair(10, MMX(DxfCX));
+    DxfPair(20, MMY(DxfCY));
     DxfPair(30, '0.0');
-    DxfPair(40, MMR(Radius));
+    DxfPair(40, MMR(DxfRadius));
     DxfPair(50, FormatFloat('0.######', StartDeg));
     DxfPair(51, FormatFloat('0.######', EndDeg));
 end;
 
-procedure WriteCircle(const LName : String; CX, CY, Radius : TCoord);
+procedure WriteCircle(const LName : String; DxfCX, DxfCY, DxfRadius : TCoord);
 begin
-    if Radius <= 0 then Exit;
+    if DxfRadius <= 0 then Exit;
     DxfPair(0, 'CIRCLE');
     DxfPair(5, NextHandle);
     DxfPair(8, LName);
-    DxfPair(10, MMX(CX));
-    DxfPair(20, MMY(CY));
+    DxfPair(10, MMX(DxfCX));
+    DxfPair(20, MMY(DxfCY));
     DxfPair(30, '0.0');
-    DxfPair(40, MMR(Radius));
+    DxfPair(40, MMR(DxfRadius));
 end;
 
-function IsCopperLayer(ALayer : TLayer) : Boolean;
+function IsCopperLayer(DxfALayer : TLayer) : Boolean;
 begin
-    Result := (ALayer = eTopLayer) or (ALayer = eBottomLayer) or
-              ((ALayer >= eMidLayer1) and (ALayer <= eMidLayer30));
+    Result := (DxfALayer = eTopLayer) or (DxfALayer = eBottomLayer) or
+              ((DxfALayer >= eMidLayer1) and (DxfALayer <= eMidLayer30));
 end;
 
-function IsDefaultChecked(ALayer : TLayer) : Boolean;
+function IsDefaultChecked(DxfALayer : TLayer) : Boolean;
 begin
-    Result := IsCopperLayer(ALayer) or
-              (ALayer = eTopOverlay) or (ALayer = eBottomOverlay);
+    Result := IsCopperLayer(DxfALayer) or
+              (DxfALayer = eTopOverlay) or (DxfALayer = eBottomOverlay);
 end;
 
-procedure AddLayerIfMissing(ALayer : TLayer);
+procedure AddLayerIfMissing(DxfALayer : TLayer);
 begin
-    if LayerIds.IndexOf(IntToStr(ALayer)) < 0 then
+    if LayerIds.IndexOf(IntToStr(DxfALayer)) < 0 then
     begin
-        LayerItems.Add(Layer2String(ALayer));
-        LayerIds.Add(IntToStr(ALayer));
+        LayerItems.Add(Layer2String(DxfALayer));
+        LayerIds.Add(IntToStr(DxfALayer));
     end;
 end;
 
 procedure CollectBoardLayers;
 var
-    LS : IPCB_LayerObject;
-    Stack : IPCB_LayerStack;
-    Name : String;
-    Id : TLayer;
+    DxfLS : IPCB_LayerObject;
+    DxfStack : IPCB_LayerStack;
+    DxfName : String;
+    DxfId : TLayer;
 begin
     LayerItems.Clear;
     LayerIds.Clear;
@@ -149,24 +150,24 @@ begin
 
     { Сигнальные / плоскости через V7 stack, если есть. }
     try
-        Stack := Board.LayerStack_V7;
+        DxfStack := DxfBoard.LayerStack_V7;
     except
-        Stack := nil;
+        DxfStack := nil;
     end;
 
-    if Stack <> nil then
+    if DxfStack <> nil then
     begin
-        LS := Stack.First(eLayerClass_Electrical);
-        while LS <> nil do
+        DxfLS := DxfStack.First(eLayerClass_Electrical);
+        while DxfLS <> nil do
         begin
-            Id := LS.LayerID;
-            Name := Layer2String(Id);
-            if LayerIds.IndexOf(IntToStr(Id)) < 0 then
+            DxfId := DxfLS.LayerID;
+            DxfName := Layer2String(DxfId);
+            if LayerIds.IndexOf(IntToStr(DxfId)) < 0 then
             begin
-                LayerItems.Add(Name);
-                LayerIds.Add(IntToStr(Id));
+                LayerItems.Add(DxfName);
+                LayerIds.Add(IntToStr(DxfId));
             end;
-            LS := Stack.Next(eLayerClass_Electrical, LS);
+            DxfLS := DxfStack.Next(eLayerClass_Electrical, DxfLS);
         end;
     end;
 
@@ -188,74 +189,74 @@ begin
     AddLayerIfMissing(eMechanical15);
 end;
 
-procedure ExportTrackOutline(const LName : String; T : IPCB_Track);
+procedure ExportTrackOutline(const LName : String; DxfT : IPCB_Track);
 var
-    dx, dy, Len, nx, ny, hw : Double;
+    Dxfdx, Dxfdy, Len, nx, ny, hw : Double;
     L1x1, L1y1, L1x2, L1y2 : TCoord;
     L2x1, L2y1, L2x2, L2y2 : TCoord;
     Ang : Double;
     StartDeg, EndDeg : Double;
 begin
-    dx := T.X2 - T.X1;
-    dy := T.Y2 - T.Y1;
-    Len := Sqrt(dx * dx + dy * dy);
+    Dxfdx := DxfT.X2 - DxfT.X1;
+    Dxfdy := DxfT.Y2 - DxfT.Y1;
+    Len := Sqrt(Dxfdx * Dxfdx + Dxfdy * Dxfdy);
     if Len < 1 then Exit;
-    nx := -dy / Len;
-    ny := dx / Len;
-    hw := T.Width / 2.0;
+    nx := -Dxfdy / Len;
+    ny := Dxfdx / Len;
+    hw := DxfT.Width / 2.0;
 
-    L1x1 := Round(T.X1 + nx * hw);
-    L1y1 := Round(T.Y1 + ny * hw);
-    L1x2 := Round(T.X2 + nx * hw);
-    L1y2 := Round(T.Y2 + ny * hw);
-    L2x1 := Round(T.X1 - nx * hw);
-    L2y1 := Round(T.Y1 - ny * hw);
-    L2x2 := Round(T.X2 - nx * hw);
-    L2y2 := Round(T.Y2 - ny * hw);
+    L1x1 := Round(DxfT.X1 + nx * hw);
+    L1y1 := Round(DxfT.Y1 + ny * hw);
+    L1x2 := Round(DxfT.X2 + nx * hw);
+    L1y2 := Round(DxfT.Y2 + ny * hw);
+    L2x1 := Round(DxfT.X1 - nx * hw);
+    L2y1 := Round(DxfT.Y1 - ny * hw);
+    L2x2 := Round(DxfT.X2 - nx * hw);
+    L2y2 := Round(DxfT.Y2 - ny * hw);
 
     WriteLine(LName, L1x1, L1y1, L1x2, L1y2);
     WriteLine(LName, L2x1, L2y1, L2x2, L2y2);
 
     { Круглые крышки: полуокружности на концах, перпендикуляр к направлению. }
-    Ang := ArcTan2(dy, dx) * 180.0 / PiValue;
+    Ang := ArcTan2(Dxfdy, Dxfdx) * 180.0 / DxfPiValue;
     { На конце 1 (старт): полукруг с внешней стороны, охватывающий 180°. }
     StartDeg := Ang + 90;
     EndDeg := Ang + 270;
-    WriteArc(LName, T.X1, T.Y1, T.Width div 2, StartDeg, EndDeg);
+    WriteArc(LName, DxfT.X1, DxfT.Y1, DxfT.Width div 2, StartDeg, EndDeg);
     StartDeg := Ang - 90;
     EndDeg := Ang + 90;
-    WriteArc(LName, T.X2, T.Y2, T.Width div 2, StartDeg, EndDeg);
+    WriteArc(LName, DxfT.X2, DxfT.Y2, DxfT.Width div 2, StartDeg, EndDeg);
 end;
 
-procedure ExportArcOutline(const LName : String; A : IPCB_Arc);
+procedure ExportArcOutline(const LName : String; DxfA : IPCB_Arc);
 var
     hw, RIn, ROut : TCoord;
-    Sa, Ea : Double;
+    DxfSa, DxfEa : Double;
     C1x, C1y, C2x, C2y : TCoord;
     C3x, C3y, C4x, C4y : TCoord;
 begin
-    hw := A.LineWidth div 2;
+    hw := DxfA.LineWidth div 2;
     if hw < 0 then hw := 0;
-    ROut := A.Radius + hw;
-    RIn := A.Radius - hw;
-    Sa := A.StartAngle;
-    Ea := A.EndAngle;
+    ROut := DxfA.Radius + hw;
+    RIn := DxfA.Radius - hw;
+    DxfSa := DxfA.StartAngle;
+    DxfEa := DxfA.EndAngle;
 
-    WriteArc(LName, A.XCenter, A.YCenter, ROut, Sa, Ea);
+    WriteArc(LName, DxfA.XCenter, DxfA.YCenter, ROut, DxfSa, DxfEa);
     if RIn > 0 then
-        WriteArc(LName, A.XCenter, A.YCenter, RIn, Sa, Ea)
+        WriteArc(LName, DxfA.XCenter, DxfA.YCenter, RIn, DxfSa, DxfEa)
     else
-        WriteCircle(LName, A.XCenter, A.YCenter, hw);
+        WriteCircle(LName, DxfA.XCenter, DxfA.YCenter, hw);
 
     { Радиальные соединения на торцах дуги. }
-    C1x := Round(A.XCenter + ROut * Cos(Sa * PiValue / 180));
-    C1y := Round(A.YCenter + ROut * Sin(Sa * PiValue / 180));
-    C2x := Round(A.XCenter + Max(RIn, 0) * Cos(Sa * PiValue / 180));
-    C2y := Round(A.YCenter + Max(RIn, 0) * Sin(Sa * PiValue / 180));
-    C3x := Round(A.XCenter + ROut * Cos(Ea * PiValue / 180));
-    C3y := Round(A.YCenter + ROut * Sin(Ea * PiValue / 180));
-    C4x := Round(A.XCenter + Max(RIn, 0) * Cos(Ea * PiValue / 180));
-    C4y := Round(A.YCenter + Max(RIn, 0) * Sin(Ea * PiValue / 180));
+    C1x := Round(DxfA.XCenter + ROut * Cos(DxfSa * DxfPiValue / 180));
+    C1y := Round(DxfA.YCenter + ROut * Sin(DxfSa * DxfPiValue / 180));
+    C2x := Round(DxfA.XCenter + Max(RIn, 0) * Cos(DxfSa * DxfPiValue / 180));
+    C2y := Round(DxfA.YCenter + Max(RIn, 0) * Sin(DxfSa * DxfPiValue / 180));
+    C3x := Round(DxfA.XCenter + ROut * Cos(DxfEa * DxfPiValue / 180));
+    C3y := Round(DxfA.YCenter + ROut * Sin(DxfEa * DxfPiValue / 180));
+    C4x := Round(DxfA.XCenter + Max(RIn, 0) * Cos(DxfEa * DxfPiValue / 180));
+    C4y := Round(DxfA.YCenter + Max(RIn, 0) * Sin(DxfEa * DxfPiValue / 180));
     if RIn > 0 then
     begin
         WriteLine(LName, C1x, C1y, C2x, C2y);
@@ -263,47 +264,47 @@ begin
     end;
 end;
 
-procedure ExportPadOutline(const LName : String; Pad : IPCB_Pad; ALayer : TLayer);
+procedure ExportPadOutline(const LName : String; DxfPad : IPCB_Pad; DxfALayer : TLayer);
 var
-    SX, SY, X, Y : TCoord;
+    SX, SY, DxfX, DxfY : TCoord;
     Shape : TShape;
     CR : Integer;
-    i : Integer;
-    Ang, R : Double;
+    Dxfi : Integer;
+    Ang, DxfR : Double;
     Px, Py, Qx, Qy : TCoord;
-    Rot : Double;
+    DxfRot : Double;
 begin
     { Размер площадки на данном слое. Для SMT — Top/Bottom size. }
-    X := Pad.X;
-    Y := Pad.Y;
+    DxfX := DxfPad.X;
+    DxfY := DxfPad.Y;
     try
-        SX := Pad.TopXSize;
-        SY := Pad.TopYSize;
-        if (ALayer = eBottomLayer) or (Pad.Layer = eBottomLayer) then
+        SX := DxfPad.TopXSize;
+        SY := DxfPad.TopYSize;
+        if (DxfALayer = eBottomLayer) or (DxfPad.Layer = eBottomLayer) then
         begin
-            SX := Pad.BotXSize;
-            SY := Pad.BotYSize;
+            SX := DxfPad.BotXSize;
+            SY := DxfPad.BotYSize;
         end;
     except
-        SX := Pad.XSize;
-        SY := Pad.YSize;
+        SX := DxfPad.XSize;
+        SY := DxfPad.YSize;
     end;
 
     if (SX <= 0) or (SY <= 0) then Exit;
 
     try
-        Shape := Pad.Mode;
+        Shape := DxfPad.Mode;
     except
         Shape := eSimple;
     end;
 
     { Круглая площадка: если размеры равны и форма круглая. }
     try
-        if Pad.TopShape = eRounded then
+        if DxfPad.TopShape = eRounded then
         begin
             if Abs(SX - SY) < 10 then
             begin
-                WriteCircle(LName, X, Y, SX div 2);
+                WriteCircle(LName, DxfX, DxfY, SX div 2);
                 Exit;
             end;
         end;
@@ -311,9 +312,9 @@ begin
     end;
 
     try
-        if (Pad.TopShape = eRound) or (Pad.Shape = eRound) then
+        if (DxfPad.TopShape = eRound) or (DxfPad.Shape = eRound) then
         begin
-            WriteCircle(LName, X, Y, SX div 2);
+            WriteCircle(LName, DxfX, DxfY, SX div 2);
             Exit;
         end;
     except
@@ -322,37 +323,37 @@ begin
     { Прямоугольник / скруглённый прямоугольник — bounding box с опциональными галтелями. }
     CR := 0;
     try
-        CR := Pad.CornerRadiusTop;
+        CR := DxfPad.CornerRadiusTop;
     except
         CR := 0;
     end;
 
     if CR > 0 then
     begin
-        WriteLine(LName, X - SX div 2 + CR, Y - SY div 2, X + SX div 2 - CR, Y - SY div 2);
-        WriteLine(LName, X + SX div 2, Y - SY div 2 + CR, X + SX div 2, Y + SY div 2 - CR);
-        WriteLine(LName, X + SX div 2 - CR, Y + SY div 2, X - SX div 2 + CR, Y + SY div 2);
-        WriteLine(LName, X - SX div 2, Y + SY div 2 - CR, X - SX div 2, Y - SY div 2 + CR);
-        WriteArc(LName, X - SX div 2 + CR, Y - SY div 2 + CR, CR, 180, 270);
-        WriteArc(LName, X + SX div 2 - CR, Y - SY div 2 + CR, CR, 270, 0);
-        WriteArc(LName, X + SX div 2 - CR, Y + SY div 2 - CR, CR, 0, 90);
-        WriteArc(LName, X - SX div 2 + CR, Y + SY div 2 - CR, CR, 90, 180);
+        WriteLine(LName, DxfX - SX div 2 + CR, DxfY - SY div 2, DxfX + SX div 2 - CR, DxfY - SY div 2);
+        WriteLine(LName, DxfX + SX div 2, DxfY - SY div 2 + CR, DxfX + SX div 2, DxfY + SY div 2 - CR);
+        WriteLine(LName, DxfX + SX div 2 - CR, DxfY + SY div 2, DxfX - SX div 2 + CR, DxfY + SY div 2);
+        WriteLine(LName, DxfX - SX div 2, DxfY + SY div 2 - CR, DxfX - SX div 2, DxfY - SY div 2 + CR);
+        WriteArc(LName, DxfX - SX div 2 + CR, DxfY - SY div 2 + CR, CR, 180, 270);
+        WriteArc(LName, DxfX + SX div 2 - CR, DxfY - SY div 2 + CR, CR, 270, 0);
+        WriteArc(LName, DxfX + SX div 2 - CR, DxfY + SY div 2 - CR, CR, 0, 90);
+        WriteArc(LName, DxfX - SX div 2 + CR, DxfY + SY div 2 - CR, CR, 90, 180);
     end
     else
     begin
         { Октагон: 8 сторон, иначе прямоугольник. }
         try
-            if (Pad.TopShape = eOctagonal) or (Pad.Shape = eOctagonal) then
+            if (DxfPad.TopShape = eOctagonal) or (DxfPad.Shape = eOctagonal) then
             begin
-                R := SX / 2.0;
-                for i := 0 to 7 do
+                DxfR := SX / 2.0;
+                for Dxfi := 0 to 7 do
                 begin
-                    Ang := (22.5 + i * 45) * PiValue / 180;
-                    Px := Round(X + R * Cos(Ang));
-                    Py := Round(Y + R * Sin(Ang));
-                    Ang := (22.5 + (i + 1) * 45) * PiValue / 180;
-                    Qx := Round(X + R * Cos(Ang));
-                    Qy := Round(Y + R * Sin(Ang));
+                    Ang := (22.5 + Dxfi * 45) * DxfPiValue / 180;
+                    Px := Round(DxfX + DxfR * Cos(Ang));
+                    Py := Round(DxfY + DxfR * Sin(Ang));
+                    Ang := (22.5 + (Dxfi + 1) * 45) * DxfPiValue / 180;
+                    Qx := Round(DxfX + DxfR * Cos(Ang));
+                    Qy := Round(DxfY + DxfR * Sin(Ang));
                     WriteLine(LName, Px, Py, Qx, Qy);
                 end;
                 Exit;
@@ -360,61 +361,61 @@ begin
         except
         end;
 
-        WriteLine(LName, X - SX div 2, Y - SY div 2, X + SX div 2, Y - SY div 2);
-        WriteLine(LName, X + SX div 2, Y - SY div 2, X + SX div 2, Y + SY div 2);
-        WriteLine(LName, X + SX div 2, Y + SY div 2, X - SX div 2, Y + SY div 2);
-        WriteLine(LName, X - SX div 2, Y + SY div 2, X - SX div 2, Y - SY div 2);
+        WriteLine(LName, DxfX - SX div 2, DxfY - SY div 2, DxfX + SX div 2, DxfY - SY div 2);
+        WriteLine(LName, DxfX + SX div 2, DxfY - SY div 2, DxfX + SX div 2, DxfY + SY div 2);
+        WriteLine(LName, DxfX + SX div 2, DxfY + SY div 2, DxfX - SX div 2, DxfY + SY div 2);
+        WriteLine(LName, DxfX - SX div 2, DxfY + SY div 2, DxfX - SX div 2, DxfY - SY div 2);
     end;
 end;
 
-procedure ExportViaOutline(const LName : String; Via : IPCB_Via; ALayer : TLayer);
+procedure ExportViaOutline(const LName : String; DxfVia : IPCB_Via; DxfALayer : TLayer);
 var
     Outer : TCoord;
 begin
     try
-        Outer := Via.Size;
+        Outer := DxfVia.Size;
     except
-        Outer := Via.HoleSize + MMsToCoord(0.3);
+        Outer := DxfVia.HoleSize + MMsToCoord(0.3);
     end;
-    WriteCircle(LName, Via.X, Via.Y, Outer div 2);
+    WriteCircle(LName, DxfVia.X, DxfVia.Y, Outer div 2);
 end;
 
-procedure ExportFillOutline(const LName : String; Fill : IPCB_Fill);
+procedure ExportFillOutline(const LName : String; DxfFill : IPCB_Fill);
 begin
-    WriteLine(LName, Fill.X1Location, Fill.Y1Location, Fill.X2Location, Fill.Y1Location);
-    WriteLine(LName, Fill.X2Location, Fill.Y1Location, Fill.X2Location, Fill.Y2Location);
-    WriteLine(LName, Fill.X2Location, Fill.Y2Location, Fill.X1Location, Fill.Y2Location);
-    WriteLine(LName, Fill.X1Location, Fill.Y2Location, Fill.X1Location, Fill.Y1Location);
+    WriteLine(LName, DxfFill.X1Location, DxfFill.Y1Location, DxfFill.X2Location, DxfFill.Y1Location);
+    WriteLine(LName, DxfFill.X2Location, DxfFill.Y1Location, DxfFill.X2Location, DxfFill.Y2Location);
+    WriteLine(LName, DxfFill.X2Location, DxfFill.Y2Location, DxfFill.X1Location, DxfFill.Y2Location);
+    WriteLine(LName, DxfFill.X1Location, DxfFill.Y2Location, DxfFill.X1Location, DxfFill.Y1Location);
 end;
 
 procedure ExportContour(const LName : String; Contour : IPCB_Contour);
 var
-    i, n : Integer;
-    X1, Y1, X2, Y2 : TCoord;
+    Dxfi, Dxfn : Integer;
+    DxfX1, DxfY1, DxfX2, DxfY2 : TCoord;
 begin
     if Contour = nil then Exit;
     try
-        n := Contour.Count;
+        Dxfn := Contour.Count;
     except
-        n := 0;
+        Dxfn := 0;
     end;
-    if n < 2 then Exit;
-    for i := 0 to n - 1 do
+    if Dxfn < 2 then Exit;
+    for Dxfi := 0 to Dxfn - 1 do
     begin
         try
-            X1 := Contour.X[i];
-            Y1 := Contour.Y[i];
-            if i = n - 1 then
+            DxfX1 := Contour.X[Dxfi];
+            DxfY1 := Contour.Y[Dxfi];
+            if Dxfi = Dxfn - 1 then
             begin
-                X2 := Contour.X[0];
-                Y2 := Contour.Y[0];
+                DxfX2 := Contour.X[0];
+                DxfY2 := Contour.Y[0];
             end
             else
             begin
-                X2 := Contour.X[i + 1];
-                Y2 := Contour.Y[i + 1];
+                DxfX2 := Contour.X[Dxfi + 1];
+                DxfY2 := Contour.Y[Dxfi + 1];
             end;
-            WriteLine(LName, X1, Y1, X2, Y2);
+            WriteLine(LName, DxfX1, DxfY1, DxfX2, DxfY2);
         except
         end;
     end;
@@ -423,14 +424,14 @@ end;
 procedure ExportRegionOutline(const LName : String; Rgn : IPCB_Region);
 var
     G : IPCB_GeometricPolygon;
-    i : Integer;
+    Dxfi : Integer;
 begin
     try
         G := Rgn.GetGeometricPolygon;
         if G <> nil then
         begin
-            for i := 0 to G.Count - 1 do
-                ExportContour(LName, G.Contour[i]);
+            for Dxfi := 0 to G.Count - 1 do
+                ExportContour(LName, G.Contour[Dxfi]);
             Exit;
         end;
     except
@@ -441,72 +442,72 @@ begin
     end;
 end;
 
-procedure ExportPolygonOutline(const LName : String; Poly : IPCB_Polygon);
+procedure ExportPolygonOutline(const LName : String; DxfPoly : IPCB_Polygon);
 var
-    i, n : Integer;
-    Seg : TPolySegment;
+    Dxfi, Dxfn : Integer;
+    DxfSeg : TPolySegment;
     PrevX, PrevY, NX, NY : TCoord;
 begin
     try
-        n := Poly.PointCount;
+        Dxfn := DxfPoly.PointCount;
     except
-        n := 0;
+        Dxfn := 0;
     end;
-    if n < 2 then Exit;
+    if Dxfn < 2 then Exit;
 
-    for i := 0 to n - 1 do
+    for Dxfi := 0 to Dxfn - 1 do
     begin
         try
-            Seg := Poly.Segments[i];
-            if i = 0 then
+            DxfSeg := DxfPoly.Segments[Dxfi];
+            if Dxfi = 0 then
             begin
-                PrevX := Seg.vx;
-                PrevY := Seg.vy;
+                PrevX := DxfSeg.vx;
+                PrevY := DxfSeg.vy;
             end;
 
-            if i = n - 1 then
+            if Dxfi = Dxfn - 1 then
             begin
-                NX := Poly.Segments[0].vx;
-                NY := Poly.Segments[0].vy;
+                NX := DxfPoly.Segments[0].vx;
+                NY := DxfPoly.Segments[0].vy;
             end
             else
             begin
-                NX := Poly.Segments[i + 1].vx;
-                NY := Poly.Segments[i + 1].vy;
+                NX := DxfPoly.Segments[Dxfi + 1].vx;
+                NY := DxfPoly.Segments[Dxfi + 1].vy;
             end;
 
-            if Seg.Kind = ePolySegmentArc then
-                WriteArc(LName, Seg.cx, Seg.cy, Seg.Radius, Seg.sa1, Seg.sa2)
+            if DxfSeg.Kind = ePolySegmentArc then
+                WriteArc(LName, DxfSeg.cx, DxfSeg.cy, DxfSeg.Radius, DxfSeg.sa1, DxfSeg.sa2)
             else
-                WriteLine(LName, Seg.vx, Seg.vy, NX, NY);
+                WriteLine(LName, DxfSeg.vx, DxfSeg.vy, NX, NY);
         except
             { Сегмент недоступен — пропускаем. }
         end;
     end;
 end;
 
-function PrimitiveOnLayer(Prim : IPCB_Primitive; ALayer : TLayer) : Boolean;
+function PrimitiveOnLayer(DxfPrim : IPCB_Primitive; DxfALayer : TLayer) : Boolean;
 begin
     Result := False;
-    if Prim = nil then Exit;
-    if Prim.Layer = ALayer then
+    if DxfPrim = nil then Exit;
+    if DxfPrim.Layer = DxfALayer then
     begin
         Result := True;
         Exit;
     end;
-    if Prim.ObjectId = ePadObject then
+    if DxfPrim.ObjectId = ePadObject then
     begin
-        if (Prim.Layer = eMultiLayer) and IsCopperLayer(ALayer) then
+        if (DxfPrim.Layer = eMultiLayer) and IsCopperLayer(DxfALayer) then
             Result := True;
-        if (ALayer = eMultiLayer) and (Prim.Layer = eMultiLayer) then
+        if (DxfALayer = eMultiLayer) and (DxfPrim.Layer = eMultiLayer) then
             Result := True;
     end;
-    if Prim.ObjectId = eViaObject then
+    if DxfPrim.ObjectId = eViaObject then
     begin
-        if IsCopperLayer(ALayer) or (ALayer = eMultiLayer) then
+        if IsCopperLayer(DxfALayer) or (DxfALayer = eMultiLayer) then
         begin
             try
-                Result := Prim.IntersectLayer(ALayer);
+                Result := DxfPrim.IntersectLayer(DxfALayer);
             except
                 Result := True;
             end;
@@ -516,66 +517,66 @@ end;
 
 procedure ExportHolesLayer;
 var
-    Iter : IPCB_BoardIterator;
-    Prim : IPCB_Primitive;
+    DxfIter : IPCB_BoardIterator;
+    DxfPrim : IPCB_Primitive;
     LName : String;
 begin
     LName := 'HOLES';
-    Iter := Board.BoardIterator_Create;
-    Iter.AddFilter_ObjectSet(MkSet(ePadObject, eViaObject));
-    Iter.AddFilter_LayerSet(AllLayers);
-    Iter.AddFilter_Method(eProcessAll);
-    Prim := Iter.FirstPCBObject;
-    while Prim <> nil do
+    DxfIter := DxfBoard.BoardIterator_Create;
+    DxfIter.AddFilter_ObjectSet(MkSet(ePadObject, eViaObject));
+    DxfIter.AddFilter_LayerSet(AllLayers);
+    DxfIter.AddFilter_Method(eProcessAll);
+    DxfPrim := DxfIter.FirstPCBObject;
+    while DxfPrim <> nil do
     begin
-        if Prim.HoleSize > 0 then
+        if DxfPrim.HoleSize > 0 then
         begin
-            if Prim.ObjectId = ePadObject then
-                WriteCircle(LName, Prim.X, Prim.Y, Prim.HoleSize div 2)
+            if DxfPrim.ObjectId = ePadObject then
+                WriteCircle(LName, DxfPrim.X, DxfPrim.Y, DxfPrim.HoleSize div 2)
             else
-                WriteCircle(LName, Prim.X, Prim.Y, Prim.HoleSize div 2);
+                WriteCircle(LName, DxfPrim.X, DxfPrim.Y, DxfPrim.HoleSize div 2);
         end;
-        Prim := Iter.NextPCBObject;
+        DxfPrim := DxfIter.NextPCBObject;
     end;
-    Board.BoardIterator_Destroy(Iter);
+    DxfBoard.BoardIterator_Destroy(DxfIter);
 end;
 
-procedure ExportLayer(ALayer : TLayer);
+procedure ExportLayer(DxfALayer : TLayer);
 var
-    Iter : IPCB_BoardIterator;
-    Prim : IPCB_Primitive;
+    DxfIter : IPCB_BoardIterator;
+    DxfPrim : IPCB_Primitive;
     LName : String;
 begin
-    LName := DxfLayerName(ALayer);
-    Iter := Board.BoardIterator_Create;
-    Iter.AddFilter_ObjectSet(MkSet(eTrackObject, eArcObject, ePadObject, eViaObject,
+    LName := DxfLayerName(DxfALayer);
+    DxfIter := DxfBoard.BoardIterator_Create;
+    DxfIter.AddFilter_ObjectSet(MkSet(eTrackObject, eArcObject, ePadObject, eViaObject,
                                    eFillObject, eRegionObject, ePolyObject));
-    Iter.AddFilter_LayerSet(AllLayers);
-    Iter.AddFilter_Method(eProcessAll);
+    DxfIter.AddFilter_LayerSet(AllLayers);
+    DxfIter.AddFilter_Method(eProcessAll);
 
-    Prim := Iter.FirstPCBObject;
-    while Prim <> nil do
+    DxfPrim := DxfIter.FirstPCBObject;
+    while DxfPrim <> nil do
     begin
-        if PrimitiveOnLayer(Prim, ALayer) then
+        if PrimitiveOnLayer(DxfPrim, DxfALayer) then
         begin
-            case Prim.ObjectId of
-                eTrackObject  : ExportTrackOutline(LName, Prim);
-                eArcObject    : ExportArcOutline(LName, Prim);
-                ePadObject    : ExportPadOutline(LName, Prim, ALayer);
-                eViaObject    : ExportViaOutline(LName, Prim, ALayer);
-                eFillObject   : ExportFillOutline(LName, Prim);
-                eRegionObject : ExportRegionOutline(LName, Prim);
-                ePolyObject   : ExportPolygonOutline(LName, Prim);
+            case DxfPrim.ObjectId of
+                eTrackObject  : ExportTrackOutline(LName, DxfPrim);
+                eArcObject    : ExportArcOutline(LName, DxfPrim);
+                ePadObject    : ExportPadOutline(LName, DxfPrim, DxfALayer);
+                eViaObject    : ExportViaOutline(LName, DxfPrim, DxfALayer);
+                eFillObject   : ExportFillOutline(LName, DxfPrim);
+                eRegionObject : ExportRegionOutline(LName, DxfPrim);
+                ePolyObject   : ExportPolygonOutline(LName, DxfPrim);
             end;
         end;
-        Prim := Iter.NextPCBObject;
+        DxfPrim := DxfIter.NextPCBObject;
     end;
-    Board.BoardIterator_Destroy(Iter);
+    DxfBoard.BoardIterator_Destroy(DxfIter);
 end;
 
 procedure WriteDxfHeader(SelectedNames : TStringList);
 var
-    i : Integer;
+    Dxfi : Integer;
 begin
     HandleCount := 100;
     DxfPair(0, 'SECTION');
@@ -596,12 +597,12 @@ begin
     DxfPair(70, '0');
     DxfPair(62, '7');
     DxfPair(6, 'CONTINUOUS');
-    for i := 0 to SelectedNames.Count - 1 do
+    for Dxfi := 0 to SelectedNames.Count - 1 do
     begin
         DxfPair(0, 'LAYER');
-        DxfPair(2, SelectedNames[i]);
+        DxfPair(2, SelectedNames[Dxfi]);
         DxfPair(70, '0');
-        DxfPair(62, IntToStr((i mod 6) + 1));
+        DxfPair(62, IntToStr((Dxfi mod 6) + 1));
         DxfPair(6, 'CONTINUOUS');
     end;
     DxfPair(0, 'ENDTAB');
@@ -620,36 +621,36 @@ end;
 { ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
-function CS_ScriptFolder : String;
+function DxfCS_ScriptFolder : String;
 var
-    WS  : IWorkspace;
-    Prj : IProject;
-    i   : Integer;
-    P   : String;
+    DxfWS  : IWorkspace;
+    DxfPrj : IProject;
+    Dxfi   : Integer;
+    DxfP   : String;
 begin
     Result := '';
     try
-        WS := GetWorkspace;
-        if WS = nil then Exit;
-        Prj := WS.DM_FocusedProject;
-        if Prj <> nil then
+        DxfWS := GetWorkspace;
+        if DxfWS = nil then Exit;
+        DxfPrj := DxfWS.DM_FocusedProject;
+        if DxfPrj <> nil then
         begin
-            P := ExtractFilePath(Prj.DM_ProjectFullPath);
-            if P <> '' then
+            DxfP := ExtractFilePath(DxfPrj.DM_ProjectFullPath);
+            if DxfP <> '' then
             begin
-                Result := P;
+                Result := DxfP;
                 Exit;
             end;
         end;
-        for i := 0 to WS.DM_ProjectCount - 1 do
+        for Dxfi := 0 to DxfWS.DM_ProjectCount - 1 do
         begin
-            Prj := WS.DM_Projects(i);
-            if Prj <> nil then
+            DxfPrj := DxfWS.DM_Projects(Dxfi);
+            if DxfPrj <> nil then
             begin
-                P := Prj.DM_ProjectFullPath;
-                if Pos('CustomScripts', P) > 0 then
+                DxfP := DxfPrj.DM_ProjectFullPath;
+                if Pos('CustomScripts', DxfP) > 0 then
                 begin
-                    Result := ExtractFilePath(P);
+                    Result := ExtractFilePath(DxfP);
                     Exit;
                 end;
             end;
@@ -659,46 +660,46 @@ begin
     end;
 end;
 
-function CS_FindImageFile(const FileName : String) : String;
+function DxfCS_FindImageFile(const DxfFileName : String) : String;
 var
-    Dir, P : String;
+    DxfDir, DxfP : String;
 begin
     Result := '';
-    Dir := CS_ScriptFolder;
-    if Dir <> '' then
+    DxfDir := DxfCS_ScriptFolder;
+    if DxfDir <> '' then
     begin
-        P := Dir + 'images\' + FileName;
-        if FileExists(P) then
+        DxfP := DxfDir + 'images\' + DxfFileName;
+        if FileExists(DxfP) then
         begin
-            Result := P;
+            Result := DxfP;
             Exit;
         end;
-        P := Dir + FileName;
-        if FileExists(P) then
+        DxfP := DxfDir + DxfFileName;
+        if FileExists(DxfP) then
         begin
-            Result := P;
+            Result := DxfP;
             Exit;
         end;
     end;
-    P := 'images\' + FileName;
-    if FileExists(P) then Result := P;
+    DxfP := 'images\' + DxfFileName;
+    if FileExists(DxfP) then Result := DxfP;
 end;
 
-procedure CS_TryLoadHelpImage(const BmpName : String; const PngName : String);
+procedure DxfCS_TryLoadHelpImage(const DxfBmpName : String; const DxfPngName : String);
 var
-    P : String;
+    DxfP : String;
 begin
     try
-        P := CS_FindImageFile(BmpName);
-        if P = '' then
-            P := CS_FindImageFile(PngName);
-        if (P <> '') and FileExists(P) then
+        DxfP := DxfCS_FindImageFile(DxfBmpName);
+        if DxfP = '' then
+            DxfP := DxfCS_FindImageFile(DxfPngName);
+        if (DxfP <> '') and FileExists(DxfP) then
         begin
-            ImageHelp.Picture.LoadFromFile(P);
-            LabelImageHint.Caption := 'Replace image: images\' + BmpName;
+            ImageHelp.Picture.LoadFromFile(DxfP);
+            LabelImageHint.Caption := 'Replace image: images\' + DxfBmpName;
         end
         else
-            LabelImageHint.Caption := 'No image. Put ' + BmpName + ' in images\ next to the scripts.';
+            LabelImageHint.Caption := 'No image. Put ' + DxfBmpName + ' in images\ next to the scripts.';
     except
         try
             LabelImageHint.Caption := 'Image not loaded.';
@@ -708,131 +709,131 @@ begin
 end;
 
 
-procedure DoExport(FileName : String);
+procedure DoExport(DxfFileName : String);
 var
-    i : Integer;
-    ALayer : TLayer;
-    Names : TStringList;
+    Dxfi : Integer;
+    DxfALayer : TLayer;
+    DxfNames : TStringList;
 begin
     DxfLines := TStringList.Create;
-    Names := TStringList.Create;
+    DxfNames := TStringList.Create;
     try
-        for i := 0 to CheckListLayers.Items.Count - 1 do
-            if CheckListLayers.Checked[i] then
+        for Dxfi := 0 to CheckListLayers.Items.Count - 1 do
+            if CheckListLayers.Checked[Dxfi] then
             begin
-                if LayerIds[i] = 'HOLES' then
-                    Names.Add('HOLES')
+                if LayerIds[Dxfi] = 'HOLES' then
+                    DxfNames.Add('HOLES')
                 else
-                    Names.Add(DxfLayerName(StrToInt(LayerIds[i])));
+                    DxfNames.Add(DxfLayerName(StrToInt(LayerIds[Dxfi])));
             end;
 
-        WriteDxfHeader(Names);
+        WriteDxfHeader(DxfNames);
 
-        for i := 0 to CheckListLayers.Items.Count - 1 do
+        for Dxfi := 0 to CheckListLayers.Items.Count - 1 do
         begin
-            if CheckListLayers.Checked[i] then
+            if CheckListLayers.Checked[Dxfi] then
             begin
-                if LayerIds[i] = 'HOLES' then
+                if LayerIds[Dxfi] = 'HOLES' then
                     ExportHolesLayer
                 else
                 begin
-                    ALayer := StrToInt(LayerIds[i]);
-                    ExportLayer(ALayer);
+                    DxfALayer := StrToInt(LayerIds[Dxfi]);
+                    ExportLayer(DxfALayer);
                 end;
             end;
         end;
 
         WriteDxfFooter;
-        DxfLines.SaveToFile(FileName);
-        ShowInfo('DXF сохранён:' + sLineBreak + FileName + sLineBreak + sLineBreak +
-                 'Слоёв: ' + IntToStr(Names.Count) + sLineBreak +
+        DxfLines.SaveToFile(DxfFileName);
+        ShowInfo('DXF сохранён:' + sLineBreak + DxfFileName + sLineBreak + sLineBreak +
+                 'Слоёв: ' + IntToStr(DxfNames.Count) + sLineBreak +
                  'Текст шелкографии не экспортирован (см. README).',
                  'Экспорт DXF');
     finally
-        Names.Free;
+        DxfNames.Free;
         DxfLines.Free;
     end;
 end;
 
-procedure TFormDxf.FormDxfShow(Sender: TObject);
+procedure TFormDxf.FormDxfShow(DxfSender: TObject);
 var
-    i : Integer;
-    ALayer : TLayer;
+    Dxfi : Integer;
+    DxfALayer : TLayer;
 begin
     try
-        CS_TryLoadHelpImage('DxfExport.bmp', 'DxfExport.png');
+        DxfCS_TryLoadHelpImage('DxfExport.bmp', 'DxfExport.png');
     except
     end;
     CheckListLayers.Items.Clear;
-    Board := nil;
+    DxfBoard := nil;
     try
         if PCBServer <> nil then
-            Board := PCBServer.GetCurrentPCBBoard;
+            DxfBoard := PCBServer.GetCurrentPCBBoard;
     except
-        Board := nil;
+        DxfBoard := nil;
     end;
-    if (Board = nil) or (LayerItems = nil) then Exit;
+    if (DxfBoard = nil) or (LayerItems = nil) then Exit;
     CollectBoardLayers;
-    for i := 0 to LayerItems.Count - 1 do
+    for Dxfi := 0 to LayerItems.Count - 1 do
     begin
-        CheckListLayers.Items.Add(LayerItems[i]);
-        if LayerIds[i] = 'HOLES' then
-            CheckListLayers.Checked[i] := True
+        CheckListLayers.Items.Add(LayerItems[Dxfi]);
+        if LayerIds[Dxfi] = 'HOLES' then
+            CheckListLayers.Checked[Dxfi] := True
         else
         begin
-            ALayer := StrToInt(LayerIds[i]);
-            CheckListLayers.Checked[i] := IsDefaultChecked(ALayer);
+            DxfALayer := StrToInt(LayerIds[Dxfi]);
+            CheckListLayers.Checked[Dxfi] := IsDefaultChecked(DxfALayer);
         end;
     end;
 end;
 
-procedure TFormDxf.ButtonAllClick(Sender: TObject);
+procedure TFormDxf.ButtonAllClick(DxfSender: TObject);
 var
-    i : Integer;
+    Dxfi : Integer;
 begin
-    for i := 0 to CheckListLayers.Items.Count - 1 do
-        CheckListLayers.Checked[i] := True;
+    for Dxfi := 0 to CheckListLayers.Items.Count - 1 do
+        CheckListLayers.Checked[Dxfi] := True;
 end;
 
-procedure TFormDxf.ButtonNoneClick(Sender: TObject);
+procedure TFormDxf.ButtonNoneClick(DxfSender: TObject);
 var
-    i : Integer;
+    Dxfi : Integer;
 begin
-    for i := 0 to CheckListLayers.Items.Count - 1 do
-        CheckListLayers.Checked[i] := False;
+    for Dxfi := 0 to CheckListLayers.Items.Count - 1 do
+        CheckListLayers.Checked[Dxfi] := False;
 end;
 
-procedure TFormDxf.ButtonCopperClick(Sender: TObject);
+procedure TFormDxf.ButtonCopperClick(DxfSender: TObject);
 var
-    i : Integer;
-    ALayer : TLayer;
+    Dxfi : Integer;
+    DxfALayer : TLayer;
 begin
-    for i := 0 to CheckListLayers.Items.Count - 1 do
+    for Dxfi := 0 to CheckListLayers.Items.Count - 1 do
     begin
-        if LayerIds[i] = 'HOLES' then
-            CheckListLayers.Checked[i] := False
+        if LayerIds[Dxfi] = 'HOLES' then
+            CheckListLayers.Checked[Dxfi] := False
         else
         begin
-            ALayer := StrToInt(LayerIds[i]);
-            CheckListLayers.Checked[i] := IsCopperLayer(ALayer);
+            DxfALayer := StrToInt(LayerIds[Dxfi]);
+            CheckListLayers.Checked[Dxfi] := IsCopperLayer(DxfALayer);
         end;
     end;
 end;
 
-procedure TFormDxf.ButtonOKClick(Sender: TObject);
+procedure TFormDxf.ButtonOKClick(DxfSender: TObject);
 var
     SaveDlg : TSaveDialog;
-    i, n : Integer;
+    Dxfi, Dxfn : Integer;
 begin
-    if Board = nil then
+    if DxfBoard = nil then
     begin
         ShowError('Open a PCB document.');
         Exit;
     end;
-    n := 0;
-    for i := 0 to CheckListLayers.Items.Count - 1 do
-        if CheckListLayers.Checked[i] then Inc(n);
-    if n = 0 then
+    Dxfn := 0;
+    for Dxfi := 0 to CheckListLayers.Items.Count - 1 do
+        if CheckListLayers.Checked[Dxfi] then Inc(Dxfn);
+    if Dxfn = 0 then
     begin
         ShowWarning('Выберите хотя бы один слой.');
         Exit;
@@ -854,12 +855,12 @@ begin
     end;
 end;
 
-procedure TFormDxf.ButtonCancelClick(Sender: TObject);
+procedure TFormDxf.ButtonCancelClick(DxfSender: TObject);
 begin
     FormDxf.Close;
 end;
 
-procedure Start;
+procedure StartDxfOutlineExport;
 begin
     LayerItems := TStringList.Create;
     LayerIds := TStringList.Create;
@@ -873,7 +874,7 @@ begin
     end;
 end;
 
-procedure _Start;
+procedure _StartDxfOutlineExport;
 begin
-    Start;
+    StartDxfOutlineExport;
 end;

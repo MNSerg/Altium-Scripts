@@ -11,146 +11,147 @@ var
     SkippedLock : Integer;
     PrefixCounters : TStringList;
 
-procedure Start; forward;
-procedure _Start; forward;
-procedure TFormAnnot.ButtonOKClick(Sender: TObject); forward;
-procedure TFormAnnot.ButtonCancelClick(Sender: TObject); forward;
-procedure TFormAnnot.FormAnnotShow(Sender: TObject); forward;
+{ Run Script: choose procedure StartSchDesignatorReset (project compiles only this .pas). }
+procedure StartSchDesignatorReset; forward;
+procedure _StartSchDesignatorReset; forward;
+procedure TFormAnnot.ButtonOKClick(SchSender: TObject); forward;
+procedure TFormAnnot.ButtonCancelClick(SchSender: TObject); forward;
+procedure TFormAnnot.FormAnnotShow(SchSender: TObject); forward;
 
-function DesignatorPrefix(const Des : String) : String;
+function DesignatorPrefix(const SchDes : String) : String;
 var
-    i : Integer;
-    C : Char;
+    Schi : Integer;
+    SchC : Char;
 begin
     Result := '';
-    for i := 1 to Length(Des) do
+    for Schi := 1 to Length(SchDes) do
     begin
-        C := Des[i];
-        if ((C >= 'A') and (C <= 'Z')) or ((C >= 'a') and (C <= 'z')) then
-            Result := Result + C
+        SchC := SchDes[Schi];
+        if ((SchC >= 'A') and (SchC <= 'Z')) or ((SchC >= 'a') and (SchC <= 'z')) then
+            Result := Result + SchC
         else
             Break;
     end;
     if Result = '' then Result := 'U';
 end;
 
-function IsLockedDesignator(Comp : ISch_Component) : Boolean;
+function IsLockedDesignator(SchComp : ISch_Component) : Boolean;
 begin
     Result := False;
     try
-        Result := Comp.DesignatorLocked;
+        Result := SchComp.DesignatorLocked;
     except
         try
-            Result := Comp.GetState_LockDesignator;
+            Result := SchComp.GetState_LockDesignator;
         except
             Result := False;
         end;
     end;
 end;
 
-function CompKindExcluded(Comp : ISch_Component) : Boolean;
+function CompKindExcluded(SchComp : ISch_Component) : Boolean;
 begin
     Result := False;
 end;
 
-procedure ResetSheet(Doc : ISch_Document);
+procedure ResetSheet(SchSchDoc : ISch_Document);
 var
-    Iter : ISch_Iterator;
-    Comp : ISch_Component;
-    Des  : ISch_Designator;
+    SchIter : ISch_Iterator;
+    SchComp : ISch_Component;
+    SchDes  : ISch_Designator;
     Text : String;
     Pref : String;
 begin
-    if Doc = nil then Exit;
-    SchServer.ProcessControl.PreProcess(Doc, '');
+    if SchSchDoc = nil then Exit;
+    SchServer.ProcessControl.PreProcess(SchSchDoc, '');
     try
-        Iter := Doc.SchIterator_Create;
-        Iter.AddFilter_ObjectSet(MkSet(eSchComponent));
-        Comp := Iter.FirstSchObject;
-        while Comp <> nil do
+        SchIter := SchSchDoc.SchIterator_Create;
+        SchIter.AddFilter_ObjectSet(MkSet(eSchComponent));
+        SchComp := SchIter.FirstSchObject;
+        while SchComp <> nil do
         begin
-            if not CompKindExcluded(Comp) then
+            if not CompKindExcluded(SchComp) then
             begin
-                if IsLockedDesignator(Comp) then
+                if IsLockedDesignator(SchComp) then
                     Inc(SkippedLock)
                 else
                 begin
                     try
-                        Des := Comp.Designator;
-                        Text := Des.Text;
+                        SchDes := SchComp.Designator;
+                        Text := SchDes.Text;
                         Pref := DesignatorPrefix(Text);
-                        Comp.SetState_x_Location(Comp.Location.X); { touch for undo }
-                        Des.Text := Pref + '?';
+                        SchComp.SetState_x_Location(SchComp.Location.X); { touch for undo }
+                        SchDes.Text := Pref + '?';
                         Inc(ChangedCnt);
                     except
                     end;
                 end;
             end;
-            Comp := Iter.NextSchObject;
+            SchComp := SchIter.NextSchObject;
         end;
-        Doc.SchIterator_Destroy(Iter);
-        Doc.GraphicallyInvalidate;
+        SchSchDoc.SchIterator_Destroy(SchIter);
+        SchSchDoc.GraphicallyInvalidate;
     finally
-        SchServer.ProcessControl.PostProcess(Doc, '');
+        SchServer.ProcessControl.PostProcess(SchSchDoc, '');
     end;
 end;
 
-procedure AnnotateSheet(Doc : ISch_Document);
+procedure AnnotateSheet(SchSchDoc : ISch_Document);
 var
-    Iter : ISch_Iterator;
-    Comp : ISch_Component;
-    List : TStringList;
-    i : Integer;
+    SchIter : ISch_Iterator;
+    SchComp : ISch_Component;
+    SchList : TStringList;
+    Schi : Integer;
     Prefix : String;
-    Idx, Num : Integer;
-    X, Y : Integer;
+    SchIdx, Num : Integer;
+    SchX, SchY : Integer;
     SortKey : String;
 begin
-    if Doc = nil then Exit;
-    List := TStringList.Create;
-    SchServer.ProcessControl.PreProcess(Doc, '');
+    if SchSchDoc = nil then Exit;
+    SchList := TStringList.Create;
+    SchServer.ProcessControl.PreProcess(SchSchDoc, '');
     try
-        Iter := Doc.SchIterator_Create;
-        Iter.AddFilter_ObjectSet(MkSet(eSchComponent));
-        Comp := Iter.FirstSchObject;
-        while Comp <> nil do
+        SchIter := SchSchDoc.SchIterator_Create;
+        SchIter.AddFilter_ObjectSet(MkSet(eSchComponent));
+        SchComp := SchIter.FirstSchObject;
+        while SchComp <> nil do
         begin
-            if (not CompKindExcluded(Comp)) and (not IsLockedDesignator(Comp)) then
+            if (not CompKindExcluded(SchComp)) and (not IsLockedDesignator(SchComp)) then
             begin
-                X := Comp.Location.X;
-                Y := Comp.Location.Y;
+                SchX := SchComp.Location.X;
+                SchY := SchComp.Location.Y;
                 { Down then Across: сначала колонка сверху вниз, затем следующая слева направо. }
-                SortKey := Format('%.10d|%.10d', [X, 1000000000 - Y]);
-                List.AddObject(SortKey, Comp);
+                SortKey := Format('%.10d|%.10d', [SchX, 1000000000 - SchY]);
+                SchList.AddObject(SortKey, SchComp);
             end;
-            Comp := Iter.NextSchObject;
+            SchComp := SchIter.NextSchObject;
         end;
-        Doc.SchIterator_Destroy(Iter);
+        SchSchDoc.SchIterator_Destroy(SchIter);
 
-        List.Sorted := True;
+        SchList.Sorted := True;
 
-        for i := 0 to List.Count - 1 do
+        for Schi := 0 to SchList.Count - 1 do
         begin
-            Comp := List.Objects[i];
-            Prefix := DesignatorPrefix(Comp.Designator.Text);
-            Idx := PrefixCounters.IndexOfName(Prefix);
-            if Idx < 0 then
+            SchComp := SchList.Objects[Schi];
+            Prefix := DesignatorPrefix(SchComp.Designator.Text);
+            SchIdx := PrefixCounters.IndexOfName(Prefix);
+            if SchIdx < 0 then
             begin
                 Num := 1;
                 PrefixCounters.Add(Prefix + '=1');
             end
             else
             begin
-                Num := StrToInt(PrefixCounters.ValueFromIndex[Idx]) + 1;
-                PrefixCounters.ValueFromIndex[Idx] := IntToStr(Num);
+                Num := StrToInt(PrefixCounters.ValueFromIndex[SchIdx]) + 1;
+                PrefixCounters.ValueFromIndex[SchIdx] := IntToStr(Num);
             end;
-            Comp.Designator.Text := Prefix + IntToStr(Num);
+            SchComp.Designator.Text := Prefix + IntToStr(Num);
             Inc(ChangedCnt);
         end;
-        Doc.GraphicallyInvalidate;
+        SchSchDoc.GraphicallyInvalidate;
     finally
-        SchServer.ProcessControl.PostProcess(Doc, '');
-        List.Free;
+        SchServer.ProcessControl.PostProcess(SchSchDoc, '');
+        SchList.Free;
     end;
 end;
 
@@ -166,11 +167,11 @@ end;
 
 procedure ProcessDocuments;
 var
-    WS : IWorkspace;
-    Project : IProject;
-    i : Integer;
-    LogDoc : IDocument;
-    SchDoc : ISch_Document;
+    SchWS : IWorkspace;
+    SchProject : IProject;
+    Schi : Integer;
+    SchLogDoc : IDocument;
+    SchSchDoc : ISch_Document;
     Current : ISch_Document;
     CountSheets : Integer;
 begin
@@ -184,13 +185,13 @@ begin
     end;
 
     Current := SchServer.GetCurrentSchDocument;
-    WS := GetWorkspace;
-    if WS = nil then Exit;
-    Project := WS.DM_FocusedProject;
+    SchWS := GetWorkspace;
+    if SchWS = nil then Exit;
+    SchProject := SchWS.DM_FocusedProject;
 
     if AllSheets then
     begin
-        if Project = nil then
+        if SchProject = nil then
         begin
             ShowError('Нет активного проекта.');
             Exit;
@@ -206,26 +207,26 @@ begin
         if DoReset then
             TryOfficialReset;
 
-        if AllSheets and (Project <> nil) then
+        if AllSheets and (SchProject <> nil) then
         begin
             CountSheets := 0;
-            for i := 0 to Project.DM_LogicalDocumentCount - 1 do
+            for Schi := 0 to SchProject.DM_LogicalDocumentCount - 1 do
             begin
-                LogDoc := Project.DM_LogicalDocuments(i);
-                if (LogDoc.DM_DocumentKind = 'SCH') or (LogDoc.DM_DocumentKind = 'SCHDOC') then
+                SchLogDoc := SchProject.DM_LogicalDocuments(Schi);
+                if (SchLogDoc.DM_DocumentKind = 'SCH') or (SchLogDoc.DM_DocumentKind = 'SCHDOC') then
                 begin
                     Inc(CountSheets);
                     try
-                        SchServer.LoadSchDocumentByPath(LogDoc.DM_FullPath);
+                        SchServer.LoadSchDocumentByPath(SchLogDoc.DM_FullPath);
                     except
                     end;
-                    SchDoc := SchServer.GetSchDocumentByPath(LogDoc.DM_FullPath);
-                    if SchDoc = nil then
-                        SchDoc := SchServer.GetCurrentSchDocument;
-                    if SchDoc <> nil then
+                    SchSchDoc := SchServer.GetSchDocumentByPath(SchLogDoc.DM_FullPath);
+                    if SchSchDoc = nil then
+                        SchSchDoc := SchServer.GetCurrentSchDocument;
+                    if SchSchDoc <> nil then
                     begin
-                        if DoReset then ResetSheet(SchDoc);
-                        if DoAnnotate then AnnotateSheet(SchDoc);
+                        if DoReset then ResetSheet(SchSchDoc);
+                        if DoAnnotate then AnnotateSheet(SchSchDoc);
                     end;
                 end;
             end;
@@ -255,7 +256,7 @@ begin
     end;
 end;
 
-procedure TFormAnnot.ButtonOKClick(Sender: TObject);
+procedure TFormAnnot.ButtonOKClick(SchSender: TObject);
 begin
     DoReset := CheckReset.Checked;
     DoAnnotate := CheckAnnotate.Checked;
@@ -269,7 +270,7 @@ begin
     ProcessDocuments;
 end;
 
-procedure TFormAnnot.ButtonCancelClick(Sender: TObject);
+procedure TFormAnnot.ButtonCancelClick(SchSender: TObject);
 begin
     FormAnnot.Close;
 end;
@@ -277,36 +278,36 @@ end;
 { ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
-function CS_ScriptFolder : String;
+function SchCS_ScriptFolder : String;
 var
-    WS  : IWorkspace;
-    Prj : IProject;
-    i   : Integer;
-    P   : String;
+    SchWS  : IWorkspace;
+    SchPrj : IProject;
+    Schi   : Integer;
+    SchP   : String;
 begin
     Result := '';
     try
-        WS := GetWorkspace;
-        if WS = nil then Exit;
-        Prj := WS.DM_FocusedProject;
-        if Prj <> nil then
+        SchWS := GetWorkspace;
+        if SchWS = nil then Exit;
+        SchPrj := SchWS.DM_FocusedProject;
+        if SchPrj <> nil then
         begin
-            P := ExtractFilePath(Prj.DM_ProjectFullPath);
-            if P <> '' then
+            SchP := ExtractFilePath(SchPrj.DM_ProjectFullPath);
+            if SchP <> '' then
             begin
-                Result := P;
+                Result := SchP;
                 Exit;
             end;
         end;
-        for i := 0 to WS.DM_ProjectCount - 1 do
+        for Schi := 0 to SchWS.DM_ProjectCount - 1 do
         begin
-            Prj := WS.DM_Projects(i);
-            if Prj <> nil then
+            SchPrj := SchWS.DM_Projects(Schi);
+            if SchPrj <> nil then
             begin
-                P := Prj.DM_ProjectFullPath;
-                if Pos('CustomScripts', P) > 0 then
+                SchP := SchPrj.DM_ProjectFullPath;
+                if Pos('CustomScripts', SchP) > 0 then
                 begin
-                    Result := ExtractFilePath(P);
+                    Result := ExtractFilePath(SchP);
                     Exit;
                 end;
             end;
@@ -316,46 +317,46 @@ begin
     end;
 end;
 
-function CS_FindImageFile(const FileName : String) : String;
+function SchCS_FindImageFile(const SchFileName : String) : String;
 var
-    Dir, P : String;
+    SchDir, SchP : String;
 begin
     Result := '';
-    Dir := CS_ScriptFolder;
-    if Dir <> '' then
+    SchDir := SchCS_ScriptFolder;
+    if SchDir <> '' then
     begin
-        P := Dir + 'images\' + FileName;
-        if FileExists(P) then
+        SchP := SchDir + 'images\' + SchFileName;
+        if FileExists(SchP) then
         begin
-            Result := P;
+            Result := SchP;
             Exit;
         end;
-        P := Dir + FileName;
-        if FileExists(P) then
+        SchP := SchDir + SchFileName;
+        if FileExists(SchP) then
         begin
-            Result := P;
+            Result := SchP;
             Exit;
         end;
     end;
-    P := 'images\' + FileName;
-    if FileExists(P) then Result := P;
+    SchP := 'images\' + SchFileName;
+    if FileExists(SchP) then Result := SchP;
 end;
 
-procedure CS_TryLoadHelpImage(const BmpName : String; const PngName : String);
+procedure SchCS_TryLoadHelpImage(const SchBmpName : String; const SchPngName : String);
 var
-    P : String;
+    SchP : String;
 begin
     try
-        P := CS_FindImageFile(BmpName);
-        if P = '' then
-            P := CS_FindImageFile(PngName);
-        if (P <> '') and FileExists(P) then
+        SchP := SchCS_FindImageFile(SchBmpName);
+        if SchP = '' then
+            SchP := SchCS_FindImageFile(SchPngName);
+        if (SchP <> '') and FileExists(SchP) then
         begin
-            ImageHelp.Picture.LoadFromFile(P);
-            LabelImageHint.Caption := 'Replace image: images\' + BmpName;
+            ImageHelp.Picture.LoadFromFile(SchP);
+            LabelImageHint.Caption := 'Replace image: images\' + SchBmpName;
         end
         else
-            LabelImageHint.Caption := 'No image. Put ' + BmpName + ' in images\ next to the scripts.';
+            LabelImageHint.Caption := 'No image. Put ' + SchBmpName + ' in images\ next to the scripts.';
     except
         try
             LabelImageHint.Caption := 'Image not loaded.';
@@ -365,22 +366,22 @@ begin
 end;
 
 
-procedure TFormAnnot.FormAnnotShow(Sender: TObject);
+procedure TFormAnnot.FormAnnotShow(SchSender: TObject);
 begin
     try
-        CS_TryLoadHelpImage('SchAnnotate.bmp', 'SchAnnotate.png');
+        SchCS_TryLoadHelpImage('SchAnnotate.bmp', 'SchAnnotate.png');
     except
     end;
     CheckAnnotate.Checked := True;
     CheckAllSheets.Checked := True;
 end;
 
-procedure Start;
+procedure StartSchDesignatorReset;
 begin
     FormAnnot.ShowModal;
 end;
 
-procedure _Start;
+procedure _StartSchDesignatorReset;
 begin
-    Start;
+    StartSchDesignatorReset;
 end;

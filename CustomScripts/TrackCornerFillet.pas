@@ -9,10 +9,10 @@ const
     cDefaultRadiusMM = 0.5;
     cJoinTol         = 50;      // допуск стыковки концов, Coord (~0.005 mil * 10)
     cMinLength       = 10;
-    PiValue          = 3.141592653589793;
+    FilPiValue          = 3.141592653589793;
 
 var
-    Board          : IPCB_Board;
+    FilBoard          : IPCB_Board;
     RadiusCoord    : TCoord;
     ReplaceFillets : Boolean;
     AskedReplace   : Boolean;
@@ -20,33 +20,34 @@ var
     SkippedCount   : Integer;
     TooLargeCount  : Integer;
 
-procedure Start; forward;
-procedure _Start; forward;
-procedure TFormFillet.ButtonOKClick(Sender: TObject); forward;
-procedure TFormFillet.ButtonCancelClick(Sender: TObject); forward;
-procedure TFormFillet.FormFilletShow(Sender: TObject); forward;
+{ Run Script: choose procedure StartTrackCornerFillet (project compiles only this .pas). }
+procedure StartTrackCornerFillet; forward;
+procedure _StartTrackCornerFillet; forward;
+procedure TFormFillet.ButtonOKClick(FilSender: TObject); forward;
+procedure TFormFillet.ButtonCancelClick(FilSender: TObject); forward;
+procedure TFormFillet.FormFilletShow(FilSender: TObject); forward;
 procedure DoFilletWork; forward;
 procedure ExpandConnectedPath; forward;
 
-function Distance(X1, Y1, X2, Y2 : TCoord) : Double;
+function Distance(FilX1, FilY1, FilX2, FilY2 : TCoord) : Double;
 begin
-    Result := Sqrt(Sqr(1.0 * (X2 - X1)) + Sqr(1.0 * (Y2 - Y1)));
+    Result := Sqrt(Sqr(1.0 * (FilX2 - FilX1)) + Sqr(1.0 * (FilY2 - FilY1)));
 end;
 
-function SamePoint(X1, Y1, X2, Y2 : TCoord) : Boolean;
+function SamePoint(FilX1, FilY1, FilX2, FilY2 : TCoord) : Boolean;
 begin
-    Result := Distance(X1, Y1, X2, Y2) <= cJoinTol;
+    Result := Distance(FilX1, FilY1, FilX2, FilY2) <= cJoinTol;
 end;
 
 function IsNumericMM(Text : String) : Boolean;
 var
-    V : Double;
+    FilV : Double;
 begin
     Result := False;
     if Text = '' then Exit;
     try
-        V := StrToFloat(Text);
-        Result := V >= 0;
+        FilV := StrToFloat(Text);
+        Result := FilV >= 0;
     except
         Result := False;
     end;
@@ -72,52 +73,52 @@ begin
     if EndIdx = 1 then Result := AnArc.StartY else Result := AnArc.EndY;
 end;
 
-function SameNetAndLayer(A, B : IPCB_Primitive) : Boolean;
+function SameNetAndLayer(FilA, FilB : IPCB_Primitive) : Boolean;
 begin
     Result := False;
-    if (A = nil) or (B = nil) then Exit;
-    if A.Layer <> B.Layer then Exit;
-    if A.InNet and B.InNet then
+    if (FilA = nil) or (FilB = nil) then Exit;
+    if FilA.Layer <> FilB.Layer then Exit;
+    if FilA.InNet and FilB.InNet then
     begin
-        if A.Net <> B.Net then Exit;
+        if FilA.Net <> FilB.Net then Exit;
     end;
     Result := True;
 end;
 
 { Найти примитив (трек или дугу), стыкующийся с концом EndIdx объекта Prim. }
-function FindConnectedAtEnd(Prim : IPCB_Primitive; EndIdx : Integer; SelectedOnly : Boolean) : IPCB_Primitive;
+function FindConnectedAtEnd(FilPrim : IPCB_Primitive; EndIdx : Integer; SelectedOnly : Boolean) : IPCB_Primitive;
 var
     SIter : IPCB_SpatialIterator;
     Other : IPCB_Primitive;
     Xp, Yp : TCoord;
-    i : Integer;
+    Fili : Integer;
 begin
     Result := nil;
-    if Prim.ObjectId = eTrackObject then
+    if FilPrim.ObjectId = eTrackObject then
     begin
-        Xp := TrackEndX(Prim, EndIdx);
-        Yp := TrackEndY(Prim, EndIdx);
+        Xp := TrackEndX(FilPrim, EndIdx);
+        Yp := TrackEndY(FilPrim, EndIdx);
     end
-    else if Prim.ObjectId = eArcObject then
+    else if FilPrim.ObjectId = eArcObject then
     begin
-        Xp := ArcEndX(Prim, EndIdx);
-        Yp := ArcEndY(Prim, EndIdx);
+        Xp := ArcEndX(FilPrim, EndIdx);
+        Yp := ArcEndY(FilPrim, EndIdx);
     end
     else Exit;
 
-    SIter := Board.SpatialIterator_Create;
+    SIter := FilBoard.SpatialIterator_Create;
     SIter.AddFilter_ObjectSet(MkSet(eTrackObject, eArcObject));
-    SIter.AddFilter_LayerSet(MkSet(Prim.Layer));
+    SIter.AddFilter_LayerSet(MkSet(FilPrim.Layer));
     SIter.AddFilter_Area(Xp - cJoinTol, Yp - cJoinTol, Xp + cJoinTol, Yp + cJoinTol);
 
     Other := SIter.FirstPCBObject;
     while Other <> nil do
     begin
-        if Other.I_ObjectAddress <> Prim.I_ObjectAddress then
+        if Other.I_ObjectAddress <> FilPrim.I_ObjectAddress then
         begin
             if (not SelectedOnly) or Other.Selected then
             begin
-                if SameNetAndLayer(Prim, Other) then
+                if SameNetAndLayer(FilPrim, Other) then
                 begin
                     if Other.ObjectId = eTrackObject then
                     begin
@@ -140,16 +141,16 @@ begin
         end;
         Other := SIter.NextPCBObject;
     end;
-    Board.SpatialIterator_Destroy(SIter);
+    FilBoard.SpatialIterator_Destroy(SIter);
 
     { Запасной обход выделения, если spatial iterator не нашёл стык. }
     if Result = nil then
     begin
-        for i := 0 to Board.SelectecObjectCount - 1 do
+        for Fili := 0 to FilBoard.SelectecObjectCount - 1 do
         begin
-            Other := Board.SelectecObject(i);
-            if Other.I_ObjectAddress = Prim.I_ObjectAddress then Continue;
-            if not SameNetAndLayer(Prim, Other) then Continue;
+            Other := FilBoard.SelectecObject(Fili);
+            if Other.I_ObjectAddress = FilPrim.I_ObjectAddress then Continue;
+            if not SameNetAndLayer(FilPrim, Other) then Continue;
             if Other.ObjectId = eTrackObject then
             begin
                 if SamePoint(Other.X1, Other.Y1, Xp, Yp) or SamePoint(Other.X2, Other.Y2, Xp, Yp) then
@@ -171,15 +172,15 @@ begin
 end;
 
 { Сколько выделенных треков/дуг сходятся в точке. T-стык: >= 3. }
-function CountAllAtPoint(Xp, Yp : TCoord; ALayer : TLayer) : Integer;
+function CountAllAtPoint(Xp, Yp : TCoord; FilALayer : TLayer) : Integer;
 var
     SIter : IPCB_SpatialIterator;
     Other : IPCB_Primitive;
 begin
     Result := 0;
-    SIter := Board.SpatialIterator_Create;
+    SIter := FilBoard.SpatialIterator_Create;
     SIter.AddFilter_ObjectSet(MkSet(eTrackObject, eArcObject));
-    SIter.AddFilter_LayerSet(MkSet(ALayer));
+    SIter.AddFilter_LayerSet(MkSet(FilALayer));
     SIter.AddFilter_Area(Xp - cJoinTol, Yp - cJoinTol, Xp + cJoinTol, Yp + cJoinTol);
     Other := SIter.FirstPCBObject;
     while Other <> nil do
@@ -196,42 +197,42 @@ begin
         end;
         Other := SIter.NextPCBObject;
     end;
-    Board.SpatialIterator_Destroy(SIter);
+    FilBoard.SpatialIterator_Destroy(SIter);
 end;
 
 { Добирает состыкованный путь той же цепи/слоя (квадрат из 1 сегмента → 4). T-стыки не трогаем. }
 procedure ExpandConnectedPath;
 var
     Changed : Boolean;
-    Guard, i, EndIdx : Integer;
-    Prim, Other : IPCB_Primitive;
+    Guard, Fili, EndIdx : Integer;
+    FilPrim, Other : IPCB_Primitive;
     Xp, Yp : TCoord;
 begin
     Guard := 0;
     repeat
         Changed := False;
         Inc(Guard);
-        i := 0;
-        while i < Board.SelectecObjectCount do
+        Fili := 0;
+        while Fili < FilBoard.SelectecObjectCount do
         begin
-            Prim := Board.SelectecObject(i);
-            if (Prim.ObjectId = eTrackObject) or (Prim.ObjectId = eArcObject) then
+            FilPrim := FilBoard.SelectecObject(Fili);
+            if (FilPrim.ObjectId = eTrackObject) or (FilPrim.ObjectId = eArcObject) then
             begin
                 for EndIdx := 1 to 2 do
                 begin
-                    if Prim.ObjectId = eTrackObject then
+                    if FilPrim.ObjectId = eTrackObject then
                     begin
-                        if EndIdx = 1 then begin Xp := Prim.X1; Yp := Prim.Y1; end
-                        else begin Xp := Prim.X2; Yp := Prim.Y2; end;
+                        if EndIdx = 1 then begin Xp := FilPrim.X1; Yp := FilPrim.Y1; end
+                        else begin Xp := FilPrim.X2; Yp := FilPrim.Y2; end;
                     end
                     else
                     begin
-                        if EndIdx = 1 then begin Xp := Prim.StartX; Yp := Prim.StartY; end
-                        else begin Xp := Prim.EndX; Yp := Prim.EndY; end;
+                        if EndIdx = 1 then begin Xp := FilPrim.StartX; Yp := FilPrim.StartY; end
+                        else begin Xp := FilPrim.EndX; Yp := FilPrim.EndY; end;
                     end;
-                    if CountAllAtPoint(Xp, Yp, Prim.Layer) = 2 then
+                    if CountAllAtPoint(Xp, Yp, FilPrim.Layer) = 2 then
                     begin
-                        Other := FindConnectedAtEnd(Prim, EndIdx, False);
+                        Other := FindConnectedAtEnd(FilPrim, EndIdx, False);
                         if (Other <> nil) and (not Other.Selected) then
                         begin
                             Other.Selected := True;
@@ -240,7 +241,7 @@ begin
                     end;
                 end;
             end;
-            Inc(i);
+            Inc(Fili);
         end;
     until (not Changed) or (Guard > 8000);
 end;
@@ -248,36 +249,36 @@ end;
 { ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
-function CS_ScriptFolder : String;
+function FilCS_ScriptFolder : String;
 var
-    WS  : IWorkspace;
-    Prj : IProject;
-    i   : Integer;
-    P   : String;
+    FilWS  : IWorkspace;
+    FilPrj : IProject;
+    Fili   : Integer;
+    FilP   : String;
 begin
     Result := '';
     try
-        WS := GetWorkspace;
-        if WS = nil then Exit;
-        Prj := WS.DM_FocusedProject;
-        if Prj <> nil then
+        FilWS := GetWorkspace;
+        if FilWS = nil then Exit;
+        FilPrj := FilWS.DM_FocusedProject;
+        if FilPrj <> nil then
         begin
-            P := ExtractFilePath(Prj.DM_ProjectFullPath);
-            if P <> '' then
+            FilP := ExtractFilePath(FilPrj.DM_ProjectFullPath);
+            if FilP <> '' then
             begin
-                Result := P;
+                Result := FilP;
                 Exit;
             end;
         end;
-        for i := 0 to WS.DM_ProjectCount - 1 do
+        for Fili := 0 to FilWS.DM_ProjectCount - 1 do
         begin
-            Prj := WS.DM_Projects(i);
-            if Prj <> nil then
+            FilPrj := FilWS.DM_Projects(Fili);
+            if FilPrj <> nil then
             begin
-                P := Prj.DM_ProjectFullPath;
-                if Pos('CustomScripts', P) > 0 then
+                FilP := FilPrj.DM_ProjectFullPath;
+                if Pos('CustomScripts', FilP) > 0 then
                 begin
-                    Result := ExtractFilePath(P);
+                    Result := ExtractFilePath(FilP);
                     Exit;
                 end;
             end;
@@ -287,46 +288,46 @@ begin
     end;
 end;
 
-function CS_FindImageFile(const FileName : String) : String;
+function FilCS_FindImageFile(const FilFileName : String) : String;
 var
-    Dir, P : String;
+    FilDir, FilP : String;
 begin
     Result := '';
-    Dir := CS_ScriptFolder;
-    if Dir <> '' then
+    FilDir := FilCS_ScriptFolder;
+    if FilDir <> '' then
     begin
-        P := Dir + 'images\' + FileName;
-        if FileExists(P) then
+        FilP := FilDir + 'images\' + FilFileName;
+        if FileExists(FilP) then
         begin
-            Result := P;
+            Result := FilP;
             Exit;
         end;
-        P := Dir + FileName;
-        if FileExists(P) then
+        FilP := FilDir + FilFileName;
+        if FileExists(FilP) then
         begin
-            Result := P;
+            Result := FilP;
             Exit;
         end;
     end;
-    P := 'images\' + FileName;
-    if FileExists(P) then Result := P;
+    FilP := 'images\' + FilFileName;
+    if FileExists(FilP) then Result := FilP;
 end;
 
-procedure CS_TryLoadHelpImage(const BmpName : String; const PngName : String);
+procedure FilCS_TryLoadHelpImage(const FilBmpName : String; const FilPngName : String);
 var
-    P : String;
+    FilP : String;
 begin
     try
-        P := CS_FindImageFile(BmpName);
-        if P = '' then
-            P := CS_FindImageFile(PngName);
-        if (P <> '') and FileExists(P) then
+        FilP := FilCS_FindImageFile(FilBmpName);
+        if FilP = '' then
+            FilP := FilCS_FindImageFile(FilPngName);
+        if (FilP <> '') and FileExists(FilP) then
         begin
-            ImageHelp.Picture.LoadFromFile(P);
-            LabelImageHint.Caption := 'Replace image: images\' + BmpName;
+            ImageHelp.Picture.LoadFromFile(FilP);
+            LabelImageHint.Caption := 'Replace image: images\' + FilBmpName;
         end
         else
-            LabelImageHint.Caption := 'No image. Put ' + BmpName + ' in images\ next to the scripts.';
+            LabelImageHint.Caption := 'No image. Put ' + FilBmpName + ' in images\ next to the scripts.';
     except
         try
             LabelImageHint.Caption := 'Image not loaded.';
@@ -338,22 +339,22 @@ end;
 
 function CountSelectedAtPoint(Xp, Yp : TCoord; IgnoreAddr : Integer) : Integer;
 var
-    i : Integer;
-    Prim : IPCB_Primitive;
+    Fili : Integer;
+    FilPrim : IPCB_Primitive;
 begin
     Result := 0;
-    for i := 0 to Board.SelectecObjectCount - 1 do
+    for Fili := 0 to FilBoard.SelectecObjectCount - 1 do
     begin
-        Prim := Board.SelectecObject(i);
-        if Prim.I_ObjectAddress = IgnoreAddr then Continue;
-        if Prim.ObjectId = eTrackObject then
+        FilPrim := FilBoard.SelectecObject(Fili);
+        if FilPrim.I_ObjectAddress = IgnoreAddr then Continue;
+        if FilPrim.ObjectId = eTrackObject then
         begin
-            if SamePoint(Prim.X1, Prim.Y1, Xp, Yp) or SamePoint(Prim.X2, Prim.Y2, Xp, Yp) then
+            if SamePoint(FilPrim.X1, FilPrim.Y1, Xp, Yp) or SamePoint(FilPrim.X2, FilPrim.Y2, Xp, Yp) then
                 Inc(Result);
         end
-        else if Prim.ObjectId = eArcObject then
+        else if FilPrim.ObjectId = eArcObject then
         begin
-            if SamePoint(Prim.StartX, Prim.StartY, Xp, Yp) or SamePoint(Prim.EndX, Prim.EndY, Xp, Yp) then
+            if SamePoint(FilPrim.StartX, FilPrim.StartY, Xp, Yp) or SamePoint(FilPrim.EndX, FilPrim.EndY, Xp, Yp) then
                 Inc(Result);
         end;
     end;
@@ -361,21 +362,21 @@ end;
 
 function TrackAngleFromEnd(ATrack : IPCB_Track; CommonEnd : Integer) : Double;
 var
-    dx, dy : Double;
+    Fildx, Fildy : Double;
 begin
     { Угол направления ОТ общей точки вдоль трека. }
     if CommonEnd = 1 then
     begin
-        dx := ATrack.X2 - ATrack.X1;
-        dy := ATrack.Y2 - ATrack.Y1;
+        Fildx := ATrack.X2 - ATrack.X1;
+        Fildy := ATrack.Y2 - ATrack.Y1;
     end
     else
     begin
-        dx := ATrack.X1 - ATrack.X2;
-        dy := ATrack.Y1 - ATrack.Y2;
+        Fildx := ATrack.X1 - ATrack.X2;
+        Fildy := ATrack.Y1 - ATrack.Y2;
     end;
-    Result := ArcTan2(dy, dx);
-    if Result < 0 then Result := Result + 2 * PiValue;
+    Result := ArcTan2(Fildy, Fildx);
+    if Result < 0 then Result := Result + 2 * FilPiValue;
 end;
 
 function CommonEndOfTrack(ATrack : IPCB_Track; Xp, Yp : TCoord) : Integer;
@@ -408,26 +409,26 @@ end;
 
 procedure RemoveArcUndoSafe(AnArc : IPCB_Arc);
 begin
-    Board.BeginModify;
-    Board.RemovePCBObject(AnArc);
-    Board.DispatchMessage(Board.I_ObjectAddress, c_BroadCast, PCBM_BoardRegisteration, AnArc.I_ObjectAddress);
-    Board.EndModify;
+    FilBoard.BeginModify;
+    FilBoard.RemovePCBObject(AnArc);
+    FilBoard.DispatchMessage(FilBoard.I_ObjectAddress, c_BroadCast, PCBM_BoardRegisteration, AnArc.I_ObjectAddress);
+    FilBoard.EndModify;
 end;
 
-function IntersectTracks(T1, T2 : IPCB_Track; var Xp, Yp : TCoord) : Boolean;
+function IntersectTracks(FilT1, FilT2 : IPCB_Track; var Xp, Yp : TCoord) : Boolean;
 var
-    X1, Y1, X2, Y2, X3, Y3, X4, Y4 : Double;
+    FilX1, FilY1, FilX2, FilY2, X3, Y3, X4, Y4 : Double;
     Den : Double;
 begin
     Result := False;
-    X1 := CoordToMMs(T1.X1); Y1 := CoordToMMs(T1.Y1);
-    X2 := CoordToMMs(T1.X2); Y2 := CoordToMMs(T1.Y2);
-    X3 := CoordToMMs(T2.X1); Y3 := CoordToMMs(T2.Y1);
-    X4 := CoordToMMs(T2.X2); Y4 := CoordToMMs(T2.Y2);
-    Den := (X1 - X2) * (Y3 - Y4) - (Y1 - Y2) * (X3 - X4);
+    FilX1 := CoordToMMs(FilT1.X1); FilY1 := CoordToMMs(FilT1.Y1);
+    FilX2 := CoordToMMs(FilT1.X2); FilY2 := CoordToMMs(FilT1.Y2);
+    X3 := CoordToMMs(FilT2.X1); Y3 := CoordToMMs(FilT2.Y1);
+    X4 := CoordToMMs(FilT2.X2); Y4 := CoordToMMs(FilT2.Y2);
+    Den := (FilX1 - FilX2) * (Y3 - Y4) - (FilY1 - FilY2) * (X3 - X4);
     if Abs(Den) < 1e-12 then Exit;
-    Xp := MMsToCoord((((X1 * Y2 - Y1 * X2) * (X3 - X4) - (X1 - X2) * (X3 * Y4 - Y3 * X4)) / Den));
-    Yp := MMsToCoord((((X1 * Y2 - Y1 * X2) * (Y3 - Y4) - (Y1 - Y2) * (X3 * Y4 - Y3 * X4)) / Den));
+    Xp := MMsToCoord((((FilX1 * FilY2 - FilY1 * FilX2) * (X3 - X4) - (FilX1 - FilX2) * (X3 * Y4 - Y3 * X4)) / Den));
+    Yp := MMsToCoord((((FilX1 * FilY2 - FilY1 * FilX2) * (Y3 - Y4) - (FilY1 - FilY2) * (X3 * Y4 - Y3 * X4)) / Den));
     Result := True;
 end;
 
@@ -437,7 +438,7 @@ var
     Angle1, Angle2   : Double;
     StartAngle, StopAngle, HalfAngle : Double;
     RemovedLength    : Double;
-    X1, Y1, X2, Y2, Xc, Yc : Double;
+    FilX1, FilY1, FilX2, FilY2, Xc, Yc : Double;
     A1, A2           : Double;
     AnArc            : IPCB_Arc;
     Xp, Yp           : TCoord;
@@ -481,33 +482,33 @@ begin
     Angle2 := TrackAngleFromEnd(SecondTrack, Common2);
 
     if Abs(Angle1 - Angle2) < 1e-6 then Exit;
-    if Abs(Abs(Angle1 - Angle2) - PiValue) < 1e-6 then Exit;
+    if Abs(Abs(Angle1 - Angle2) - FilPiValue) < 1e-6 then Exit;
 
-    if (Angle1 > Angle2) and (Angle1 - Angle2 < PiValue) then
+    if (Angle1 > Angle2) and (Angle1 - Angle2 < FilPiValue) then
     begin
-        StartAngle := PiValue / 2 + Angle1;
-        StopAngle  := 3 * PiValue / 2 + Angle2;
+        StartAngle := FilPiValue / 2 + Angle1;
+        StopAngle  := 3 * FilPiValue / 2 + Angle2;
     end
-    else if (Angle1 > Angle2) and (Angle1 - Angle2 > PiValue) then
+    else if (Angle1 > Angle2) and (Angle1 - Angle2 > FilPiValue) then
     begin
-        StartAngle := PiValue / 2 + Angle2;
-        StopAngle  := Angle1 - PiValue / 2;
+        StartAngle := FilPiValue / 2 + Angle2;
+        StopAngle  := Angle1 - FilPiValue / 2;
     end
-    else if (Angle1 < Angle2) and (Angle2 - Angle1 < PiValue) then
+    else if (Angle1 < Angle2) and (Angle2 - Angle1 < FilPiValue) then
     begin
-        StartAngle := PiValue / 2 + Angle2;
-        StopAngle  := 3 * PiValue / 2 + Angle1;
+        StartAngle := FilPiValue / 2 + Angle2;
+        StopAngle  := 3 * FilPiValue / 2 + Angle1;
     end
     else
     begin
-        StartAngle := PiValue / 2 + Angle1;
-        StopAngle  := Angle2 - PiValue / 2;
+        StartAngle := FilPiValue / 2 + Angle1;
+        StopAngle  := Angle2 - FilPiValue / 2;
     end;
 
     HalfAngle := (StopAngle - StartAngle) / 2;
     if Abs(HalfAngle) < 1e-6 then Exit;
 
-    if (Abs(HalfAngle - PiValue / 2) < 1e-6) or (Abs(HalfAngle - 3 * PiValue / 2) < 1e-6) then
+    if (Abs(HalfAngle - FilPiValue / 2) < 1e-6) or (Abs(HalfAngle - 3 * FilPiValue / 2) < 1e-6) then
         RemovedLength := RadiusCoord
     else
         RemovedLength := RadiusCoord * Tan(HalfAngle);
@@ -527,15 +528,15 @@ begin
     begin
         FirstTrack.X1 := FirstTrack.X1 + Round(RemovedLength * Cos(Angle1));
         FirstTrack.Y1 := FirstTrack.Y1 + Round(RemovedLength * Sin(Angle1));
-        X1 := FirstTrack.X1;
-        Y1 := FirstTrack.Y1;
+        FilX1 := FirstTrack.X1;
+        FilY1 := FirstTrack.Y1;
     end
     else
     begin
         FirstTrack.X2 := FirstTrack.X2 + Round(RemovedLength * Cos(Angle1));
         FirstTrack.Y2 := FirstTrack.Y2 + Round(RemovedLength * Sin(Angle1));
-        X1 := FirstTrack.X2;
-        Y1 := FirstTrack.Y2;
+        FilX1 := FirstTrack.X2;
+        FilY1 := FirstTrack.Y2;
     end;
     FirstTrack.EndModify;
     FirstTrack.GraphicallyInvalidate;
@@ -545,51 +546,51 @@ begin
     begin
         SecondTrack.X1 := SecondTrack.X1 + Round(RemovedLength * Cos(Angle2));
         SecondTrack.Y1 := SecondTrack.Y1 + Round(RemovedLength * Sin(Angle2));
-        X2 := SecondTrack.X1;
-        Y2 := SecondTrack.Y1;
+        FilX2 := SecondTrack.X1;
+        FilY2 := SecondTrack.Y1;
     end
     else
     begin
         SecondTrack.X2 := SecondTrack.X2 + Round(RemovedLength * Cos(Angle2));
         SecondTrack.Y2 := SecondTrack.Y2 + Round(RemovedLength * Sin(Angle2));
-        X2 := SecondTrack.X2;
-        Y2 := SecondTrack.Y2;
+        FilX2 := SecondTrack.X2;
+        FilY2 := SecondTrack.Y2;
     end;
     SecondTrack.EndModify;
     SecondTrack.GraphicallyInvalidate;
 
-    if (Abs(Angle1) < 1e-6) or (Abs(Angle1 - PiValue) < 1e-6) then
-        Xc := X1
-    else if (Abs(Angle2) < 1e-6) or (Abs(Angle2 - PiValue) < 1e-6) then
-        Xc := X2
+    if (Abs(Angle1) < 1e-6) or (Abs(Angle1 - FilPiValue) < 1e-6) then
+        Xc := FilX1
+    else if (Abs(Angle2) < 1e-6) or (Abs(Angle2 - FilPiValue) < 1e-6) then
+        Xc := FilX2
     else
     begin
-        A1 := Tan(PiValue / 2 + Angle1);
-        A2 := Tan(PiValue / 2 + Angle2);
+        A1 := Tan(FilPiValue / 2 + Angle1);
+        A2 := Tan(FilPiValue / 2 + Angle2);
         if Abs(A1 - A2) < 1e-12 then Exit;
-        Xc := (Y2 - Y1 + A1 * X1 - A2 * X2) / (A1 - A2);
+        Xc := (FilY2 - FilY1 + A1 * FilX1 - A2 * FilX2) / (A1 - A2);
     end;
 
-    if (Abs(Angle1 - PiValue / 2) < 1e-6) or (Abs(Angle1 - 3 * PiValue / 2) < 1e-6) then
-        Yc := Y1
-    else if (Abs(Angle2 - PiValue / 2) < 1e-6) or (Abs(Angle2 - 3 * PiValue / 2) < 1e-6) then
-        Yc := Y2
-    else if (Abs(Angle1) > 1e-6) and (Abs(Angle1 - PiValue) > 1e-6) then
-        Yc := Tan(PiValue / 2 + Angle1) * (Xc - X1) + Y1
+    if (Abs(Angle1 - FilPiValue / 2) < 1e-6) or (Abs(Angle1 - 3 * FilPiValue / 2) < 1e-6) then
+        Yc := FilY1
+    else if (Abs(Angle2 - FilPiValue / 2) < 1e-6) or (Abs(Angle2 - 3 * FilPiValue / 2) < 1e-6) then
+        Yc := FilY2
+    else if (Abs(Angle1) > 1e-6) and (Abs(Angle1 - FilPiValue) > 1e-6) then
+        Yc := Tan(FilPiValue / 2 + Angle1) * (Xc - FilX1) + FilY1
     else
-        Yc := Tan(PiValue / 2 + Angle2) * (Xc - X2) + Y2;
+        Yc := Tan(FilPiValue / 2 + Angle2) * (Xc - FilX2) + FilY2;
 
     AnArc := PCBServer.PCBObjectFactory(eArcObject, eNoDimension, eCreate_Default);
     AnArc.XCenter := Round(Xc);
     AnArc.YCenter := Round(Yc);
-    AnArc.Radius := Round(Sqrt(Sqr(X1 - Xc) + Sqr(Y1 - Yc)));
+    AnArc.Radius := Round(Sqrt(Sqr(FilX1 - Xc) + Sqr(FilY1 - Yc)));
     AnArc.LineWidth := FirstTrack.Width;
-    AnArc.StartAngle := StartAngle * 180 / PiValue;
-    AnArc.EndAngle := StopAngle * 180 / PiValue;
+    AnArc.StartAngle := StartAngle * 180 / FilPiValue;
+    AnArc.EndAngle := StopAngle * 180 / FilPiValue;
     AnArc.Layer := FirstTrack.Layer;
     if FirstTrack.InNet then AnArc.Net := FirstTrack.Net;
-    Board.AddPCBObject(AnArc);
-    Board.DispatchMessage(Board.I_ObjectAddress, c_BroadCast, PCBM_BoardRegisteration, AnArc.I_ObjectAddress);
+    FilBoard.AddPCBObject(AnArc);
+    FilBoard.DispatchMessage(FilBoard.I_ObjectAddress, c_BroadCast, PCBM_BoardRegisteration, AnArc.I_ObjectAddress);
     AnArc.Selected := True;
     Inc(CreatedCount);
     Result := True;
@@ -597,30 +598,30 @@ end;
 
 procedure EnsureReplaceAsked;
 var
-    Ans : Boolean;
+    FilAns : Boolean;
 begin
     if AskedReplace then Exit;
     AskedReplace := True;
-    Ans := ConfirmNoYes('На выбранном треке уже есть скругления. Переделать их?');
-    ReplaceFillets := Ans;
+    FilAns := ConfirmNoYes('На выбранном треке уже есть скругления. Переделать их?');
+    ReplaceFillets := FilAns;
 end;
 
-procedure ProcessTrackPair(T1, T2 : IPCB_Track);
+procedure ProcessTrackPair(FilT1, FilT2 : IPCB_Track);
 begin
-    if T1.I_ObjectAddress = T2.I_ObjectAddress then Exit;
-    if T1.Layer <> T2.Layer then Exit;
-    CreateFilletBetweenTracks(T1, T2);
+    if FilT1.I_ObjectAddress = FilT2.I_ObjectAddress then Exit;
+    if FilT1.Layer <> FilT2.Layer then Exit;
+    CreateFilletBetweenTracks(FilT1, FilT2);
 end;
 
 procedure ProcessExistingFillet(AnArc : IPCB_Arc);
 var
-    T1, T2 : IPCB_Primitive;
+    FilT1, FilT2 : IPCB_Primitive;
     OtherEnd : Integer;
 begin
-    T1 := FindConnectedAtEnd(AnArc, 1, True);
-    T2 := FindConnectedAtEnd(AnArc, 2, True);
-    if (T1 = nil) or (T2 = nil) then Exit;
-    if (T1.ObjectId <> eTrackObject) or (T2.ObjectId <> eTrackObject) then Exit;
+    FilT1 := FindConnectedAtEnd(AnArc, 1, True);
+    FilT2 := FindConnectedAtEnd(AnArc, 2, True);
+    if (FilT1 = nil) or (FilT2 = nil) then Exit;
+    if (FilT1.ObjectId <> eTrackObject) or (FilT2.ObjectId <> eTrackObject) then Exit;
 
     EnsureReplaceAsked;
     if not ReplaceFillets then
@@ -631,19 +632,19 @@ begin
 
     { Вернуть концы треков к пересечению и поставить новую дугу. }
     RemoveArcUndoSafe(AnArc);
-    CreateFilletBetweenTracks(T1, T2);
+    CreateFilletBetweenTracks(FilT1, FilT2);
 end;
 
 procedure DoFilletWork;
 var
-    i : Integer;
-    Prim, Other : IPCB_Primitive;
-    T1, T2 : IPCB_Track;
+    Fili : Integer;
+    FilPrim, Other : IPCB_Primitive;
+    FilT1, FilT2 : IPCB_Track;
     Xp, Yp : TCoord;
     EndIdx : Integer;
     ConnCount : Integer;
     PairDone : TStringList;
-    Key : String;
+    FilKey : String;
     Addr1, Addr2 : Integer;
 begin
     if PCBServer = nil then
@@ -651,24 +652,24 @@ begin
         ShowError('PCB-server is not available.');
         Exit;
     end;
-    Board := PCBServer.GetCurrentPCBBoard;
-    if Board = nil then
+    FilBoard := PCBServer.GetCurrentPCBBoard;
+    if FilBoard = nil then
     begin
         ShowError('Open a PCB document.');
         Exit;
     end;
 
-    i := 0;
-    while i < Board.SelectecObjectCount do
+    Fili := 0;
+    while Fili < FilBoard.SelectecObjectCount do
     begin
-        Prim := Board.SelectecObject(i);
-        if (Prim.ObjectId = eTrackObject) or (Prim.ObjectId = eArcObject) then
-            Inc(i)
+        FilPrim := FilBoard.SelectecObject(Fili);
+        if (FilPrim.ObjectId = eTrackObject) or (FilPrim.ObjectId = eArcObject) then
+            Inc(Fili)
         else
-            Prim.SetState_Selected(False);
+            FilPrim.SetState_Selected(False);
     end;
     ExpandConnectedPath;
-    if Board.SelectecObjectCount = 0 then
+    if FilBoard.SelectecObjectCount = 0 then
     begin
         ShowWarning('Select one track segment or a path (a square of 4 segments gets 4 fillets).');
         Exit;
@@ -686,40 +687,40 @@ begin
     PCBServer.PreProcess;
     try
         { Сначала существующие выделенные дуги-скругления. }
-        i := 0;
-        while i < Board.SelectecObjectCount do
+        Fili := 0;
+        while Fili < FilBoard.SelectecObjectCount do
         begin
-            Prim := Board.SelectecObject(i);
-            if Prim.ObjectId = eArcObject then
+            FilPrim := FilBoard.SelectecObject(Fili);
+            if FilPrim.ObjectId = eArcObject then
             begin
-                ProcessExistingFillet(Prim);
+                ProcessExistingFillet(FilPrim);
                 { После удаления дуги индексы выделения сдвигаются — не увеличиваем i. }
             end;
-            Inc(i);
+            Inc(Fili);
         end;
 
         { Затем пары треков с общей вершиной (ровно 2 выделенных сегмента). }
-        for i := 0 to Board.SelectecObjectCount - 1 do
+        for Fili := 0 to FilBoard.SelectecObjectCount - 1 do
         begin
-            Prim := Board.SelectecObject(i);
-            if Prim.ObjectId <> eTrackObject then Continue;
-            T1 := Prim;
+            FilPrim := FilBoard.SelectecObject(Fili);
+            if FilPrim.ObjectId <> eTrackObject then Continue;
+            FilT1 := FilPrim;
             for EndIdx := 1 to 2 do
             begin
                 if EndIdx = 1 then
                 begin
-                    Xp := T1.X1; Yp := T1.Y1;
+                    Xp := FilT1.X1; Yp := FilT1.Y1;
                 end
                 else
                 begin
-                    Xp := T1.X2; Yp := T1.Y2;
+                    Xp := FilT1.X2; Yp := FilT1.Y2;
                 end;
 
                 ConnCount := CountSelectedAtPoint(Xp, Yp, 0);
                 { Сам трек + ровно один сосед = 2. Больше — T-стык, пропускаем. }
                 if ConnCount <> 2 then Continue;
 
-                Other := FindConnectedAtEnd(T1, EndIdx, True);
+                Other := FindConnectedAtEnd(FilT1, EndIdx, True);
                 if Other = nil then Continue;
                 if Other.ObjectId = eArcObject then
                 begin
@@ -727,18 +728,18 @@ begin
                     Continue;
                 end;
                 if Other.ObjectId <> eTrackObject then Continue;
-                T2 := Other;
+                FilT2 := Other;
 
-                Addr1 := T1.I_ObjectAddress;
-                Addr2 := T2.I_ObjectAddress;
+                Addr1 := FilT1.I_ObjectAddress;
+                Addr2 := FilT2.I_ObjectAddress;
                 if Addr1 < Addr2 then
-                    Key := IntToStr(Addr1) + '-' + IntToStr(Addr2)
+                    FilKey := IntToStr(Addr1) + '-' + IntToStr(Addr2)
                 else
-                    Key := IntToStr(Addr2) + '-' + IntToStr(Addr1);
-                if PairDone.IndexOf(Key) >= 0 then Continue;
-                PairDone.Add(Key);
+                    FilKey := IntToStr(Addr2) + '-' + IntToStr(Addr1);
+                if PairDone.IndexOf(FilKey) >= 0 then Continue;
+                PairDone.Add(FilKey);
 
-                ProcessTrackPair(T1, T2);
+                ProcessTrackPair(FilT1, FilT2);
             end;
         end;
     finally
@@ -757,7 +758,7 @@ begin
                  'Скругление углов');
 end;
 
-procedure TFormFillet.ButtonOKClick(Sender: TObject);
+procedure TFormFillet.ButtonOKClick(FilSender: TObject);
 var
     MM : Double;
 begin
@@ -782,26 +783,26 @@ begin
     DoFilletWork;
 end;
 
-procedure TFormFillet.ButtonCancelClick(Sender: TObject);
+procedure TFormFillet.ButtonCancelClick(FilSender: TObject);
 begin
     FormFillet.Close;
 end;
 
-procedure TFormFillet.FormFilletShow(Sender: TObject);
+procedure TFormFillet.FormFilletShow(FilSender: TObject);
 begin
     try
-        CS_TryLoadHelpImage('Fillet.bmp', 'Fillet.png');
+        FilCS_TryLoadHelpImage('Fillet.bmp', 'Fillet.png');
     except
     end;
     EditRadius.Text := FloatToStr(cDefaultRadiusMM);
 end;
 
-procedure Start;
+procedure StartTrackCornerFillet;
 begin
     FormFillet.ShowModal;
 end;
 
-procedure _Start;
+procedure _StartTrackCornerFillet;
 begin
-    Start;
+    StartTrackCornerFillet;
 end;
