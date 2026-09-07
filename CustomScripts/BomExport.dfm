@@ -21,9 +21,6 @@ object FormBom: TFormBom
     Top = 8
     Width = 320
     Height = 214
-    Center = True
-    Proportional = True
-    Stretch = True
   end
   object LabelImageHint: TLabel
     Left = 8
@@ -63,7 +60,7 @@ object FormBom: TFormBom
     Width = 380
     Height = 120
     AutoSize = False
-    Caption = #1057#1090#1086#1083#1073#1094#1099' '#1090#1086#1095#1085#1086': Comment, Designator, Description, Quantity, Value. '#1042#1089#1077' '#1082#1086#1084#1087#1086#1085#1077#1085#1090#1099' '#1074#1082#1083#1102#1095#1072#1102#1090#1089#1103' (DNP/графика '#1090#1086#1078#1077'). '#1043#1088#1091#1087#1087#1080#1088#1086#1074#1082#1072' Comment+Value+Description. '#1060#1086#1088#1084#1072#1090' SpreadsheetML, '#1086#1090#1082#1088#1099#1074#1072#1077#1090#1089#1103' '#1074' Excel.'
+    Caption = #1057#1090#1086#1083#1073#1094#1099' '#1090#1086#1095#1085#1086': Comment, Designator, Description, Quantity, Value. '#1042#1089#1077' '#1082#1086#1084#1087#1086#1085#1077#1085#1090#1099' '#1074#1082#1083#1102#1095#1072#1102#1090#1089#1103' (DNP/#1075#1088#1072#1092#1080#1082#1072 '#1090#1086#1078#1077'). '#1043#1088#1091#1087#1087#1080#1088#1086#1074#1082#1072' Comment+Value+Description. '#1060#1086#1088#1084#1072#1090' SpreadsheetML, '#1086#1090#1082#1088#1099#1074#1072#1077#1090#1089#1103' '#1074' Excel.'
     WordWrap = True
   end
   object ButtonOK: TButton

@@ -21,9 +21,6 @@ object FormAnnot: TFormAnnot
     Top = 8
     Width = 320
     Height = 214
-    Center = True
-    Proportional = True
-    Stretch = True
   end
   object LabelImageHint: TLabel
     Left = 8

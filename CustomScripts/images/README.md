@@ -1,14 +1,18 @@
-# Картинки диалогов
+# Dialog pictures
 
-Замените PNG своим рисунком (то же имя файла). Диалог загружает картинку при открытии.
+Put BMP (preferred in Altium VCL) or PNG next to the scripts:
 
-| Файл | Скрипт |
+`CustomScripts/images/<name>.bmp`
+
+Replace the file with your own drawing. Missing file = caption hint, no crash.
+
+| File | Script |
 | --- | --- |
-| Fillet.png | TrackCornerFillet |
-| DxfExport.png | DxfOutlineExport |
-| Panelizer.png | Panelizer |
-| SchAnnotate.png | SchDesignatorReset |
-| BomExport.png | BomExport |
-| GroundPolygons.png | GroundPolygons |
-| PcbWizard.png | PcbWizard |
-| PlaceDesignators.png | PlaceDesignators |
+| Fillet.bmp | TrackCornerFillet |
+| DxfExport.bmp | DxfOutlineExport |
+| Panelizer.bmp | Panelizer |
+| SchAnnotate.bmp | SchDesignatorReset |
+| BomExport.bmp | BomExport |
+| GroundPolygons.bmp | GroundPolygons |
+| PcbWizard.bmp | PcbWizard |
+| PlaceDesignators.bmp | PlaceDesignators |

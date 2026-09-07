@@ -1,4 +1,4 @@
-{..............................................................................}
+﻿{..............................................................................}
 { DxfOutlineExport.pas                                                          }
 { Экспорт слоёв PCB в ASCII DXF R12: контуры меди LINE/ARC, шелкография,       }
 { отверстия CIRCLE на отдельном слое HOLES. Без ExportDXF Altium.              }
@@ -22,7 +22,6 @@ procedure TFormDxf.ButtonCancelClick(Sender: TObject); forward;
 procedure TFormDxf.ButtonAllClick(Sender: TObject); forward;
 procedure TFormDxf.ButtonNoneClick(Sender: TObject); forward;
 procedure TFormDxf.ButtonCopperClick(Sender: TObject); forward;
-procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String); forward;
 
 function MMX(X : TCoord) : String;
 begin
@@ -618,50 +617,96 @@ begin
     DxfPair(0, 'EOF');
 end;
 
-procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String);
+{ ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
+{ Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
+
+function CS_ScriptFolder : String;
 var
-    Cands : TStringList;
-    i : Integer;
-    P : String;
-    WS : IWorkspace;
+    WS  : IWorkspace;
     Prj : IProject;
+    i   : Integer;
+    P   : String;
 begin
-    if Img = nil then Exit;
-    Cands := TStringList.Create;
+    Result := '';
     try
-        try Cands.Add(ExtractFilePath(ParamStr(0)) + 'images\' + FileName); except end;
-        try
-            WS := GetWorkspace;
-            if WS <> nil then
-                for i := 0 to WS.DM_ProjectCount - 1 do
-                begin
-                    Prj := WS.DM_Projects(i);
-                    if Prj <> nil then
-                        Cands.Add(ExtractFilePath(Prj.DM_ProjectFullPath) + 'images\' + FileName);
-                end;
-        except
-        end;
-        Cands.Add('images\' + FileName);
-        Cands.Add('CustomScripts\images\' + FileName);
-        for i := 0 to Cands.Count - 1 do
+        WS := GetWorkspace;
+        if WS = nil then Exit;
+        Prj := WS.DM_FocusedProject;
+        if Prj <> nil then
         begin
-            P := Cands[i];
-            if (P <> '') and FileExists(P) then
+            P := ExtractFilePath(Prj.DM_ProjectFullPath);
+            if P <> '' then
             begin
-                try
-                    Img.Picture.LoadFromFile(P);
-                    if Hint <> nil then Hint.Caption := 'Замените картинку: images\' + FileName;
+                Result := P;
+                Exit;
+            end;
+        end;
+        for i := 0 to WS.DM_ProjectCount - 1 do
+        begin
+            Prj := WS.DM_Projects(i);
+            if Prj <> nil then
+            begin
+                P := Prj.DM_ProjectFullPath;
+                if Pos('CustomScripts', P) > 0 then
+                begin
+                    Result := ExtractFilePath(P);
                     Exit;
-                except
                 end;
             end;
         end;
-        if Hint <> nil then
-            Hint.Caption := 'Нет картинки. Положите ' + FileName + ' в images\ рядом со скриптами.';
-    finally
-        Cands.Free;
+    except
+        Result := '';
     end;
 end;
+
+function CS_FindImageFile(const FileName : String) : String;
+var
+    Dir, P : String;
+begin
+    Result := '';
+    Dir := CS_ScriptFolder;
+    if Dir <> '' then
+    begin
+        P := Dir + 'images\' + FileName;
+        if FileExists(P) then
+        begin
+            Result := P;
+            Exit;
+        end;
+        P := Dir + FileName;
+        if FileExists(P) then
+        begin
+            Result := P;
+            Exit;
+        end;
+    end;
+    P := 'images\' + FileName;
+    if FileExists(P) then Result := P;
+end;
+
+procedure CS_TryLoadHelpImage(const BmpName : String; const PngName : String);
+var
+    P : String;
+begin
+    try
+        P := CS_FindImageFile(BmpName);
+        if P = '' then
+            P := CS_FindImageFile(PngName);
+        if (P <> '') and FileExists(P) then
+        begin
+            ImageHelp.Picture.LoadFromFile(P);
+            LabelImageHint.Caption := 'Replace image: images\' + BmpName;
+        end
+        else
+            LabelImageHint.Caption := 'No image. Put ' + BmpName + ' in images\ next to the scripts.';
+    except
+        try
+            LabelImageHint.Caption := 'Image not loaded.';
+        except
+        end;
+    end;
+end;
+
 
 procedure DoExport(FileName : String);
 var
@@ -714,8 +759,20 @@ var
     i : Integer;
     ALayer : TLayer;
 begin
-    LoadHelpImage(ImageHelp, LabelImageHint, 'DxfExport.png');
+    try
+        CS_TryLoadHelpImage('DxfExport.bmp', 'DxfExport.png');
+    except
+    end;
     CheckListLayers.Items.Clear;
+    Board := nil;
+    try
+        if PCBServer <> nil then
+            Board := PCBServer.GetCurrentPCBBoard;
+    except
+        Board := nil;
+    end;
+    if (Board = nil) or (LayerItems = nil) then Exit;
+    CollectBoardLayers;
     for i := 0 to LayerItems.Count - 1 do
     begin
         CheckListLayers.Items.Add(LayerItems[i]);
@@ -767,6 +824,11 @@ var
     SaveDlg : TSaveDialog;
     i, n : Integer;
 begin
+    if Board = nil then
+    begin
+        ShowError('Open a PCB document.');
+        Exit;
+    end;
     n := 0;
     for i := 0 to CheckListLayers.Items.Count - 1 do
         if CheckListLayers.Checked[i] then Inc(n);
@@ -799,20 +861,15 @@ end;
 
 procedure Start;
 begin
-    Board := PCBServer.GetCurrentPCBBoard;
-    if Board = nil then
-    begin
-        ShowError('Нет открытого PCB-документа.');
-        Exit;
-    end;
     LayerItems := TStringList.Create;
     LayerIds := TStringList.Create;
     try
-        CollectBoardLayers;
         FormDxf.ShowModal;
     finally
         LayerItems.Free;
         LayerIds.Free;
+        LayerItems := nil;
+        LayerIds := nil;
     end;
 end;
 

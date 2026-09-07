@@ -2,79 +2,28 @@
 Version=1.0
 
 [Document1]
-DocumentPath=CommonUtils.pas
-
-[Document2]
 DocumentPath=TrackCornerFillet.pas
 
-[Document3]
-DocumentPath=TrackCornerFillet.dfm
-
-[Document4]
+[Document2]
 DocumentPath=DxfOutlineExport.pas
 
-[Document5]
-DocumentPath=DxfOutlineExport.dfm
-
-[Document6]
+[Document3]
 DocumentPath=Panelizer.pas
 
-[Document7]
-DocumentPath=Panelizer.dfm
-
-[Document8]
+[Document4]
 DocumentPath=SchDesignatorReset.pas
 
-[Document9]
-DocumentPath=SchDesignatorReset.dfm
-
-[Document10]
+[Document5]
 DocumentPath=BomExport.pas
 
-[Document11]
-DocumentPath=BomExport.dfm
-
-[Document12]
+[Document6]
 DocumentPath=GroundPolygons.pas
 
-[Document13]
-DocumentPath=GroundPolygons.dfm
-
-[Document14]
+[Document7]
 DocumentPath=PcbWizard.pas
 
-[Document15]
-DocumentPath=PcbWizard.dfm
-
-[Document16]
+[Document8]
 DocumentPath=PlaceDesignators.pas
-
-[Document17]
-DocumentPath=PlaceDesignators.dfm
-
-[Document18]
-DocumentPath=images/Fillet.png
-
-[Document19]
-DocumentPath=images/DxfExport.png
-
-[Document20]
-DocumentPath=images/Panelizer.png
-
-[Document21]
-DocumentPath=images/SchAnnotate.png
-
-[Document22]
-DocumentPath=images/BomExport.png
-
-[Document23]
-DocumentPath=images/GroundPolygons.png
-
-[Document24]
-DocumentPath=images/PcbWizard.png
-
-[Document25]
-DocumentPath=images/PlaceDesignators.png
 
 [Generic_ScriptingSystem]
 StartProcName=TrackCornerFillet.pas>Start

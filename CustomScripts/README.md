@@ -8,31 +8,39 @@
 
 1. В Altium: **DXP / File → Run Script…** либо **File → Open Project** и откройте `CustomScripts.PrjScr`.
 2. Можно добавить проект в **Installation → Scripts** (Preferences → Scripting System → Project Scripts), чтобы скрипты были в меню **DXP → Run Script**.
-3. Запускайте процедуру **`Start`** нужного модуля (она же `_Start`).
-4. Формы (`.dfm`) должны лежать рядом с соответствующими `.pas`.
+3. Запускайте процедуру **`Start`** нужного модуля (она же `_Start`). Не запускайте случайные внутренние процедуры.
+4. Формы (`.dfm`) должны лежать рядом с соответствующими `.pas` (Altium подхватывает их по имени, в `.PrjScr` формы не перечисляются).
 
-Каждый скрипт самодостаточен: его можно запускать и без общего проекта, указав файл `.pas`.
+Каждый скрипт самодостаточен: его можно запускать и без общего проекта, указав файл `.pas`. Диалог открывается даже без открытого PCB/схемы; работа с платой — только по OK.
 
 Интерфейс диалогов и сообщения — на русском. Идентификаторы в коде — на английском.
 
 ## Картинки в диалогах
 
-У **каждого** скрипта всплывающее окно (`TForm` / `.dfm`): слева иллюстрация (`TImage`), справа параметры и OK/Отмена.
+У **каждого** скрипта всплывающее окно: слева `TImage`, справа параметры и OK/Отмена.
 
-PNG лежат в [`images/`](images/):
+Положите BMP (предпочтительно) или PNG в [`images/`](images/) рядом с `CustomScripts.PrjScr`:
 
 | Скрипт | Файл |
 | --- | --- |
-| TrackCornerFillet | `images/Fillet.png` |
-| DxfOutlineExport | `images/DxfExport.png` |
-| Panelizer | `images/Panelizer.png` |
-| SchDesignatorReset | `images/SchAnnotate.png` |
-| BomExport | `images/BomExport.png` |
-| GroundPolygons | `images/GroundPolygons.png` |
-| PcbWizard | `images/PcbWizard.png` |
-| PlaceDesignators | `images/PlaceDesignators.png` |
+| TrackCornerFillet | `images/Fillet.bmp` |
+| DxfOutlineExport | `images/DxfExport.bmp` |
+| Panelizer | `images/Panelizer.bmp` |
+| SchDesignatorReset | `images/SchAnnotate.bmp` |
+| BomExport | `images/BomExport.bmp` |
+| GroundPolygons | `images/GroundPolygons.bmp` |
+| PcbWizard | `images/PcbWizard.bmp` |
+| PlaceDesignators | `images/PlaceDesignators.bmp` |
 
-Чтобы подставить свою картинку, **замените соответствующий PNG** (тот же путь и имя). При отсутствии файла в диалоге остаётся подсказка «положите PNG в `images\`». Загрузка: `TImage.Picture.LoadFromFile` из папки скриптов / проекта (`ExtractFilePath(ParamStr(0))` и путь PrjScr).
+Замените файл своим рисунком. Если файла нет, диалог **не падает** — показывается подсказка. Путь берётся из открытого `CustomScripts.PrjScr` (`GetWorkspace`), **не** из `ParamStr(0)` (в Altium это не EXE и даёт AV).
+
+## Устранение сбоя «Разрушительный сбой»
+
+- Сохраняйте `.pas` как **UTF-8 с BOM** (как сейчас в репозитории). UTF-8 без BOM с кириллицей ломает старый DelphiScript.
+- Не вызывайте `ParamStr` — его нет в скриптах Altium.
+- Запускайте `Start` / `_Start`, не другие процедуры.
+- Картинки: `images\*.bmp` рядом с PrjScr; отсутствие файла безопасно.
+- В `.PrjScr` только `.pas` (как в примере Fillet), без PNG и без `.dfm` отдельными документами.
 
 ## Скрипты
 

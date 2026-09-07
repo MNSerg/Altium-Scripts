@@ -1,4 +1,4 @@
-{..............................................................................}
+﻿{..............................................................................}
 { SchDesignatorReset.pas                                                        }
 { Сброс десигнаторов и аннотация всего проекта: Down then Across.              }
 {..............................................................................}
@@ -16,7 +16,6 @@ procedure _Start; forward;
 procedure TFormAnnot.ButtonOKClick(Sender: TObject); forward;
 procedure TFormAnnot.ButtonCancelClick(Sender: TObject); forward;
 procedure TFormAnnot.FormAnnotShow(Sender: TObject); forward;
-procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String); forward;
 
 function DesignatorPrefix(const Des : String) : String;
 var
@@ -275,65 +274,109 @@ begin
     FormAnnot.Close;
 end;
 
-procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String);
+{ ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
+{ Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
+
+function CS_ScriptFolder : String;
 var
-    Cands : TStringList;
-    i : Integer;
-    P : String;
-    WS : IWorkspace;
+    WS  : IWorkspace;
     Prj : IProject;
+    i   : Integer;
+    P   : String;
 begin
-    if Img = nil then Exit;
-    Cands := TStringList.Create;
+    Result := '';
     try
-        try Cands.Add(ExtractFilePath(ParamStr(0)) + 'images\' + FileName); except end;
-        try
-            WS := GetWorkspace;
-            if WS <> nil then
-                for i := 0 to WS.DM_ProjectCount - 1 do
-                begin
-                    Prj := WS.DM_Projects(i);
-                    if Prj <> nil then
-                        Cands.Add(ExtractFilePath(Prj.DM_ProjectFullPath) + 'images\' + FileName);
-                end;
-        except
-        end;
-        Cands.Add('images\' + FileName);
-        Cands.Add('CustomScripts\images\' + FileName);
-        for i := 0 to Cands.Count - 1 do
+        WS := GetWorkspace;
+        if WS = nil then Exit;
+        Prj := WS.DM_FocusedProject;
+        if Prj <> nil then
         begin
-            P := Cands[i];
-            if (P <> '') and FileExists(P) then
+            P := ExtractFilePath(Prj.DM_ProjectFullPath);
+            if P <> '' then
             begin
-                try
-                    Img.Picture.LoadFromFile(P);
-                    if Hint <> nil then Hint.Caption := 'Замените картинку: images\' + FileName;
+                Result := P;
+                Exit;
+            end;
+        end;
+        for i := 0 to WS.DM_ProjectCount - 1 do
+        begin
+            Prj := WS.DM_Projects(i);
+            if Prj <> nil then
+            begin
+                P := Prj.DM_ProjectFullPath;
+                if Pos('CustomScripts', P) > 0 then
+                begin
+                    Result := ExtractFilePath(P);
                     Exit;
-                except
                 end;
             end;
         end;
-        if Hint <> nil then
-            Hint.Caption := 'Нет картинки. Положите ' + FileName + ' в images\ рядом со скриптами.';
-    finally
-        Cands.Free;
+    except
+        Result := '';
     end;
 end;
 
+function CS_FindImageFile(const FileName : String) : String;
+var
+    Dir, P : String;
+begin
+    Result := '';
+    Dir := CS_ScriptFolder;
+    if Dir <> '' then
+    begin
+        P := Dir + 'images\' + FileName;
+        if FileExists(P) then
+        begin
+            Result := P;
+            Exit;
+        end;
+        P := Dir + FileName;
+        if FileExists(P) then
+        begin
+            Result := P;
+            Exit;
+        end;
+    end;
+    P := 'images\' + FileName;
+    if FileExists(P) then Result := P;
+end;
+
+procedure CS_TryLoadHelpImage(const BmpName : String; const PngName : String);
+var
+    P : String;
+begin
+    try
+        P := CS_FindImageFile(BmpName);
+        if P = '' then
+            P := CS_FindImageFile(PngName);
+        if (P <> '') and FileExists(P) then
+        begin
+            ImageHelp.Picture.LoadFromFile(P);
+            LabelImageHint.Caption := 'Replace image: images\' + BmpName;
+        end
+        else
+            LabelImageHint.Caption := 'No image. Put ' + BmpName + ' in images\ next to the scripts.';
+    except
+        try
+            LabelImageHint.Caption := 'Image not loaded.';
+        except
+        end;
+    end;
+end;
+
+
 procedure TFormAnnot.FormAnnotShow(Sender: TObject);
 begin
-    LoadHelpImage(ImageHelp, LabelImageHint, 'SchAnnotate.png');
+    try
+        CS_TryLoadHelpImage('SchAnnotate.bmp', 'SchAnnotate.png');
+    except
+    end;
     CheckAnnotate.Checked := True;
     CheckAllSheets.Checked := True;
 end;
 
 procedure Start;
 begin
-    if SchServer = nil then
-    begin
-        ShowError('Откройте схематический документ.');
-        Exit;
-    end;
     FormAnnot.ShowModal;
 end;
 

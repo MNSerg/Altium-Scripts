@@ -1,4 +1,4 @@
-{..............................................................................}
+﻿{..............................................................................}
 { TrackCornerFillet.pas                                                         }
 { Скругления всех углов выделенного трека (IPCB_Track + IPCB_Arc).             }
 { Если скругления уже есть — спрашивает, переделать ли их.                      }
@@ -27,7 +27,6 @@ procedure TFormFillet.ButtonCancelClick(Sender: TObject); forward;
 procedure TFormFillet.FormFilletShow(Sender: TObject); forward;
 procedure DoFilletWork; forward;
 procedure ExpandConnectedPath; forward;
-procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String); forward;
 
 function Distance(X1, Y1, X2, Y2 : TCoord) : Double;
 begin
@@ -246,52 +245,96 @@ begin
     until (not Changed) or (Guard > 8000);
 end;
 
-procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String);
+{ ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
+{ Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
+
+function CS_ScriptFolder : String;
 var
-    Cands : TStringList;
-    i : Integer;
-    P : String;
-    WS : IWorkspace;
+    WS  : IWorkspace;
     Prj : IProject;
+    i   : Integer;
+    P   : String;
 begin
-    if Img = nil then Exit;
-    Cands := TStringList.Create;
+    Result := '';
     try
-        try Cands.Add(ExtractFilePath(ParamStr(0)) + 'images\' + FileName); except end;
-        try
-            WS := GetWorkspace;
-            if WS <> nil then
-            begin
-                for i := 0 to WS.DM_ProjectCount - 1 do
-                begin
-                    Prj := WS.DM_Projects(i);
-                    if Prj <> nil then
-                        Cands.Add(ExtractFilePath(Prj.DM_ProjectFullPath) + 'images\' + FileName);
-                end;
-            end;
-        except
-        end;
-        Cands.Add('images\' + FileName);
-        Cands.Add('CustomScripts\images\' + FileName);
-        for i := 0 to Cands.Count - 1 do
+        WS := GetWorkspace;
+        if WS = nil then Exit;
+        Prj := WS.DM_FocusedProject;
+        if Prj <> nil then
         begin
-            P := Cands[i];
-            if (P <> '') and FileExists(P) then
+            P := ExtractFilePath(Prj.DM_ProjectFullPath);
+            if P <> '' then
             begin
-                try
-                    Img.Picture.LoadFromFile(P);
-                    if Hint <> nil then Hint.Caption := 'Замените картинку: images\' + FileName;
+                Result := P;
+                Exit;
+            end;
+        end;
+        for i := 0 to WS.DM_ProjectCount - 1 do
+        begin
+            Prj := WS.DM_Projects(i);
+            if Prj <> nil then
+            begin
+                P := Prj.DM_ProjectFullPath;
+                if Pos('CustomScripts', P) > 0 then
+                begin
+                    Result := ExtractFilePath(P);
                     Exit;
-                except
                 end;
             end;
         end;
-        if Hint <> nil then
-            Hint.Caption := 'Нет картинки. Положите ' + FileName + ' в images\ рядом со скриптами.';
-    finally
-        Cands.Free;
+    except
+        Result := '';
     end;
 end;
+
+function CS_FindImageFile(const FileName : String) : String;
+var
+    Dir, P : String;
+begin
+    Result := '';
+    Dir := CS_ScriptFolder;
+    if Dir <> '' then
+    begin
+        P := Dir + 'images\' + FileName;
+        if FileExists(P) then
+        begin
+            Result := P;
+            Exit;
+        end;
+        P := Dir + FileName;
+        if FileExists(P) then
+        begin
+            Result := P;
+            Exit;
+        end;
+    end;
+    P := 'images\' + FileName;
+    if FileExists(P) then Result := P;
+end;
+
+procedure CS_TryLoadHelpImage(const BmpName : String; const PngName : String);
+var
+    P : String;
+begin
+    try
+        P := CS_FindImageFile(BmpName);
+        if P = '' then
+            P := CS_FindImageFile(PngName);
+        if (P <> '') and FileExists(P) then
+        begin
+            ImageHelp.Picture.LoadFromFile(P);
+            LabelImageHint.Caption := 'Replace image: images\' + BmpName;
+        end
+        else
+            LabelImageHint.Caption := 'No image. Put ' + BmpName + ' in images\ next to the scripts.';
+    except
+        try
+            LabelImageHint.Caption := 'Image not loaded.';
+        except
+        end;
+    end;
+end;
+
 
 function CountSelectedAtPoint(Xp, Yp : TCoord; IgnoreAddr : Integer) : Integer;
 var
@@ -603,6 +646,34 @@ var
     Key : String;
     Addr1, Addr2 : Integer;
 begin
+    if PCBServer = nil then
+    begin
+        ShowError('PCB-server is not available.');
+        Exit;
+    end;
+    Board := PCBServer.GetCurrentPCBBoard;
+    if Board = nil then
+    begin
+        ShowError('Open a PCB document.');
+        Exit;
+    end;
+
+    i := 0;
+    while i < Board.SelectecObjectCount do
+    begin
+        Prim := Board.SelectecObject(i);
+        if (Prim.ObjectId = eTrackObject) or (Prim.ObjectId = eArcObject) then
+            Inc(i)
+        else
+            Prim.SetState_Selected(False);
+    end;
+    ExpandConnectedPath;
+    if Board.SelectecObjectCount = 0 then
+    begin
+        ShowWarning('Select one track segment or a path (a square of 4 segments gets 4 fillets).');
+        Exit;
+    end;
+
     CreatedCount := 0;
     SkippedCount := 0;
     TooLargeCount := 0;
@@ -718,39 +789,15 @@ end;
 
 procedure TFormFillet.FormFilletShow(Sender: TObject);
 begin
-    LoadHelpImage(ImageHelp, LabelImageHint, 'Fillet.png');
+    try
+        CS_TryLoadHelpImage('Fillet.bmp', 'Fillet.png');
+    except
+    end;
     EditRadius.Text := FloatToStr(cDefaultRadiusMM);
 end;
 
 procedure Start;
-var
-    i : Integer;
-    Prim : IPCB_Primitive;
 begin
-    Board := PCBServer.GetCurrentPCBBoard;
-    if Board = nil then
-    begin
-        ShowError('Нет открытого PCB-документа.');
-        Exit;
-    end;
-
-    i := 0;
-    while i < Board.SelectecObjectCount do
-    begin
-        Prim := Board.SelectecObject(i);
-        if (Prim.ObjectId = eTrackObject) or (Prim.ObjectId = eArcObject) then
-            Inc(i)
-        else
-            Prim.SetState_Selected(False);
-    end;
-
-    if Board.SelectecObjectCount = 0 then
-    begin
-        ShowWarning('Выделите один сегмент или весь путь трека (квадрат из 4 сегментов даст 4 скругления).');
-        Exit;
-    end;
-
-    ExpandConnectedPath;
     FormFillet.ShowModal;
 end;
 
