@@ -18,11 +18,7 @@ procedure TFormWizard.FormWizardShow(WizSender: TObject); forward;
 
 procedure WizShowBox(const Msg : String; Flags : Integer);
 begin
-    try
-        MessageBox(0, PChar(Msg), PChar(FormWizard.Caption), Flags);
-    except
-        try ShowInfo(Msg, FormWizard.Caption); except end;
-    end;
+    ShowMessage(Msg);
 end;
 
 { DelphiScript: rfReplaceAll in square brackets is an Array Variant, not a set. }
@@ -45,21 +41,18 @@ end;
 function WizParseFloat(const WizS : String; var WizV : Double) : Boolean;
 var
     WizT : String;
+    WizCode : Integer;
 begin
     Result := False;
     WizT := WizS;
-    try
-        WizV := StrToFloat(WizReplaceChar(WizT, ',', '.'));
-        Result := True;
-        Exit;
-    except
-    end;
-    try
-        WizV := StrToFloat(WizReplaceChar(WizT, '.', ','));
-        Result := True;
-    except
-        Result := False;
-    end;
+    while (Length(WizT) > 0) and (WizT[1] = ' ') do
+        WizT := Copy(WizT, 2, Length(WizT));
+    while (Length(WizT) > 0) and (WizT[Length(WizT)] = ' ') do
+        WizT := Copy(WizT, 1, Length(WizT) - 1);
+    WizT := WizReplaceChar(WizT, ',', '.');
+    if WizT = '' then Exit;
+    Val(WizT, WizV, WizCode);
+    Result := (WizCode = 0);
 end;
 
 function AddTrackL(WizX1, WizY1, WizX2, WizY2 : TCoord; WizALayer : TLayer; Width : TCoord) : IPCB_Track;
@@ -217,7 +210,6 @@ end;
 procedure BuildBoard;
 var
     WizX0, WizY0, WizX1, WizY1, WizR, Width : TCoord;
-    OriginOff : TCoord;
     WizWS : IWorkspace;
 begin
     if NewDoc then
@@ -238,11 +230,15 @@ begin
         Exit;
     end;
 
-    OriginOff := MMsToCoord(10);
-    WizX0 := OriginOff;
-    WizY0 := OriginOff;
-    WizX1 := OriginOff + MMsToCoord(Wmm);
-    WizY1 := OriginOff + MMsToCoord(Hmm);
+    try
+        WizBoard.XOrigin := 0;
+        WizBoard.YOrigin := 0;
+    except
+    end;
+    WizX0 := 0;
+    WizY0 := 0;
+    WizX1 := MMsToCoord(Wmm);
+    WizY1 := MMsToCoord(Hmm);
     WizR := MMsToCoord(FilletMM);
     Width := MMsToCoord(0.2);
 
@@ -341,7 +337,7 @@ begin
     FormWizard.Close;
 end;
 
-{ ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
+{ ScriptBoot.inc — safe help-image load. Do not read EXE command-line args (AV). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
 function WizCS_ScriptFolder : String;
@@ -349,35 +345,38 @@ var
     WizWS  : IWorkspace;
     WizPrj : IProject;
     Wizi   : Integer;
-    WizP   : String;
+    WizP, WizName : String;
 begin
     Result := '';
     try
         WizWS := GetWorkspace;
         if WizWS = nil then Exit;
-        WizPrj := WizWS.DM_FocusedProject;
-        if WizPrj <> nil then
+        for Wizi := 0 to WizWS.DM_ProjectCount - 1 do
         begin
-            WizP := ExtractFilePath(WizPrj.DM_ProjectFullPath);
-            if WizP <> '' then
+            WizPrj := WizWS.DM_Projects(Wizi);
+            if WizPrj = nil then Continue;
+            WizP := WizPrj.DM_ProjectFullPath;
+            WizName := UpperCase(ExtractFileName(WizP));
+            if WizName = 'PCBWIZARD.PRJSCR' then
             begin
-                Result := WizP;
+                Result := ExtractFilePath(WizP);
                 Exit;
             end;
         end;
         for Wizi := 0 to WizWS.DM_ProjectCount - 1 do
         begin
             WizPrj := WizWS.DM_Projects(Wizi);
-            if WizPrj <> nil then
+            if WizPrj = nil then Continue;
+            WizP := WizPrj.DM_ProjectFullPath;
+            if Pos('CUSTOMSCRIPTS', UpperCase(WizP)) > 0 then
             begin
-                WizP := WizPrj.DM_ProjectFullPath;
-                if Pos('CustomScripts', WizP) > 0 then
-                begin
-                    Result := ExtractFilePath(WizP);
-                    Exit;
-                end;
+                Result := ExtractFilePath(WizP);
+                Exit;
             end;
         end;
+        WizPrj := WizWS.DM_FocusedProject;
+        if WizPrj <> nil then
+            Result := ExtractFilePath(WizPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -392,43 +391,44 @@ begin
     if WizDir <> '' then
     begin
         WizP := WizDir + 'images\' + WizFileName;
-        if FileExists(WizP) then
-        begin
-            Result := WizP;
-            Exit;
-        end;
+        if FileExists(WizP) then begin Result := WizP; Exit; end;
         WizP := WizDir + WizFileName;
-        if FileExists(WizP) then
-        begin
-            Result := WizP;
-            Exit;
-        end;
+        if FileExists(WizP) then begin Result := WizP; Exit; end;
     end;
     WizP := 'images\' + WizFileName;
-    if FileExists(WizP) then Result := WizP;
+    if FileExists(WizP) then begin Result := WizP; Exit; end;
+    if FileExists(WizFileName) then Result := WizFileName;
 end;
 
 procedure WizCS_TryLoadHelpImage(const WizBmpName : String; const WizPngName : String);
 var
     WizP : String;
+    HadPic : Boolean;
 begin
+    HadPic := False;
+    try
+        if ImageHelp.Picture.Width > 0 then HadPic := True;
+    except
+        HadPic := False;
+    end;
     try
         WizP := WizCS_FindImageFile(WizBmpName);
         if WizP = '' then
             WizP := WizCS_FindImageFile(WizPngName);
+        if WizP = '' then
+            WizP := WizCS_FindImageFile('PcbWizard.bmp');
         if (WizP <> '') and FileExists(WizP) then
         begin
             ImageHelp.Picture.LoadFromFile(WizP);
-            LabelImageHint.Caption := 'Replace image: images\' + WizBmpName;
-        end
-        else
-            LabelImageHint.Caption := 'No image. Put ' + WizBmpName + ' in images\ next to the scripts.';
-    except
-        try
-            LabelImageHint.Caption := 'Image not loaded.';
-        except
+            LabelImageHint.Caption := '';
+            Exit;
         end;
+    except
     end;
+    if HadPic then
+        LabelImageHint.Caption := ''
+    else
+        LabelImageHint.Caption := 'No image. Put ' + WizBmpName + ' in images\ next to the scripts.';
 end;
 
 

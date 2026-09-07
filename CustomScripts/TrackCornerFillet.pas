@@ -60,21 +60,18 @@ end;
 function FilParseFloat(const FilS : String; var FilV : Double) : Boolean;
 var
     FilT : String;
+    FilCode : Integer;
 begin
     Result := False;
     FilT := FilS;
-    try
-        FilV := StrToFloat(FilReplaceChar(FilT, ',', '.'));
-        Result := True;
-        Exit;
-    except
-    end;
-    try
-        FilV := StrToFloat(FilReplaceChar(FilT, '.', ','));
-        Result := True;
-    except
-        Result := False;
-    end;
+    while (Length(FilT) > 0) and (FilT[1] = ' ') do
+        FilT := Copy(FilT, 2, Length(FilT));
+    while (Length(FilT) > 0) and (FilT[Length(FilT)] = ' ') do
+        FilT := Copy(FilT, 1, Length(FilT) - 1);
+    FilT := FilReplaceChar(FilT, ',', '.');
+    if FilT = '' then Exit;
+    Val(FilT, FilV, FilCode);
+    Result := (FilCode = 0);
 end;
 
 function IsNumericMM(Text : String) : Boolean;
@@ -86,18 +83,14 @@ end;
 
 procedure FilShowBox(const Msg : String; Flags : Integer);
 begin
-    try
-        MessageBox(0, PChar(Msg), PChar(FormFillet.Caption), Flags);
-    except
-        try ShowInfo(Msg, FormFillet.Caption); except end;
-    end;
+    ShowMessage(Msg);
 end;
 
 function FilAskYesNo(const Msg : String) : Boolean;
 begin
     Result := False;
     try
-        Result := MessageBox(0, PChar(Msg), PChar(FormFillet.Caption), 36) = 6;
+        Result := MessageBox(0, Msg, FormFillet.Caption, 36) = 6;
     except
         try Result := ConfirmNoYes(Msg); except end;
     end;
@@ -238,7 +231,7 @@ begin
         ArcList.AddObject(FilKey, AnArc);
 end;
 
-{ ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
+{ ScriptBoot.inc — safe help-image load. Do not read EXE command-line args (AV). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
 function FilCS_ScriptFolder : String;
@@ -246,35 +239,38 @@ var
     FilWS  : IWorkspace;
     FilPrj : IProject;
     Fili   : Integer;
-    FilP   : String;
+    FilP, FilName : String;
 begin
     Result := '';
     try
         FilWS := GetWorkspace;
         if FilWS = nil then Exit;
-        FilPrj := FilWS.DM_FocusedProject;
-        if FilPrj <> nil then
+        for Fili := 0 to FilWS.DM_ProjectCount - 1 do
         begin
-            FilP := ExtractFilePath(FilPrj.DM_ProjectFullPath);
-            if FilP <> '' then
+            FilPrj := FilWS.DM_Projects(Fili);
+            if FilPrj = nil then Continue;
+            FilP := FilPrj.DM_ProjectFullPath;
+            FilName := UpperCase(ExtractFileName(FilP));
+            if FilName = 'TRACKCORNERFILLET.PRJSCR' then
             begin
-                Result := FilP;
+                Result := ExtractFilePath(FilP);
                 Exit;
             end;
         end;
         for Fili := 0 to FilWS.DM_ProjectCount - 1 do
         begin
             FilPrj := FilWS.DM_Projects(Fili);
-            if FilPrj <> nil then
+            if FilPrj = nil then Continue;
+            FilP := FilPrj.DM_ProjectFullPath;
+            if Pos('CUSTOMSCRIPTS', UpperCase(FilP)) > 0 then
             begin
-                FilP := FilPrj.DM_ProjectFullPath;
-                if Pos('CustomScripts', FilP) > 0 then
-                begin
-                    Result := ExtractFilePath(FilP);
-                    Exit;
-                end;
+                Result := ExtractFilePath(FilP);
+                Exit;
             end;
         end;
+        FilPrj := FilWS.DM_FocusedProject;
+        if FilPrj <> nil then
+            Result := ExtractFilePath(FilPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -289,43 +285,44 @@ begin
     if FilDir <> '' then
     begin
         FilP := FilDir + 'images\' + FilFileName;
-        if FileExists(FilP) then
-        begin
-            Result := FilP;
-            Exit;
-        end;
+        if FileExists(FilP) then begin Result := FilP; Exit; end;
         FilP := FilDir + FilFileName;
-        if FileExists(FilP) then
-        begin
-            Result := FilP;
-            Exit;
-        end;
+        if FileExists(FilP) then begin Result := FilP; Exit; end;
     end;
     FilP := 'images\' + FilFileName;
-    if FileExists(FilP) then Result := FilP;
+    if FileExists(FilP) then begin Result := FilP; Exit; end;
+    if FileExists(FilFileName) then Result := FilFileName;
 end;
 
 procedure FilCS_TryLoadHelpImage(const FilBmpName : String; const FilPngName : String);
 var
     FilP : String;
+    HadPic : Boolean;
 begin
+    HadPic := False;
+    try
+        if ImageHelp.Picture.Width > 0 then HadPic := True;
+    except
+        HadPic := False;
+    end;
     try
         FilP := FilCS_FindImageFile(FilBmpName);
         if FilP = '' then
             FilP := FilCS_FindImageFile(FilPngName);
+        if FilP = '' then
+            FilP := FilCS_FindImageFile('TrackCornerFillet.bmp');
         if (FilP <> '') and FileExists(FilP) then
         begin
             ImageHelp.Picture.LoadFromFile(FilP);
-            LabelImageHint.Caption := 'Replace image: images\' + FilBmpName;
-        end
-        else
-            LabelImageHint.Caption := 'No image. Put ' + FilBmpName + ' in images\ next to the scripts.';
-    except
-        try
-            LabelImageHint.Caption := 'Image not loaded.';
-        except
+            LabelImageHint.Caption := '';
+            Exit;
         end;
+    except
     end;
+    if HadPic then
+        LabelImageHint.Caption := ''
+    else
+        LabelImageHint.Caption := 'No image. Put ' + FilBmpName + ' in images\ next to the scripts.';
 end;
 
 

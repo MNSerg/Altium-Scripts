@@ -23,11 +23,7 @@ procedure TFormSilk.FormSilkShow(SilSender: TObject); forward;
 
 procedure SilShowBox(const Msg : String; Flags : Integer);
 begin
-    try
-        MessageBox(0, PChar(Msg), PChar(FormSilk.Caption), Flags);
-    except
-        try ShowInfo(Msg, FormSilk.Caption); except end;
-    end;
+    ShowMessage(Msg);
 end;
 
 { DelphiScript: rfReplaceAll in square brackets is an Array Variant, not a set. }
@@ -50,21 +46,18 @@ end;
 function SilParseFloat(const SilS : String; var SilV : Double) : Boolean;
 var
     SilT : String;
+    SilCode : Integer;
 begin
     Result := False;
     SilT := SilS;
-    try
-        SilV := StrToFloat(SilReplaceChar(SilT, ',', '.'));
-        Result := True;
-        Exit;
-    except
-    end;
-    try
-        SilV := StrToFloat(SilReplaceChar(SilT, '.', ','));
-        Result := True;
-    except
-        Result := False;
-    end;
+    while (Length(SilT) > 0) and (SilT[1] = ' ') do
+        SilT := Copy(SilT, 2, Length(SilT));
+    while (Length(SilT) > 0) and (SilT[Length(SilT)] = ' ') do
+        SilT := Copy(SilT, 1, Length(SilT) - 1);
+    SilT := SilReplaceChar(SilT, ',', '.');
+    if SilT = '' then Exit;
+    Val(SilT, SilV, SilCode);
+    Result := (SilCode = 0);
 end;
 
 function RectsOverlap(L1, B1, R1, SilT1, L2, B2, R2, SilT2 : TCoord) : Boolean;
@@ -326,7 +319,7 @@ begin
                LabelInfoSkip.Caption + IntToStr(SkipCnt), 64);
 end;
 
-{ ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
+{ ScriptBoot.inc — safe help-image load. Do not read EXE command-line args (AV). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
 function SilCS_ScriptFolder : String;
@@ -334,35 +327,38 @@ var
     SilWS  : IWorkspace;
     SilPrj : IProject;
     Sili   : Integer;
-    SilP   : String;
+    SilP, SilName : String;
 begin
     Result := '';
     try
         SilWS := GetWorkspace;
         if SilWS = nil then Exit;
-        SilPrj := SilWS.DM_FocusedProject;
-        if SilPrj <> nil then
+        for Sili := 0 to SilWS.DM_ProjectCount - 1 do
         begin
-            SilP := ExtractFilePath(SilPrj.DM_ProjectFullPath);
-            if SilP <> '' then
+            SilPrj := SilWS.DM_Projects(Sili);
+            if SilPrj = nil then Continue;
+            SilP := SilPrj.DM_ProjectFullPath;
+            SilName := UpperCase(ExtractFileName(SilP));
+            if SilName = 'PLACEDESIGNATORS.PRJSCR' then
             begin
-                Result := SilP;
+                Result := ExtractFilePath(SilP);
                 Exit;
             end;
         end;
         for Sili := 0 to SilWS.DM_ProjectCount - 1 do
         begin
             SilPrj := SilWS.DM_Projects(Sili);
-            if SilPrj <> nil then
+            if SilPrj = nil then Continue;
+            SilP := SilPrj.DM_ProjectFullPath;
+            if Pos('CUSTOMSCRIPTS', UpperCase(SilP)) > 0 then
             begin
-                SilP := SilPrj.DM_ProjectFullPath;
-                if Pos('CustomScripts', SilP) > 0 then
-                begin
-                    Result := ExtractFilePath(SilP);
-                    Exit;
-                end;
+                Result := ExtractFilePath(SilP);
+                Exit;
             end;
         end;
+        SilPrj := SilWS.DM_FocusedProject;
+        if SilPrj <> nil then
+            Result := ExtractFilePath(SilPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -377,43 +373,44 @@ begin
     if SilDir <> '' then
     begin
         SilP := SilDir + 'images\' + SilFileName;
-        if FileExists(SilP) then
-        begin
-            Result := SilP;
-            Exit;
-        end;
+        if FileExists(SilP) then begin Result := SilP; Exit; end;
         SilP := SilDir + SilFileName;
-        if FileExists(SilP) then
-        begin
-            Result := SilP;
-            Exit;
-        end;
+        if FileExists(SilP) then begin Result := SilP; Exit; end;
     end;
     SilP := 'images\' + SilFileName;
-    if FileExists(SilP) then Result := SilP;
+    if FileExists(SilP) then begin Result := SilP; Exit; end;
+    if FileExists(SilFileName) then Result := SilFileName;
 end;
 
 procedure SilCS_TryLoadHelpImage(const SilBmpName : String; const SilPngName : String);
 var
     SilP : String;
+    HadPic : Boolean;
 begin
+    HadPic := False;
+    try
+        if ImageHelp.Picture.Width > 0 then HadPic := True;
+    except
+        HadPic := False;
+    end;
     try
         SilP := SilCS_FindImageFile(SilBmpName);
         if SilP = '' then
             SilP := SilCS_FindImageFile(SilPngName);
+        if SilP = '' then
+            SilP := SilCS_FindImageFile('PlaceDesignators.bmp');
         if (SilP <> '') and FileExists(SilP) then
         begin
             ImageHelp.Picture.LoadFromFile(SilP);
-            LabelImageHint.Caption := 'Replace image: images\' + SilBmpName;
-        end
-        else
-            LabelImageHint.Caption := 'No image. Put ' + SilBmpName + ' in images\ next to the scripts.';
-    except
-        try
-            LabelImageHint.Caption := 'Image not loaded.';
-        except
+            LabelImageHint.Caption := '';
+            Exit;
         end;
+    except
     end;
+    if HadPic then
+        LabelImageHint.Caption := ''
+    else
+        LabelImageHint.Caption := 'No image. Put ' + SilBmpName + ' in images\ next to the scripts.';
 end;
 
 

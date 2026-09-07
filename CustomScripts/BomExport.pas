@@ -6,9 +6,10 @@
 
 var
     OutPath     : String;
-    Groups      : TStringList; { key -> qty in Objects }
+    Groups      : TStringList; { grouping key }
     DesLists    : TStringList; { key -> concatenated designators }
     ExtraFields : TStringList; { key -> Comment|Description|Value }
+    QtyList     : TStringList; { key -> quantity as decimal string }
 
 { Run Script: choose procedure StartBomExport (project compiles only this .pas). }
 procedure StartBomExport; forward;
@@ -138,14 +139,14 @@ begin
     if BomIdx < 0 then
     begin
         Groups.Add(BomKey);
-        Groups.Objects[Groups.Count - 1] := TObject(1);
+        QtyList.Add('1');
         DesLists.Add(BomDes);
         ExtraFields.Add(Fields);
     end
     else
     begin
-        Qty := Integer(Groups.Objects[BomIdx]) + 1;
-        Groups.Objects[BomIdx] := TObject(Qty);
+        Qty := StrToInt(QtyList[BomIdx]) + 1;
+        QtyList[BomIdx] := IntToStr(Qty);
         if DesLists[BomIdx] = '' then
             DesLists[BomIdx] := BomDes
         else if BomDes <> '' then
@@ -253,11 +254,7 @@ end;
 
 procedure BomShowBox(const Msg : String; Flags : Integer);
 begin
-    try
-        MessageBox(0, PChar(Msg), PChar(FormBom.Caption), Flags);
-    except
-        try ShowInfo(Msg, FormBom.Caption); except end;
-    end;
+    ShowMessage(Msg);
 end;
 
 procedure WriteSettingsXml(const XlsPath : String);
@@ -312,7 +309,7 @@ begin
         Lines.Add('   </Row>');
         for Bomi := 0 to Groups.Count - 1 do
         begin
-            Qty := Integer(Groups.Objects[Bomi]);
+            Qty := StrToInt(QtyList[Bomi]);
             Parts.DelimitedText := ExtraFields[Bomi];
             while Parts.Count < 3 do Parts.Add('');
             Lines.Add('   <Row>');
@@ -336,7 +333,7 @@ begin
     end;
 end;
 
-{ ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
+{ ScriptBoot.inc — safe help-image load. Do not read EXE command-line args (AV). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
 function BomCS_ScriptFolder : String;
@@ -344,35 +341,38 @@ var
     BomWS  : IWorkspace;
     BomPrj : IProject;
     Bomi   : Integer;
-    BomP   : String;
+    BomP, BomName : String;
 begin
     Result := '';
     try
         BomWS := GetWorkspace;
         if BomWS = nil then Exit;
-        BomPrj := BomWS.DM_FocusedProject;
-        if BomPrj <> nil then
+        for Bomi := 0 to BomWS.DM_ProjectCount - 1 do
         begin
-            BomP := ExtractFilePath(BomPrj.DM_ProjectFullPath);
-            if BomP <> '' then
+            BomPrj := BomWS.DM_Projects(Bomi);
+            if BomPrj = nil then Continue;
+            BomP := BomPrj.DM_ProjectFullPath;
+            BomName := UpperCase(ExtractFileName(BomP));
+            if BomName = 'BOMEXPORT.PRJSCR' then
             begin
-                Result := BomP;
+                Result := ExtractFilePath(BomP);
                 Exit;
             end;
         end;
         for Bomi := 0 to BomWS.DM_ProjectCount - 1 do
         begin
             BomPrj := BomWS.DM_Projects(Bomi);
-            if BomPrj <> nil then
+            if BomPrj = nil then Continue;
+            BomP := BomPrj.DM_ProjectFullPath;
+            if Pos('CUSTOMSCRIPTS', UpperCase(BomP)) > 0 then
             begin
-                BomP := BomPrj.DM_ProjectFullPath;
-                if Pos('CustomScripts', BomP) > 0 then
-                begin
-                    Result := ExtractFilePath(BomP);
-                    Exit;
-                end;
+                Result := ExtractFilePath(BomP);
+                Exit;
             end;
         end;
+        BomPrj := BomWS.DM_FocusedProject;
+        if BomPrj <> nil then
+            Result := ExtractFilePath(BomPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -387,43 +387,44 @@ begin
     if BomDir <> '' then
     begin
         BomP := BomDir + 'images\' + BomFileName;
-        if FileExists(BomP) then
-        begin
-            Result := BomP;
-            Exit;
-        end;
+        if FileExists(BomP) then begin Result := BomP; Exit; end;
         BomP := BomDir + BomFileName;
-        if FileExists(BomP) then
-        begin
-            Result := BomP;
-            Exit;
-        end;
+        if FileExists(BomP) then begin Result := BomP; Exit; end;
     end;
     BomP := 'images\' + BomFileName;
-    if FileExists(BomP) then Result := BomP;
+    if FileExists(BomP) then begin Result := BomP; Exit; end;
+    if FileExists(BomFileName) then Result := BomFileName;
 end;
 
 procedure BomCS_TryLoadHelpImage(const BomBmpName : String; const BomPngName : String);
 var
     BomP : String;
+    HadPic : Boolean;
 begin
+    HadPic := False;
+    try
+        if ImageHelp.Picture.Width > 0 then HadPic := True;
+    except
+        HadPic := False;
+    end;
     try
         BomP := BomCS_FindImageFile(BomBmpName);
         if BomP = '' then
             BomP := BomCS_FindImageFile(BomPngName);
+        if BomP = '' then
+            BomP := BomCS_FindImageFile('BomExport.bmp');
         if (BomP <> '') and FileExists(BomP) then
         begin
             ImageHelp.Picture.LoadFromFile(BomP);
-            LabelImageHint.Caption := 'Replace image: images\' + BomBmpName;
-        end
-        else
-            LabelImageHint.Caption := 'No image. Put ' + BomBmpName + ' in images\ next to the scripts.';
-    except
-        try
-            LabelImageHint.Caption := 'Image not loaded.';
-        except
+            LabelImageHint.Caption := '';
+            Exit;
         end;
+    except
     end;
+    if HadPic then
+        LabelImageHint.Caption := ''
+    else
+        LabelImageHint.Caption := 'No image. Put ' + BomBmpName + ' in images\ next to the scripts.';
 end;
 
 
@@ -471,6 +472,7 @@ begin
     Groups := TStringList.Create;
     DesLists := TStringList.Create;
     ExtraFields := TStringList.Create;
+    QtyList := TStringList.Create;
     try
         HarvestFromProject;
         if Groups.Count = 0 then
@@ -481,6 +483,7 @@ begin
         Groups.Free;
         DesLists.Free;
         ExtraFields.Free;
+        QtyList.Free;
     end;
 end;
 

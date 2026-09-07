@@ -20,18 +20,14 @@ procedure TFormAnnot.FormAnnotShow(SchSender: TObject); forward;
 
 procedure SchShowBox(const Msg : String; Flags : Integer);
 begin
-    try
-        MessageBox(0, PChar(Msg), PChar(FormAnnot.Caption), Flags);
-    except
-        try ShowInfo(Msg, FormAnnot.Caption); except end;
-    end;
+    ShowMessage(Msg);
 end;
 
 function SchAskYesNo(const Msg : String) : Boolean;
 begin
     Result := False;
     try
-        Result := MessageBox(0, PChar(Msg), PChar(FormAnnot.Caption), 36) = 6;
+        Result := MessageBox(0, Msg, FormAnnot.Caption, 36) = 6;
     except
         try Result := ConfirmNoYes(Msg); except end;
     end;
@@ -297,7 +293,7 @@ begin
     FormAnnot.Close;
 end;
 
-{ ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
+{ ScriptBoot.inc — safe help-image load. Do not read EXE command-line args (AV). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
 function SchCS_ScriptFolder : String;
@@ -305,35 +301,38 @@ var
     SchWS  : IWorkspace;
     SchPrj : IProject;
     Schi   : Integer;
-    SchP   : String;
+    SchP, SchName : String;
 begin
     Result := '';
     try
         SchWS := GetWorkspace;
         if SchWS = nil then Exit;
-        SchPrj := SchWS.DM_FocusedProject;
-        if SchPrj <> nil then
+        for Schi := 0 to SchWS.DM_ProjectCount - 1 do
         begin
-            SchP := ExtractFilePath(SchPrj.DM_ProjectFullPath);
-            if SchP <> '' then
+            SchPrj := SchWS.DM_Projects(Schi);
+            if SchPrj = nil then Continue;
+            SchP := SchPrj.DM_ProjectFullPath;
+            SchName := UpperCase(ExtractFileName(SchP));
+            if SchName = 'SCHDESIGNATORRESET.PRJSCR' then
             begin
-                Result := SchP;
+                Result := ExtractFilePath(SchP);
                 Exit;
             end;
         end;
         for Schi := 0 to SchWS.DM_ProjectCount - 1 do
         begin
             SchPrj := SchWS.DM_Projects(Schi);
-            if SchPrj <> nil then
+            if SchPrj = nil then Continue;
+            SchP := SchPrj.DM_ProjectFullPath;
+            if Pos('CUSTOMSCRIPTS', UpperCase(SchP)) > 0 then
             begin
-                SchP := SchPrj.DM_ProjectFullPath;
-                if Pos('CustomScripts', SchP) > 0 then
-                begin
-                    Result := ExtractFilePath(SchP);
-                    Exit;
-                end;
+                Result := ExtractFilePath(SchP);
+                Exit;
             end;
         end;
+        SchPrj := SchWS.DM_FocusedProject;
+        if SchPrj <> nil then
+            Result := ExtractFilePath(SchPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -348,43 +347,44 @@ begin
     if SchDir <> '' then
     begin
         SchP := SchDir + 'images\' + SchFileName;
-        if FileExists(SchP) then
-        begin
-            Result := SchP;
-            Exit;
-        end;
+        if FileExists(SchP) then begin Result := SchP; Exit; end;
         SchP := SchDir + SchFileName;
-        if FileExists(SchP) then
-        begin
-            Result := SchP;
-            Exit;
-        end;
+        if FileExists(SchP) then begin Result := SchP; Exit; end;
     end;
     SchP := 'images\' + SchFileName;
-    if FileExists(SchP) then Result := SchP;
+    if FileExists(SchP) then begin Result := SchP; Exit; end;
+    if FileExists(SchFileName) then Result := SchFileName;
 end;
 
 procedure SchCS_TryLoadHelpImage(const SchBmpName : String; const SchPngName : String);
 var
     SchP : String;
+    HadPic : Boolean;
 begin
+    HadPic := False;
+    try
+        if ImageHelp.Picture.Width > 0 then HadPic := True;
+    except
+        HadPic := False;
+    end;
     try
         SchP := SchCS_FindImageFile(SchBmpName);
         if SchP = '' then
             SchP := SchCS_FindImageFile(SchPngName);
+        if SchP = '' then
+            SchP := SchCS_FindImageFile('SchDesignatorReset.bmp');
         if (SchP <> '') and FileExists(SchP) then
         begin
             ImageHelp.Picture.LoadFromFile(SchP);
-            LabelImageHint.Caption := 'Replace image: images\' + SchBmpName;
-        end
-        else
-            LabelImageHint.Caption := 'No image. Put ' + SchBmpName + ' in images\ next to the scripts.';
-    except
-        try
-            LabelImageHint.Caption := 'Image not loaded.';
-        except
+            LabelImageHint.Caption := '';
+            Exit;
         end;
+    except
     end;
+    if HadPic then
+        LabelImageHint.Caption := ''
+    else
+        LabelImageHint.Caption := 'No image. Put ' + SchBmpName + ' in images\ next to the scripts.';
 end;
 
 

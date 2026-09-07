@@ -6,6 +6,6 @@
 { Each script inlines its own uniquely prefixed copies:                        }
 {   FilCS_ScriptFolder / DxfCS_ScriptFolder / PanCS_ScriptFolder / ...         }
 { Image path: GetWorkspace / DM_FocusedProject folder + images\                }
-{ Never call ParamStr (native AV in DelphiScript).                             }
+{ Do not read EXE command-line args (native AV in DelphiScript).                             }
 { Form must have ImageHelp (TImage) and LabelImageHint (TLabel).               }
 { TImage: only Left/Top/Width/Height — no Stretch/Proportional/Center.         }

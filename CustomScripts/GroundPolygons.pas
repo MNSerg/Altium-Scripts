@@ -21,18 +21,14 @@ procedure TFormGnd.FormGndShow(GndSender: TObject); forward;
 
 procedure GndShowBox(const Msg : String; Flags : Integer);
 begin
-    try
-        MessageBox(0, PChar(Msg), PChar(FormGnd.Caption), Flags);
-    except
-        try ShowInfo(Msg, FormGnd.Caption); except end;
-    end;
+    ShowMessage(Msg);
 end;
 
 function GndAskYesNo(const Msg : String) : Boolean;
 begin
     Result := False;
     try
-        Result := MessageBox(0, PChar(Msg), PChar(FormGnd.Caption), 36) = 6;
+        Result := MessageBox(0, Msg, FormGnd.Caption, 36) = 6;
     except
         try Result := ConfirmNoYes(Msg); except end;
     end;
@@ -179,15 +175,6 @@ begin
         GndPoly.PolyHatchStyle := ePolySolid
     else
         GndPoly.PolyHatchStyle := ePoly90;
-    try
-        GndPoly.RemoveDead := True;
-    except
-    end;
-    { ClearanceGap не задаём: зазоры полигона — из правил проектирования. }
-    try
-        GndPoly.MinPrimLength := MMsToCoord(0.1);
-    except
-    end;
     CopyOutlineToPolygon(GndPoly);
     GndBoard.AddPCBObject(GndPoly);
     try
@@ -232,7 +219,7 @@ begin
                LabelInfoSkip.Caption + IntToStr(Skipped), 64);
 end;
 
-{ ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
+{ ScriptBoot.inc — safe help-image load. Do not read EXE command-line args (AV). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
 function GndCS_ScriptFolder : String;
@@ -240,35 +227,38 @@ var
     GndWS  : IWorkspace;
     GndPrj : IProject;
     Gndi   : Integer;
-    GndP   : String;
+    GndP, GndName : String;
 begin
     Result := '';
     try
         GndWS := GetWorkspace;
         if GndWS = nil then Exit;
-        GndPrj := GndWS.DM_FocusedProject;
-        if GndPrj <> nil then
+        for Gndi := 0 to GndWS.DM_ProjectCount - 1 do
         begin
-            GndP := ExtractFilePath(GndPrj.DM_ProjectFullPath);
-            if GndP <> '' then
+            GndPrj := GndWS.DM_Projects(Gndi);
+            if GndPrj = nil then Continue;
+            GndP := GndPrj.DM_ProjectFullPath;
+            GndName := UpperCase(ExtractFileName(GndP));
+            if GndName = 'GROUNDPOLYGONS.PRJSCR' then
             begin
-                Result := GndP;
+                Result := ExtractFilePath(GndP);
                 Exit;
             end;
         end;
         for Gndi := 0 to GndWS.DM_ProjectCount - 1 do
         begin
             GndPrj := GndWS.DM_Projects(Gndi);
-            if GndPrj <> nil then
+            if GndPrj = nil then Continue;
+            GndP := GndPrj.DM_ProjectFullPath;
+            if Pos('CUSTOMSCRIPTS', UpperCase(GndP)) > 0 then
             begin
-                GndP := GndPrj.DM_ProjectFullPath;
-                if Pos('CustomScripts', GndP) > 0 then
-                begin
-                    Result := ExtractFilePath(GndP);
-                    Exit;
-                end;
+                Result := ExtractFilePath(GndP);
+                Exit;
             end;
         end;
+        GndPrj := GndWS.DM_FocusedProject;
+        if GndPrj <> nil then
+            Result := ExtractFilePath(GndPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -283,43 +273,44 @@ begin
     if GndDir <> '' then
     begin
         GndP := GndDir + 'images\' + GndFileName;
-        if FileExists(GndP) then
-        begin
-            Result := GndP;
-            Exit;
-        end;
+        if FileExists(GndP) then begin Result := GndP; Exit; end;
         GndP := GndDir + GndFileName;
-        if FileExists(GndP) then
-        begin
-            Result := GndP;
-            Exit;
-        end;
+        if FileExists(GndP) then begin Result := GndP; Exit; end;
     end;
     GndP := 'images\' + GndFileName;
-    if FileExists(GndP) then Result := GndP;
+    if FileExists(GndP) then begin Result := GndP; Exit; end;
+    if FileExists(GndFileName) then Result := GndFileName;
 end;
 
 procedure GndCS_TryLoadHelpImage(const GndBmpName : String; const GndPngName : String);
 var
     GndP : String;
+    HadPic : Boolean;
 begin
+    HadPic := False;
+    try
+        if ImageHelp.Picture.Width > 0 then HadPic := True;
+    except
+        HadPic := False;
+    end;
     try
         GndP := GndCS_FindImageFile(GndBmpName);
         if GndP = '' then
             GndP := GndCS_FindImageFile(GndPngName);
+        if GndP = '' then
+            GndP := GndCS_FindImageFile('GroundPolygons.bmp');
         if (GndP <> '') and FileExists(GndP) then
         begin
             ImageHelp.Picture.LoadFromFile(GndP);
-            LabelImageHint.Caption := 'Replace image: images\' + GndBmpName;
-        end
-        else
-            LabelImageHint.Caption := 'No image. Put ' + GndBmpName + ' in images\ next to the scripts.';
-    except
-        try
-            LabelImageHint.Caption := 'Image not loaded.';
-        except
+            LabelImageHint.Caption := '';
+            Exit;
         end;
+    except
     end;
+    if HadPic then
+        LabelImageHint.Caption := ''
+    else
+        LabelImageHint.Caption := 'No image. Put ' + GndBmpName + ' in images\ next to the scripts.';
 end;
 
 

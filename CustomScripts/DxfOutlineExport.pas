@@ -313,13 +313,12 @@ begin
     end;
 
     CR := 0;
-    try
-        CR := DxfPad.CornerRadiusTop;
-    except
-        CR := 0;
+    if Shape = eRoundRectShape then
+    begin
+        CR := SX div 5;
+        if CR > SY div 2 then CR := SY div 2;
+        if CR < 1 then CR := 1;
     end;
-    if (CR <= 0) and (Shape = eRoundRectShape) then
-        CR := (SX + SY) div 20;
 
     if CR > 0 then
     begin
@@ -606,7 +605,7 @@ begin
     DxfPair(0, 'EOF');
 end;
 
-{ ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
+{ ScriptBoot.inc — safe help-image load. Do not read EXE command-line args (AV). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
 function DxfCS_ScriptFolder : String;
@@ -614,35 +613,38 @@ var
     DxfWS  : IWorkspace;
     DxfPrj : IProject;
     Dxfi   : Integer;
-    DxfP   : String;
+    DxfP, DxfName : String;
 begin
     Result := '';
     try
         DxfWS := GetWorkspace;
         if DxfWS = nil then Exit;
-        DxfPrj := DxfWS.DM_FocusedProject;
-        if DxfPrj <> nil then
+        for Dxfi := 0 to DxfWS.DM_ProjectCount - 1 do
         begin
-            DxfP := ExtractFilePath(DxfPrj.DM_ProjectFullPath);
-            if DxfP <> '' then
+            DxfPrj := DxfWS.DM_Projects(Dxfi);
+            if DxfPrj = nil then Continue;
+            DxfP := DxfPrj.DM_ProjectFullPath;
+            DxfName := UpperCase(ExtractFileName(DxfP));
+            if DxfName = 'DXFOUTLINEEXPORT.PRJSCR' then
             begin
-                Result := DxfP;
+                Result := ExtractFilePath(DxfP);
                 Exit;
             end;
         end;
         for Dxfi := 0 to DxfWS.DM_ProjectCount - 1 do
         begin
             DxfPrj := DxfWS.DM_Projects(Dxfi);
-            if DxfPrj <> nil then
+            if DxfPrj = nil then Continue;
+            DxfP := DxfPrj.DM_ProjectFullPath;
+            if Pos('CUSTOMSCRIPTS', UpperCase(DxfP)) > 0 then
             begin
-                DxfP := DxfPrj.DM_ProjectFullPath;
-                if Pos('CustomScripts', DxfP) > 0 then
-                begin
-                    Result := ExtractFilePath(DxfP);
-                    Exit;
-                end;
+                Result := ExtractFilePath(DxfP);
+                Exit;
             end;
         end;
+        DxfPrj := DxfWS.DM_FocusedProject;
+        if DxfPrj <> nil then
+            Result := ExtractFilePath(DxfPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -657,43 +659,44 @@ begin
     if DxfDir <> '' then
     begin
         DxfP := DxfDir + 'images\' + DxfFileName;
-        if FileExists(DxfP) then
-        begin
-            Result := DxfP;
-            Exit;
-        end;
+        if FileExists(DxfP) then begin Result := DxfP; Exit; end;
         DxfP := DxfDir + DxfFileName;
-        if FileExists(DxfP) then
-        begin
-            Result := DxfP;
-            Exit;
-        end;
+        if FileExists(DxfP) then begin Result := DxfP; Exit; end;
     end;
     DxfP := 'images\' + DxfFileName;
-    if FileExists(DxfP) then Result := DxfP;
+    if FileExists(DxfP) then begin Result := DxfP; Exit; end;
+    if FileExists(DxfFileName) then Result := DxfFileName;
 end;
 
 procedure DxfCS_TryLoadHelpImage(const DxfBmpName : String; const DxfPngName : String);
 var
     DxfP : String;
+    HadPic : Boolean;
 begin
+    HadPic := False;
+    try
+        if ImageHelp.Picture.Width > 0 then HadPic := True;
+    except
+        HadPic := False;
+    end;
     try
         DxfP := DxfCS_FindImageFile(DxfBmpName);
         if DxfP = '' then
             DxfP := DxfCS_FindImageFile(DxfPngName);
+        if DxfP = '' then
+            DxfP := DxfCS_FindImageFile('DxfOutlineExport.bmp');
         if (DxfP <> '') and FileExists(DxfP) then
         begin
             ImageHelp.Picture.LoadFromFile(DxfP);
-            LabelImageHint.Caption := 'Replace image: images\' + DxfBmpName;
-        end
-        else
-            LabelImageHint.Caption := 'No image. Put ' + DxfBmpName + ' in images\ next to the scripts.';
-    except
-        try
-            LabelImageHint.Caption := 'Image not loaded.';
-        except
+            LabelImageHint.Caption := '';
+            Exit;
         end;
+    except
     end;
+    if HadPic then
+        LabelImageHint.Caption := ''
+    else
+        LabelImageHint.Caption := 'No image. Put ' + DxfBmpName + ' in images\ next to the scripts.';
 end;
 
 
@@ -742,11 +745,7 @@ end;
 
 procedure DxfShowBox(const Msg : String; Flags : Integer);
 begin
-    try
-        MessageBox(0, PChar(Msg), PChar(FormDxf.Caption), Flags);
-    except
-        try ShowInfo(Msg, FormDxf.Caption); except end;
-    end;
+    ShowMessage(Msg);
 end;
 
 procedure TFormDxf.FormDxfShow(DxfSender: TObject);

@@ -50,21 +50,18 @@ end;
 function PanParseFloat(const PanS : String; var PanV : Double) : Boolean;
 var
     PanT : String;
+    PanCode : Integer;
 begin
     Result := False;
     PanT := PanS;
-    try
-        PanV := StrToFloat(PanReplaceChar(PanT, ',', '.'));
-        Result := True;
-        Exit;
-    except
-    end;
-    try
-        PanV := StrToFloat(PanReplaceChar(PanT, '.', ','));
-        Result := True;
-    except
-        Result := False;
-    end;
+    while (Length(PanT) > 0) and (PanT[1] = ' ') do
+        PanT := Copy(PanT, 2, Length(PanT));
+    while (Length(PanT) > 0) and (PanT[Length(PanT)] = ' ') do
+        PanT := Copy(PanT, 1, Length(PanT) - 1);
+    PanT := PanReplaceChar(PanT, ',', '.');
+    if PanT = '' then Exit;
+    Val(PanT, PanV, PanCode);
+    Result := (PanCode = 0);
 end;
 
 function ParsePositive(const PanS : String; var PanV : Double) : Boolean;
@@ -133,62 +130,63 @@ begin
     AddArc(ABoard, PanX0 + PanR, PanY1 - PanR, PanR, 90, 180, PanALayer);
 end;
 
-procedure DrawGappedH(ABoard : IPCB_Board; X0, X1, Y, TabMid, HalfTab : TCoord; PanALayer : TLayer);
-var
-    G0, G1 : TCoord;
-begin
-    if X1 < X0 then Exit;
-    G0 := TabMid - HalfTab;
-    G1 := TabMid + HalfTab;
-    if G0 > X0 then AddTrack(ABoard, X0, Y, G0, Y, PanALayer);
-    if G1 < X1 then AddTrack(ABoard, G1, Y, X1, Y, PanALayer);
-end;
-
-procedure DrawGappedV(ABoard : IPCB_Board; Y0, Y1, X, TabMid, HalfTab : TCoord; PanALayer : TLayer);
-var
-    G0, G1 : TCoord;
-begin
-    if Y1 < Y0 then Exit;
-    G0 := TabMid - HalfTab;
-    G1 := TabMid + HalfTab;
-    if G0 > Y0 then AddTrack(ABoard, X, Y0, X, G0, PanALayer);
-    if G1 < Y1 then AddTrack(ABoard, X, G1, X, Y1, PanALayer);
-end;
-
-{ Фреза: контур со смещением mill-радиуса от края платы, разрывы = перемычки. }
+{ Вырез в заготовке: кольцо ширины = диаметр фрезы (2*R), разрывы = перемычки. }
 procedure DrawMillAroundBoard(ABoard : IPCB_Board; Col, Row : Integer; PanALayer : TLayer);
 var
-    L, B, Rgt, Tp : TCoord;
-    CL, CB, CR, CT, Off, HalfTab, MidX, MidY, Corner : TCoord;
+    L, B, Rgt, Tp, D, HalfTab, Mx0, Mx1, My0, My1 : TCoord;
 begin
     L := BoardOriginX(Col);
     B := BoardOriginY(Row);
     Rgt := L + MMsToCoord(BoardW);
     Tp := B + MMsToCoord(BoardH);
-    Off := MMsToCoord(FilletR);
-    CL := L - Off;
-    CB := B - Off;
-    CR := Rgt + Off;
-    CT := Tp + Off;
+    D := MMsToCoord(FilletR + FilletR);
+    if D < 1 then Exit;
     HalfTab := MMsToCoord(TabW) div 2;
     if HalfTab < 1 then HalfTab := 1;
-    MidX := (L + Rgt) div 2;
-    MidY := (B + Tp) div 2;
-    Corner := Off;
-    if Corner < 0 then Corner := 0;
+    Mx0 := (L + Rgt) div 2 - HalfTab;
+    Mx1 := (L + Rgt) div 2 + HalfTab;
+    My0 := (B + Tp) div 2 - HalfTab;
+    My1 := (B + Tp) div 2 + HalfTab;
+    if Mx0 < L + 1 then Mx0 := L + 1;
+    if Mx1 > Rgt - 1 then Mx1 := Rgt - 1;
+    if My0 < B + 1 then My0 := B + 1;
+    if My1 > Tp - 1 then My1 := Tp - 1;
 
-    DrawGappedH(ABoard, CL + Corner, CR - Corner, CB, MidX, HalfTab, PanALayer);
-    DrawGappedH(ABoard, CL + Corner, CR - Corner, CT, MidX, HalfTab, PanALayer);
-    DrawGappedV(ABoard, CB + Corner, CT - Corner, CL, MidY, HalfTab, PanALayer);
-    DrawGappedV(ABoard, CB + Corner, CT - Corner, CR, MidY, HalfTab, PanALayer);
+    { SW: внутренний край = контур платы, внешний = смещение на диаметр, дуга снаружи. }
+    AddTrack(ABoard, L, B, Mx0, B, PanALayer);
+    AddTrack(ABoard, Mx0, B, Mx0, B - D, PanALayer);
+    AddTrack(ABoard, Mx0, B - D, L, B - D, PanALayer);
+    AddArc(ABoard, L, B, D, 180, 270, PanALayer);
+    AddTrack(ABoard, L - D, B, L - D, My0, PanALayer);
+    AddTrack(ABoard, L - D, My0, L, My0, PanALayer);
+    AddTrack(ABoard, L, My0, L, B, PanALayer);
 
-    if Off > 0 then
-    begin
-        AddArc(ABoard, CL + Off, CB + Off, Off, 180, 270, PanALayer);
-        AddArc(ABoard, CR - Off, CB + Off, Off, 270, 0, PanALayer);
-        AddArc(ABoard, CR - Off, CT - Off, Off, 0, 90, PanALayer);
-        AddArc(ABoard, CL + Off, CT - Off, Off, 90, 180, PanALayer);
-    end;
+    { SE }
+    AddTrack(ABoard, Mx1, B, Rgt, B, PanALayer);
+    AddTrack(ABoard, Mx1, B, Mx1, B - D, PanALayer);
+    AddTrack(ABoard, Mx1, B - D, Rgt, B - D, PanALayer);
+    AddArc(ABoard, Rgt, B, D, 270, 0, PanALayer);
+    AddTrack(ABoard, Rgt + D, B, Rgt + D, My0, PanALayer);
+    AddTrack(ABoard, Rgt + D, My0, Rgt, My0, PanALayer);
+    AddTrack(ABoard, Rgt, My0, Rgt, B, PanALayer);
+
+    { NE }
+    AddTrack(ABoard, Mx1, Tp, Rgt, Tp, PanALayer);
+    AddTrack(ABoard, Mx1, Tp, Mx1, Tp + D, PanALayer);
+    AddTrack(ABoard, Mx1, Tp + D, Rgt, Tp + D, PanALayer);
+    AddArc(ABoard, Rgt, Tp, D, 0, 90, PanALayer);
+    AddTrack(ABoard, Rgt + D, Tp, Rgt + D, My1, PanALayer);
+    AddTrack(ABoard, Rgt + D, My1, Rgt, My1, PanALayer);
+    AddTrack(ABoard, Rgt, My1, Rgt, Tp, PanALayer);
+
+    { NW }
+    AddTrack(ABoard, L, Tp, Mx0, Tp, PanALayer);
+    AddTrack(ABoard, Mx0, Tp, Mx0, Tp + D, PanALayer);
+    AddTrack(ABoard, Mx0, Tp + D, L, Tp + D, PanALayer);
+    AddArc(ABoard, L, Tp, D, 90, 180, PanALayer);
+    AddTrack(ABoard, L - D, Tp, L - D, My1, PanALayer);
+    AddTrack(ABoard, L - D, My1, L, My1, PanALayer);
+    AddTrack(ABoard, L, My1, L, Tp, PanALayer);
 end;
 
 procedure DrawAllMillPaths(ABoard : IPCB_Board; PanALayer : TLayer);
@@ -245,11 +243,7 @@ end;
 
 procedure PanShowBox(const Msg : String; Flags : Integer);
 begin
-    try
-        MessageBox(0, PChar(Msg), PChar(FormPanel.Caption), Flags);
-    except
-        try ShowInfo(Msg, FormPanel.Caption); except end;
-    end;
+    ShowMessage(Msg);
 end;
 
 procedure ApplyPanelBoardOutline(ABoard : IPCB_Board);
@@ -407,7 +401,7 @@ begin
     FormPanel.Close;
 end;
 
-{ ScriptBoot.inc — safe help-image load. Never call ParamStr (AV in Altium). }
+{ ScriptBoot.inc — safe help-image load. Do not read EXE command-line args (AV). }
 { Form must have components ImageHelp (TImage) and LabelImageHint (TLabel). }
 
 function PanCS_ScriptFolder : String;
@@ -415,35 +409,38 @@ var
     PanWS  : IWorkspace;
     PanPrj : IProject;
     Pani   : Integer;
-    PanP   : String;
+    PanP, PanName : String;
 begin
     Result := '';
     try
         PanWS := GetWorkspace;
         if PanWS = nil then Exit;
-        PanPrj := PanWS.DM_FocusedProject;
-        if PanPrj <> nil then
+        for Pani := 0 to PanWS.DM_ProjectCount - 1 do
         begin
-            PanP := ExtractFilePath(PanPrj.DM_ProjectFullPath);
-            if PanP <> '' then
+            PanPrj := PanWS.DM_Projects(Pani);
+            if PanPrj = nil then Continue;
+            PanP := PanPrj.DM_ProjectFullPath;
+            PanName := UpperCase(ExtractFileName(PanP));
+            if PanName = 'PANELIZER.PRJSCR' then
             begin
-                Result := PanP;
+                Result := ExtractFilePath(PanP);
                 Exit;
             end;
         end;
         for Pani := 0 to PanWS.DM_ProjectCount - 1 do
         begin
             PanPrj := PanWS.DM_Projects(Pani);
-            if PanPrj <> nil then
+            if PanPrj = nil then Continue;
+            PanP := PanPrj.DM_ProjectFullPath;
+            if Pos('CUSTOMSCRIPTS', UpperCase(PanP)) > 0 then
             begin
-                PanP := PanPrj.DM_ProjectFullPath;
-                if Pos('CustomScripts', PanP) > 0 then
-                begin
-                    Result := ExtractFilePath(PanP);
-                    Exit;
-                end;
+                Result := ExtractFilePath(PanP);
+                Exit;
             end;
         end;
+        PanPrj := PanWS.DM_FocusedProject;
+        if PanPrj <> nil then
+            Result := ExtractFilePath(PanPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -458,43 +455,44 @@ begin
     if PanDir <> '' then
     begin
         PanP := PanDir + 'images\' + PanFileName;
-        if FileExists(PanP) then
-        begin
-            Result := PanP;
-            Exit;
-        end;
+        if FileExists(PanP) then begin Result := PanP; Exit; end;
         PanP := PanDir + PanFileName;
-        if FileExists(PanP) then
-        begin
-            Result := PanP;
-            Exit;
-        end;
+        if FileExists(PanP) then begin Result := PanP; Exit; end;
     end;
     PanP := 'images\' + PanFileName;
-    if FileExists(PanP) then Result := PanP;
+    if FileExists(PanP) then begin Result := PanP; Exit; end;
+    if FileExists(PanFileName) then Result := PanFileName;
 end;
 
 procedure PanCS_TryLoadHelpImage(const PanBmpName : String; const PanPngName : String);
 var
     PanP : String;
+    HadPic : Boolean;
 begin
+    HadPic := False;
+    try
+        if ImageHelp.Picture.Width > 0 then HadPic := True;
+    except
+        HadPic := False;
+    end;
     try
         PanP := PanCS_FindImageFile(PanBmpName);
         if PanP = '' then
             PanP := PanCS_FindImageFile(PanPngName);
+        if PanP = '' then
+            PanP := PanCS_FindImageFile('Panelizer.bmp');
         if (PanP <> '') and FileExists(PanP) then
         begin
             ImageHelp.Picture.LoadFromFile(PanP);
-            LabelImageHint.Caption := 'Replace image: images\' + PanBmpName;
-        end
-        else
-            LabelImageHint.Caption := 'No image. Put ' + PanBmpName + ' in images\ next to the scripts.';
-    except
-        try
-            LabelImageHint.Caption := 'Image not loaded.';
-        except
+            LabelImageHint.Caption := '';
+            Exit;
         end;
+    except
     end;
+    if HadPic then
+        LabelImageHint.Caption := ''
+    else
+        LabelImageHint.Caption := 'No image. Put ' + PanBmpName + ' in images\ next to the scripts.';
 end;
 
 
