@@ -154,17 +154,13 @@ begin
     AddArc(ABoard, PanX0 + PanR, PanY1 - PanR, PanR, 90, 180, PanALayer);
 end;
 
-procedure PanLineIfNeeded(ABoard : IPCB_Board; PanX0, PanY0, PanX1, PanY1 : TCoord; PanALayer : TLayer);
-begin
-    if (PanX0 <> PanX1) or (PanY0 <> PanY1) then
-        AddTrack(ABoard, PanX0, PanY0, PanX1, PanY1, PanALayer);
-end;
-
-{ Один замкнутый контур снимаемого паза на угол. Полуокружность R — внутрь перемычки
-  (dogbone), не в паз. Ширина перемычки TabW между шейками. Без радиальных секущих. }
+{ Вырез: один простой контур на угол (снимаемый паз). Только inward dogbone R
+  внутрь перемычки; внешних «луковиц» в паз нет. Внешний offset D=2R — прямые,
+  острый внешний угол. Шея перемычки = TabW между ближайшими точками дуг. }
 procedure DrawMillAroundBoard(ABoard : IPCB_Board; Col, Row : Integer; PanALayer : TLayer);
 var
-    L, B, Rgt, Tp, D, RR, HalfTab, Mx0, Mx1, My0, My1 : TCoord;
+    L, B, Rgt, Tp, D, RR, HalfNeck, MidX, MidY : TCoord;
+    Mx0, Mx1, My0, My1 : TCoord;
 begin
     L := BoardOriginX(Col);
     B := BoardOriginY(Row);
@@ -173,51 +169,47 @@ begin
     RR := MMsToCoord(FilletR);
     D := RR + RR;
     if D < 1 then Exit;
-    HalfTab := MMsToCoord(TabW) div 2;
-    if HalfTab < 1 then HalfTab := 1;
-    Mx0 := (L + Rgt) div 2 - HalfTab;
-    Mx1 := (L + Rgt) div 2 + HalfTab;
-    My0 := (B + Tp) div 2 - HalfTab;
-    My1 := (B + Tp) div 2 + HalfTab;
-    if Mx0 < L + RR then Mx0 := L + RR;
-    if Mx1 > Rgt - RR then Mx1 := Rgt - RR;
-    if My0 < B + RR then My0 := B + RR;
-    if My1 > Tp - RR then My1 := Tp - RR;
+    { Ближайшие точки двух inward-дуг = TabW: центры раздвигаем на R в каждую сторону. }
+    HalfNeck := MMsToCoord(TabW) div 2;
+    if HalfNeck < 1 then HalfNeck := 1;
+    MidX := (L + Rgt) div 2;
+    MidY := (B + Tp) div 2;
+    Mx0 := MidX - HalfNeck - RR;
+    Mx1 := MidX + HalfNeck + RR;
+    My0 := MidY - HalfNeck - RR;
+    My1 := MidY + HalfNeck + RR;
+    if (Mx0 <= L) or (Mx1 >= Rgt) or (My0 <= B) or (My1 >= Tp) then Exit;
     if (Mx0 >= Mx1) or (My0 >= My1) then Exit;
 
-    { ЮЗ: внутренние кромки + внешний offset D + 90° снаружи + 2 inward dogbone }
+    { ЮЗ: внутренние кромки платы → inward 180° в перемычку → внешний offset, без дуги наружу }
     AddTrack(ABoard, L, B, L, My0, PanALayer);
     AddArc(ABoard, L - RR, My0, RR, 0, 180, PanALayer);
-    PanLineIfNeeded(ABoard, L - D, My0, L - D, B, PanALayer);
-    AddArc(ABoard, L, B, D, 180, 270, PanALayer);
-    PanLineIfNeeded(ABoard, L, B - D, Mx0, B - D, PanALayer);
+    AddTrack(ABoard, L - D, My0, L - D, B - D, PanALayer);
+    AddTrack(ABoard, L - D, B - D, Mx0, B - D, PanALayer);
     AddArc(ABoard, Mx0, B - RR, RR, 270, 90, PanALayer);
     AddTrack(ABoard, Mx0, B, L, B, PanALayer);
 
     { ЮВ }
     AddTrack(ABoard, Rgt, B, Mx1, B, PanALayer);
     AddArc(ABoard, Mx1, B - RR, RR, 90, 270, PanALayer);
-    PanLineIfNeeded(ABoard, Mx1, B - D, Rgt, B - D, PanALayer);
-    AddArc(ABoard, Rgt, B, D, 270, 0, PanALayer);
-    PanLineIfNeeded(ABoard, Rgt + D, B, Rgt + D, My0, PanALayer);
+    AddTrack(ABoard, Mx1, B - D, Rgt + D, B - D, PanALayer);
+    AddTrack(ABoard, Rgt + D, B - D, Rgt + D, My0, PanALayer);
     AddArc(ABoard, Rgt + RR, My0, RR, 0, 180, PanALayer);
     AddTrack(ABoard, Rgt, My0, Rgt, B, PanALayer);
 
     { СВ }
     AddTrack(ABoard, Rgt, Tp, Rgt, My1, PanALayer);
     AddArc(ABoard, Rgt + RR, My1, RR, 180, 0, PanALayer);
-    PanLineIfNeeded(ABoard, Rgt + D, My1, Rgt + D, Tp, PanALayer);
-    AddArc(ABoard, Rgt, Tp, D, 0, 90, PanALayer);
-    PanLineIfNeeded(ABoard, Rgt, Tp + D, Mx1, Tp + D, PanALayer);
+    AddTrack(ABoard, Rgt + D, My1, Rgt + D, Tp + D, PanALayer);
+    AddTrack(ABoard, Rgt + D, Tp + D, Mx1, Tp + D, PanALayer);
     AddArc(ABoard, Mx1, Tp + RR, RR, 270, 90, PanALayer);
     AddTrack(ABoard, Mx1, Tp, Rgt, Tp, PanALayer);
 
     { СЗ }
     AddTrack(ABoard, L, Tp, Mx0, Tp, PanALayer);
     AddArc(ABoard, Mx0, Tp + RR, RR, 90, 270, PanALayer);
-    PanLineIfNeeded(ABoard, Mx0, Tp + D, L, Tp + D, PanALayer);
-    AddArc(ABoard, L, Tp, D, 90, 180, PanALayer);
-    PanLineIfNeeded(ABoard, L - D, Tp, L - D, My1, PanALayer);
+    AddTrack(ABoard, Mx0, Tp + D, L - D, Tp + D, PanALayer);
+    AddTrack(ABoard, L - D, Tp + D, L - D, My1, PanALayer);
     AddArc(ABoard, L - RR, My1, RR, 180, 0, PanALayer);
     AddTrack(ABoard, L, My1, L, Tp, PanALayer);
 end;

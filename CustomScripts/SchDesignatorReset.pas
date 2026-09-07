@@ -1,7 +1,8 @@
 ﻿{..............................................................................}
 { SchDesignatorReset.pas                                                        }
 { Сброс десигнаторов и аннотация всего проекта: Down then Across.              }
-{ Обход: SchDoc/Comp.Iterator_Create (не SchIterator_Create). DESIGNATOR.Text.  }
+{ Обход: GetSchComponentCount / GetSchComponent (в !SCRIPTS нет Sch-итератора). }
+{ Запись: GetState_SchDesignator.Text (= параметр DESIGNATOR).                  }
 {..............................................................................}
 
 var
@@ -54,65 +55,20 @@ begin
 end;
 
 function SchDesText(SchComp : ISch_Component) : String;
-var
-    SchIt : ISch_Iterator;
-    SchP : ISch_Parameter;
-    PName : String;
 begin
-    { Не Comp.Designator — в этом диалекте идентификатор Designator нет. }
+    { Не Comp.Designator. DESIGNATOR = GetState_SchDesignator.Text. }
     Result := '';
     try
-        SchIt := SchComp.Iterator_Create;
-        SchIt.AddFilter_ObjectSet(MkSet(eParameter));
-        SchP := SchIt.FirstSchObject;
-        while SchP <> nil do
-        begin
-            PName := '';
-            try PName := SchP.Name; except PName := ''; end;
-            if UpperCase(PName) = 'DESIGNATOR' then
-            begin
-                try Result := SchP.Text; except Result := ''; end;
-                SchComp.Iterator_Destroy(SchIt);
-                Exit;
-            end;
-            SchP := SchIt.NextSchObject;
-        end;
-        SchComp.Iterator_Destroy(SchIt);
+        Result := SchComp.GetState_SchDesignator.Text;
     except
         Result := '';
-    end;
-    if Result = '' then
-    begin
-        try
-            Result := SchComp.GetState_SchDesignator.Text;
-        except
-        end;
     end;
 end;
 
 procedure SchSetDes(SchComp : ISch_Component; const NewT : String);
-var
-    SchIt : ISch_Iterator;
-    SchP : ISch_Parameter;
-    PName : String;
 begin
     try
-        SchIt := SchComp.Iterator_Create;
-        SchIt.AddFilter_ObjectSet(MkSet(eParameter));
-        SchP := SchIt.FirstSchObject;
-        while SchP <> nil do
-        begin
-            PName := '';
-            try PName := SchP.Name; except PName := ''; end;
-            if UpperCase(PName) = 'DESIGNATOR' then
-            begin
-                SchP.Text := NewT;
-                SchComp.Iterator_Destroy(SchIt);
-                Exit;
-            end;
-            SchP := SchIt.NextSchObject;
-        end;
-        SchComp.Iterator_Destroy(SchIt);
+        SchComp.GetState_SchDesignator.Text := NewT;
     except
     end;
 end;
@@ -138,7 +94,7 @@ end;
 
 procedure ResetSheet(SchSchDoc : ISch_Document);
 var
-    SchIter : ISch_Iterator;
+    Schi, Schn : Integer;
     SchComp : ISch_Component;
     Text : String;
     Pref : String;
@@ -146,11 +102,11 @@ begin
     if SchSchDoc = nil then Exit;
     SchServer.ProcessControl.PreProcess(SchSchDoc, '');
     try
-        SchIter := SchSchDoc.Iterator_Create;
-        SchIter.AddFilter_ObjectSet(MkSet(eSchComponent));
-        SchComp := SchIter.FirstSchObject;
-        while SchComp <> nil do
+        Schn := SchSchDoc.GetSchComponentCount;
+        for Schi := 0 to Schn - 1 do
         begin
+            SchComp := SchSchDoc.GetSchComponent(Schi);
+            if SchComp = nil then Continue;
             if not CompKindExcluded(SchComp) then
             begin
                 if IsLockedDesignator(SchComp) then
@@ -166,9 +122,7 @@ begin
                     end;
                 end;
             end;
-            SchComp := SchIter.NextSchObject;
         end;
-        SchSchDoc.Iterator_Destroy(SchIter);
         SchSchDoc.GraphicallyInvalidate;
     finally
         SchServer.ProcessControl.PostProcess(SchSchDoc, '');
@@ -177,10 +131,9 @@ end;
 
 procedure AnnotateSheet(SchSchDoc : ISch_Document);
 var
-    SchIter : ISch_Iterator;
     SchComp : ISch_Component;
     SchList : TStringList;
-    Schi : Integer;
+    Schi, Schn : Integer;
     Prefix : String;
     SchIdx, Num : Integer;
     SchX, SchY : Integer;
@@ -190,23 +143,20 @@ begin
     SchList := TStringList.Create;
     SchServer.ProcessControl.PreProcess(SchSchDoc, '');
     try
-        SchIter := SchSchDoc.Iterator_Create;
-        SchIter.AddFilter_ObjectSet(MkSet(eSchComponent));
-        SchComp := SchIter.FirstSchObject;
-        while SchComp <> nil do
+        Schn := SchSchDoc.GetSchComponentCount;
+        for Schi := 0 to Schn - 1 do
         begin
+            SchComp := SchSchDoc.GetSchComponent(Schi);
+            if SchComp = nil then Continue;
             if (not CompKindExcluded(SchComp)) and (not IsLockedDesignator(SchComp)) then
             begin
                 SchX := SchComp.Location.X;
                 SchY := SchComp.Location.Y;
-                { Down then Across: колонка = корзина X, внутри колонки Y сверху вниз.
-                  Без корзины компоненты одной колонки с разным X шли бы как отдельные столбцы. }
+                { Down then Across: колонка = корзина X, внутри колонки Y сверху вниз. }
                 SortKey := SchPadNum(SchX div 100, 8) + '|' + SchPadNum(2000000000 - SchY, 10);
                 SchList.AddObject(SortKey, SchComp);
             end;
-            SchComp := SchIter.NextSchObject;
         end;
-        SchSchDoc.Iterator_Destroy(SchIter);
 
         SchList.Sorted := True;
 

@@ -469,6 +469,7 @@ var
     LName : String;
 begin
     LName := 'HOLES';
+    { PCB iterator: Board.BoardIterator_Create — AutoPlaceSilkscreen.pas:374, Auto_Panelizer.pas:112. }
     DxfIter := DxfBoard.BoardIterator_Create;
     DxfIter.AddFilter_ObjectSet(MkSet(ePadObject, eViaObject));
     DxfIter.AddFilter_LayerSet(AllLayers);

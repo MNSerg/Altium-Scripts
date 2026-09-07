@@ -94,14 +94,13 @@ begin
     end;
 end;
 
-function ParamVal(BomComp : ISch_Component; const BomNames : String) : String;
+function ParamVal(BomComp : IComponent; const BomNames : String) : String;
 var
-    BomIter : ISch_Iterator;
-    BomP : ISch_Parameter;
     Rest, BomName, PName, PText : String;
-    PosSep : Integer;
+    PosSep, Bomj, Bomn : Integer;
+    BomP : IParameter;
 begin
-    { Имя параметра читаем обходом ISch_Parameter (eParameter). }
+    { Параметры через IDocument.DM_Components / DM_Parameters (индекс, без Sch-итератора). }
     Result := '';
     Rest := BomNames;
     while Rest <> '' do
@@ -118,35 +117,34 @@ begin
             Rest := '';
         end;
         try
-            BomIter := BomComp.Iterator_Create;
-            BomIter.AddFilter_ObjectSet(MkSet(eParameter));
-            BomP := BomIter.FirstSchObject;
-            while BomP <> nil do
+            Bomn := BomComp.DM_ParameterCount;
+            for Bomj := 0 to Bomn - 1 do
             begin
+                BomP := BomComp.DM_Parameters(Bomj);
                 PName := '';
                 PText := '';
-                try PName := BomP.Name; except PName := ''; end;
+                try PName := BomP.DM_Name; except PName := ''; end;
                 if UpperCase(PName) = UpperCase(BomName) then
                 begin
-                    try PText := BomP.Text; except PText := ''; end;
+                    try PText := BomP.DM_Value; except PText := ''; end;
                     if PText <> '' then
                     begin
                         Result := PText;
-                        BomComp.Iterator_Destroy(BomIter);
                         Exit;
                     end;
                 end;
-                BomP := BomIter.NextSchObject;
             end;
-            BomComp.Iterator_Destroy(BomIter);
         except
         end;
     end;
 end;
 
-function FootprintOf(BomComp : ISch_Component) : String;
+function FootprintOf(BomComp : IComponent) : String;
 begin
-    Result := ParamVal(BomComp, 'Footprint|PCBFootprint');
+    Result := '';
+    try Result := BomComp.DM_FootPrint; except Result := ''; end;
+    if Result = '' then
+        Result := ParamVal(BomComp, 'Footprint|PCBFootprint');
 end;
 
 procedure AddPart(const BomDes, Comment, Description, Footprint, Value : String);
@@ -178,29 +176,45 @@ begin
     end;
 end;
 
-procedure HarvestSchDoc(BomDoc : ISch_Document);
+procedure HarvestDmDoc(BomLogDoc : IDocument);
 var
-    BomIter : ISch_Iterator;
-    BomComp : ISch_Component;
+    Bomi, Bomn : Integer;
+    BomComp : IComponent;
     BomDes, Comment, Desc, Fp, BomVal : String;
 begin
-    if BomDoc = nil then Exit;
-    BomIter := BomDoc.Iterator_Create;
-    BomIter.AddFilter_ObjectSet(MkSet(eSchComponent));
-    BomComp := BomIter.FirstSchObject;
-    while BomComp <> nil do
+    { Индексный обход IDocument (тот же DM_, что Auto_Panelizer.pas: DM_FocusedProject).
+      В !SCRIPTS нет schematic-итератора — Create не используем. }
+    if BomLogDoc = nil then Exit;
+    try
+        Bomn := BomLogDoc.DM_ComponentCount;
+    except
+        Bomn := 0;
+    end;
+    for Bomi := 0 to Bomn - 1 do
     begin
-        { Ничего не исключаем: DNP, графические, NoBOM, механические — всё. }
-        BomDes := ParamVal(BomComp, 'Designator');
-        Comment := ParamVal(BomComp, 'Comment');
+        BomComp := BomLogDoc.DM_Components(Bomi);
+        if BomComp = nil then Continue;
+        BomDes := '';
+        Comment := '';
+        Desc := '';
+        Fp := '';
+        BomVal := '';
+        try BomDes := BomComp.DM_PhysicalDesignator; except BomDes := ''; end;
+        if BomDes = '' then
+        try BomDes := BomComp.DM_LogicalDesignator; except BomDes := ''; end;
+        if BomDes = '' then
+            BomDes := ParamVal(BomComp, 'Designator');
+        try Comment := BomComp.DM_Comment; except Comment := ''; end;
+        if Comment = '' then
+            Comment := ParamVal(BomComp, 'Comment');
+        try BomVal := BomComp.DM_Value; except BomVal := ''; end;
+        if BomVal = '' then
+            BomVal := ParamVal(BomComp, 'Value');
+        if BomVal = '' then BomVal := Comment;
         Desc := ParamVal(BomComp, 'Description|Part Description');
         Fp := FootprintOf(BomComp);
-        BomVal := ParamVal(BomComp, 'Value');
-        if BomVal = '' then BomVal := Comment;
         AddPart(BomDes, Comment, Desc, Fp, BomVal);
-        BomComp := BomIter.NextSchObject;
     end;
-    BomDoc.Iterator_Destroy(BomIter);
 end;
 
 procedure HarvestFromProject;
@@ -209,7 +223,6 @@ var
     BomProject : IProject;
     Bomi : Integer;
     BomLogDoc : IDocument;
-    BomSchDoc : ISch_Document;
     BomBoard : IPCB_Board;
     BomCmp : IPCB_Component;
     BomIter : IPCB_BoardIterator;
@@ -227,26 +240,18 @@ begin
     end;
     if BomTitle = '' then BomTitle := 'BOM';
 
-    if SchServer <> nil then
+    if BomProject <> nil then
     begin
-        if BomProject <> nil then
+        try
+            BomProject.DM_Compile;
+        except
+        end;
+        for Bomi := 0 to BomProject.DM_LogicalDocumentCount - 1 do
         begin
-            for Bomi := 0 to BomProject.DM_LogicalDocumentCount - 1 do
-            begin
-                BomLogDoc := BomProject.DM_LogicalDocuments(Bomi);
-                if (BomLogDoc.DM_DocumentKind = 'SCH') or (BomLogDoc.DM_DocumentKind = 'SCHDOC') then
-                begin
-                    try
-                        SchServer.LoadSchDocumentByPath(BomLogDoc.DM_FullPath);
-                    except
-                    end;
-                    BomSchDoc := SchServer.GetSchDocumentByPath(BomLogDoc.DM_FullPath);
-                    if BomSchDoc <> nil then HarvestSchDoc(BomSchDoc);
-                end;
-            end;
-        end
-        else if SchServer.GetCurrentSchDocument <> nil then
-            HarvestSchDoc(SchServer.GetCurrentSchDocument);
+            BomLogDoc := BomProject.DM_LogicalDocuments(Bomi);
+            if (BomLogDoc.DM_DocumentKind = 'SCH') or (BomLogDoc.DM_DocumentKind = 'SCHDOC') then
+                HarvestDmDoc(BomLogDoc);
+        end;
     end;
 
     if Groups.Count > 0 then Exit;

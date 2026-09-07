@@ -134,6 +134,66 @@ begin
     end;
 end;
 
+function RectInsideOutline(SilL, SilB, SilR, SilT : TCoord) : Boolean;
+var
+    RR : TCoordRect;
+begin
+    { AutoPlaceSilkscreen.pas:355 — BoardOutline.PointInPolygon на все 4 угла. }
+    Result := False;
+    try
+        if not SilBoard.BoardOutline.PointInPolygon(SilL, SilB) then Exit;
+        if not SilBoard.BoardOutline.PointInPolygon(SilL, SilT) then Exit;
+        if not SilBoard.BoardOutline.PointInPolygon(SilR, SilB) then Exit;
+        if not SilBoard.BoardOutline.PointInPolygon(SilR, SilT) then Exit;
+        Result := True;
+        Exit;
+    except
+    end;
+    try
+        RR := SilBoard.BoardOutline.BoundingRectangle;
+        Result := (SilL >= RR.Left) and (SilB >= RR.Bottom) and (SilR <= RR.Right) and (SilT <= RR.Top);
+    except
+        Result := False;
+    end;
+end;
+
+function NameHitsSilk(SilL, SilB, SilR, SilT : TCoord; SkipCmp : IPCB_Component; SilkLayer : TLayer) : Boolean;
+var
+    SIter : IPCB_SpatialIterator;
+    SilPrim : IPCB_Primitive;
+    RR : TCoordRect;
+    NameAddr : Integer;
+begin
+    Result := False;
+    NameAddr := 0;
+    try
+        if (SkipCmp <> nil) and (SkipCmp.Name <> nil) then
+            NameAddr := SkipCmp.Name.I_ObjectAddress;
+    except
+        NameAddr := 0;
+    end;
+    SIter := SilBoard.SpatialIterator_Create;
+    SIter.AddFilter_ObjectSet(MkSet(eTextObject));
+    SIter.AddFilter_LayerSet(MkSet(SilkLayer));
+    SIter.AddFilter_Area(SilL, SilB, SilR, SilT);
+    SilPrim := SIter.FirstPCBObject;
+    while SilPrim <> nil do
+    begin
+        if (NameAddr = 0) or (SilPrim.I_ObjectAddress <> NameAddr) then
+        begin
+            RR := SilPrim.BoundingRectangle;
+            if RectsOverlap(SilL, SilB, SilR, SilT, RR.Left, RR.Bottom, RR.Right, RR.Top) then
+            begin
+                Result := True;
+                SilBoard.SpatialIterator_Destroy(SIter);
+                Exit;
+            end;
+        end;
+        SilPrim := SIter.NextPCBObject;
+    end;
+    SilBoard.SpatialIterator_Destroy(SIter);
+end;
+
 function NameHitsPad(SilL, SilB, SilR, SilT : TCoord; SkipCmp : IPCB_Component) : Boolean;
 var
     Extra : TCoord;
@@ -272,9 +332,7 @@ procedure PlaceOne(SilCmp : IPCB_Component);
 var
     Txt : IPCB_Text;
     Court : TCoordRect;
-    BestScore, Score, Step, Dir : Integer;
-    BestX, BestY : TCoord;
-    Best90 : Boolean;
+    Score, Step, Dir : Integer;
     TW, TH : TCoord;
     SilL, SilB, SilR, SilT : TCoord;
     Gap, Extra : TCoord;
@@ -282,10 +340,14 @@ var
     Use90 : Boolean;
     SilkLayer : TLayer;
     PadHit : Boolean;
-    BestFreeScore : Integer;
-    BestFreeX, BestFreeY : TCoord;
-    BestFree90 : Boolean;
-    HaveFree : Boolean;
+    SilkHit : Boolean;
+    Inside : Boolean;
+    Legal : Boolean;
+    BestLegalScore : Integer;
+    BestLegalX, BestLegalY : TCoord;
+    BestLegal90 : Boolean;
+    HaveLegal : Boolean;
+    Inward : Integer;
 begin
     Txt := SilCmp.Name;
     if Txt = nil then Exit;
@@ -317,100 +379,93 @@ begin
     SilCX := (Court.Left + Court.Right) div 2;
     SilCY := (Court.Bottom + Court.Top) div 2;
 
-    BestScore := 100000;
-    BestX := Txt.XLocation;
-    BestY := Txt.YLocation;
-    Best90 := False;
-    BestFreeScore := 100000;
-    BestFreeX := BestX;
-    BestFreeY := BestY;
-    BestFree90 := False;
-    HaveFree := False;
+    BestLegalScore := 100000;
+    BestLegalX := Txt.XLocation;
+    BestLegalY := Txt.YLocation;
+    BestLegal90 := False;
+    HaveLegal := False;
 
-    { Больше смещений; площадки — жёсткий запрет, если есть свободный кандидат. }
-    for Step := 0 to 14 do
+    { Снаружи courtyard и внутрь к центру. Легальный = внутри контура, не пад, не чужой шелк. }
+    for Step := 0 to 16 do
     begin
         Extra := Gap + MMsToCoord(0.15) * Step;
-        for Dir := 0 to 15 do
+        for Inward := 0 to 8 do
         begin
-            Use90 := False;
-            CandX := SilCX;
-            CandY := SilCY;
-            case Dir of
-                0: begin CandX := SilCX; CandY := Court.Top + Extra + TH div 2; end;
-                1: begin CandX := SilCX; CandY := Court.Bottom - Extra - TH div 2; end;
-                2: begin CandX := Court.Right + Extra + TH div 2; CandY := SilCY; Use90 := True; end;
-                3: begin CandX := Court.Left - Extra - TH div 2; CandY := SilCY; Use90 := True; end;
-                4: begin CandX := Court.Right + Extra + TW div 2; CandY := Court.Top + Extra + TH div 2; end;
-                5: begin CandX := Court.Left - Extra - TW div 2; CandY := Court.Top + Extra + TH div 2; end;
-                6: begin CandX := Court.Right + Extra + TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
-                7: begin CandX := Court.Left - Extra - TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
-                8: begin CandX := Court.Right - TW div 2; CandY := Court.Top + Extra + TH div 2; end;
-                9: begin CandX := Court.Left + TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
-                10: begin CandX := Court.Right + Extra + TH div 2; CandY := Court.Top - TH; Use90 := True; end;
-                11: begin CandX := Court.Left - Extra - TH div 2; CandY := Court.Bottom + TH; Use90 := True; end;
-                12: begin CandX := SilCX + TW; CandY := Court.Top + Extra + TH div 2; end;
-                13: begin CandX := SilCX - TW; CandY := Court.Bottom - Extra - TH div 2; end;
-                14: begin CandX := Court.Right + Extra + TH; CandY := SilCY + TH; Use90 := True; end;
-                15: begin CandX := Court.Left - Extra - TH; CandY := SilCY - TH; Use90 := True; end;
-            end;
-            if Use90 then
+            Extra := Gap + MMsToCoord(0.15) * Step - MMsToCoord(0.15) * Inward;
+            for Dir := 0 to 15 do
             begin
-                SilL := CandX - TH div 2;
-                SilR := CandX + TH div 2;
-                SilB := CandY - TW div 2;
-                SilT := CandY + TW div 2;
-            end
-            else
-            begin
-                SilL := CandX - TW div 2;
-                SilR := CandX + TW div 2;
-                SilB := CandY - TH div 2;
-                SilT := CandY + TH div 2;
-            end;
-            PadHit := NameHitsPad(SilL, SilB, SilR, SilT, SilCmp);
-            Score := CollisionScore(SilL, SilB, SilR, SilT, SilCmp, SilkLayer);
-            if PadHit then
-                Score := Score + 1000;
-            if (not PadHit) then
-            begin
-                HaveFree := True;
-                if Score < BestFreeScore then
+                Use90 := False;
+                CandX := SilCX;
+                CandY := SilCY;
+                case Dir of
+                    0: begin CandX := SilCX; CandY := Court.Top + Extra + TH div 2; end;
+                    1: begin CandX := SilCX; CandY := Court.Bottom - Extra - TH div 2; end;
+                    2: begin CandX := Court.Right + Extra + TH div 2; CandY := SilCY; Use90 := True; end;
+                    3: begin CandX := Court.Left - Extra - TH div 2; CandY := SilCY; Use90 := True; end;
+                    4: begin CandX := Court.Right + Extra + TW div 2; CandY := Court.Top + Extra + TH div 2; end;
+                    5: begin CandX := Court.Left - Extra - TW div 2; CandY := Court.Top + Extra + TH div 2; end;
+                    6: begin CandX := Court.Right + Extra + TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
+                    7: begin CandX := Court.Left - Extra - TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
+                    8: begin CandX := Court.Right - TW div 2; CandY := Court.Top + Extra + TH div 2; end;
+                    9: begin CandX := Court.Left + TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
+                    10: begin CandX := Court.Right + Extra + TH div 2; CandY := Court.Top - TH; Use90 := True; end;
+                    11: begin CandX := Court.Left - Extra - TH div 2; CandY := Court.Bottom + TH; Use90 := True; end;
+                    12: begin CandX := SilCX + TW; CandY := Court.Top + Extra + TH div 2; end;
+                    13: begin CandX := SilCX - TW; CandY := Court.Bottom - Extra - TH div 2; end;
+                    14: begin CandX := Court.Right + Extra + TH; CandY := SilCY + TH; Use90 := True; end;
+                    15: begin CandX := Court.Left - Extra - TH; CandY := SilCY - TH; Use90 := True; end;
+                end;
+                if Use90 then
                 begin
-                    BestFreeScore := Score;
-                    BestFreeX := CandX;
-                    BestFreeY := CandY;
-                    BestFree90 := Use90;
+                    SilL := CandX - TH div 2;
+                    SilR := CandX + TH div 2;
+                    SilB := CandY - TW div 2;
+                    SilT := CandY + TW div 2;
+                end
+                else
+                begin
+                    SilL := CandX - TW div 2;
+                    SilR := CandX + TW div 2;
+                    SilB := CandY - TH div 2;
+                    SilT := CandY + TH div 2;
+                end;
+                Inside := RectInsideOutline(SilL, SilB, SilR, SilT);
+                PadHit := NameHitsPad(SilL, SilB, SilR, SilT, SilCmp);
+                SilkHit := NameHitsSilk(SilL, SilB, SilR, SilT, SilCmp, SilkLayer);
+                Legal := Inside and (not PadHit) and (not SilkHit);
+                if Legal then
+                begin
+                    Score := CollisionScore(SilL, SilB, SilR, SilT, SilCmp, SilkLayer);
+                    HaveLegal := True;
+                    if Score < BestLegalScore then
+                    begin
+                        BestLegalScore := Score;
+                        BestLegalX := CandX;
+                        BestLegalY := CandY;
+                        BestLegal90 := Use90;
+                    end;
+                    if BestLegalScore = 0 then Break;
                 end;
             end;
-            if Score < BestScore then
-            begin
-                BestScore := Score;
-                BestX := CandX;
-                BestY := CandY;
-                Best90 := Use90;
-            end;
-            if HaveFree and (BestFreeScore = 0) then Break;
+            if HaveLegal and (BestLegalScore = 0) then Break;
         end;
-        if HaveFree and (BestFreeScore = 0) then Break;
+        if HaveLegal and (BestLegalScore = 0) then Break;
     end;
 
-    if HaveFree then
+    if not HaveLegal then
     begin
-        BestX := BestFreeX;
-        BestY := BestFreeY;
-        Best90 := BestFree90;
-        BestScore := BestFreeScore;
+        Inc(SkipCnt);
+        Exit;
     end;
 
     Txt.BeginModify;
     SilCmp.ChangeNameAutoposition := eAutoPos_Manual;
-    ApplyRotationForReadability(Txt, SilCmp, Best90);
-    Txt.MoveToXY(BestX, BestY);
+    ApplyRotationForReadability(Txt, SilCmp, BestLegal90);
+    Txt.MoveToXY(BestLegalX, BestLegalY);
     Txt.EndModify;
     Txt.GraphicallyInvalidate;
     Inc(MovedCnt);
-    if BestScore > 0 then Inc(FailCnt);
+    if BestLegalScore > 0 then Inc(FailCnt);
 end;
 
 procedure DoPlace;
