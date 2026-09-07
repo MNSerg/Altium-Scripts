@@ -159,86 +159,52 @@ begin
     end;
 end;
 
-function SilField(const SilS : String; SilIdx : Integer) : String;
-var
-    Rest : String;
-    P, N : Integer;
-begin
-    Rest := SilS;
-    N := 0;
-    Result := '';
-    while Rest <> '' do
-    begin
-        P := Pos(#9, Rest);
-        if P = 0 then
-        begin
-            if N = SilIdx then Result := Rest;
-            Exit;
-        end;
-        if N = SilIdx then
-        begin
-            Result := Copy(Rest, 1, P - 1);
-            Exit;
-        end;
-        Rest := Copy(Rest, P + 1, Length(Rest));
-        Inc(N);
-    end;
-end;
-
-procedure SilCacheAdd(SilList : TStringList; SilL, SilB, SilR, SilT, SilAddr : TCoord);
-begin
-    SilList.Add(IntToStr(SilL) + #9 + IntToStr(SilB) + #9 + IntToStr(SilR) + #9 +
-                IntToStr(SilT) + #9 + IntToStr(SilAddr));
-end;
-
 function NameHitsSilk(SilL, SilB, SilR, SilT : TCoord; SkipCmp : IPCB_Component; SilkLayer : TLayer) : Boolean;
 var
     Sili : Integer;
-    NL, NB, NR, NT, NameAddr, SkipAddr : Integer;
+    Txt : IPCB_Text;
+    RR : TCoordRect;
+    SkipTxt : IPCB_Text;
 begin
     Result := False;
-    SkipAddr := 0;
+    SkipTxt := nil;
     try
-        if (SkipCmp <> nil) and (SkipCmp.Name <> nil) then
-            SkipAddr := SkipCmp.Name.I_ObjectAddress;
+        if SkipCmp <> nil then SkipTxt := SkipCmp.Name;
     except
-        SkipAddr := 0;
+        SkipTxt := nil;
     end;
-    if SilNameCache <> nil then
+    if SilNameCache = nil then Exit;
+    for Sili := 0 to SilNameCache.Count - 1 do
     begin
-        for Sili := 0 to SilNameCache.Count - 1 do
+        Txt := SilNameCache.Objects[Sili];
+        if Txt = nil then Continue;
+        if (SkipTxt <> nil) and (Txt = SkipTxt) then Continue;
+        RR := Txt.BoundingRectangle;
+        if RectsOverlap(SilL, SilB, SilR, SilT, RR.Left, RR.Bottom, RR.Right, RR.Top) then
         begin
-            NameAddr := StrToInt(SilField(SilNameCache[Sili], 4));
-            if (SkipAddr <> 0) and (NameAddr = SkipAddr) then Continue;
-            NL := StrToInt(SilField(SilNameCache[Sili], 0));
-            NB := StrToInt(SilField(SilNameCache[Sili], 1));
-            NR := StrToInt(SilField(SilNameCache[Sili], 2));
-            NT := StrToInt(SilField(SilNameCache[Sili], 3));
-            if RectsOverlap(SilL, SilB, SilR, SilT, NL, NB, NR, NT) then
-            begin
-                Result := True;
-                Exit;
-            end;
+            Result := True;
+            Exit;
         end;
-        Exit;
     end;
 end;
 
 function NameHitsPad(SilL, SilB, SilR, SilT : TCoord; SkipCmp : IPCB_Component) : Boolean;
 var
     Sili : Integer;
-    PL, PB, PR, PT, Dummy : Integer;
+    SilPad : IPCB_Pad;
+    RR : TCoordRect;
+    Extra : TCoord;
 begin
     Result := False;
     if SilPadCache = nil then Exit;
+    Extra := MMsToCoord(cPadClearMM);
     for Sili := 0 to SilPadCache.Count - 1 do
     begin
-        PL := StrToInt(SilField(SilPadCache[Sili], 0));
-        PB := StrToInt(SilField(SilPadCache[Sili], 1));
-        PR := StrToInt(SilField(SilPadCache[Sili], 2));
-        PT := StrToInt(SilField(SilPadCache[Sili], 3));
-        Dummy := StrToInt(SilField(SilPadCache[Sili], 4));
-        if RectsOverlap(SilL, SilB, SilR, SilT, PL, PB, PR, PT) then
+        SilPad := SilPadCache.Objects[Sili];
+        if SilPad = nil then Continue;
+        RR := SilPad.BoundingRectangle;
+        if RectsOverlap(SilL, SilB, SilR, SilT,
+            RR.Left - Extra, RR.Bottom - Extra, RR.Right + Extra, RR.Top + Extra) then
         begin
             Result := True;
             Exit;
@@ -252,11 +218,7 @@ var
     SilPad : IPCB_Pad;
     SilCmp : IPCB_Component;
     Txt : IPCB_Text;
-    RR : TCoordRect;
-    Extra : TCoord;
-    Addr : Integer;
 begin
-    Extra := MMsToCoord(cPadClearMM);
     SilIter := SilBoard.BoardIterator_Create;
     SilIter.AddFilter_ObjectSet(MkSet(ePadObject));
     SilIter.AddFilter_LayerSet(MkSet(eMultiLayer, eTopLayer, eBottomLayer));
@@ -264,9 +226,7 @@ begin
     SilPad := SilIter.FirstPCBObject;
     while SilPad <> nil do
     begin
-        RR := SilPad.BoundingRectangle;
-        SilCacheAdd(SilPadCache, RR.Left - Extra, RR.Bottom - Extra,
-                    RR.Right + Extra, RR.Top + Extra, 0);
+        SilPadCache.AddObject('P', SilPad);
         SilPad := SilIter.NextPCBObject;
     end;
     SilBoard.BoardIterator_Destroy(SilIter);
@@ -280,12 +240,7 @@ begin
     begin
         Txt := SilCmp.Name;
         if Txt <> nil then
-        begin
-            RR := Txt.BoundingRectangle;
-            Addr := 0;
-            try Addr := Txt.I_ObjectAddress; except Addr := 0; end;
-            SilCacheAdd(SilNameCache, RR.Left, RR.Bottom, RR.Right, RR.Top, Addr);
-        end;
+            SilNameCache.AddObject('N', Txt);
         SilCmp := SilIter.NextPCBObject;
     end;
     SilBoard.BoardIterator_Destroy(SilIter);

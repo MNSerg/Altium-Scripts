@@ -95,49 +95,9 @@ begin
 end;
 
 function ParamVal(BomComp : IComponent; const BomNames : String) : String;
-var
-    Rest, BomName, PName, PText : String;
-    PosSep, Bomj, Bomn : Integer;
-    BomP : IParameter;
 begin
-    { Параметры через IDocument.DM_Components / DM_Parameters (индекс, без Sch-итератора). }
+    { Нет безопасного getter значения параметра (DM_Value / DM_PhysicalValue undeclared). }
     Result := '';
-    Rest := BomNames;
-    while Rest <> '' do
-    begin
-        PosSep := Pos('|', Rest);
-        if PosSep > 0 then
-        begin
-            BomName := Copy(Rest, 1, PosSep - 1);
-            Rest := Copy(Rest, PosSep + 1, Length(Rest));
-        end
-        else
-        begin
-            BomName := Rest;
-            Rest := '';
-        end;
-        try
-            Bomn := BomComp.DM_ParameterCount;
-            for Bomj := 0 to Bomn - 1 do
-            begin
-                BomP := BomComp.DM_Parameters(Bomj);
-                PName := '';
-                PText := '';
-                try PName := BomP.DM_Name; except PName := ''; end;
-                if UpperCase(PName) = UpperCase(BomName) then
-                begin
-                    { Не DM_Value — в этом диалекте нет. IParameter: DM_PhysicalValue. }
-                    try PText := BomP.DM_PhysicalValue; except PText := ''; end;
-                    if PText <> '' then
-                    begin
-                        Result := PText;
-                        Exit;
-                    end;
-                end;
-            end;
-        except
-        end;
-    end;
 end;
 
 function FootprintOf(BomComp : IComponent) : String;
@@ -206,11 +166,8 @@ begin
         if BomDes = '' then
             BomDes := ParamVal(BomComp, 'Designator');
         try Comment := BomComp.DM_Comment; except Comment := ''; end;
-        if Comment = '' then
-            Comment := ParamVal(BomComp, 'Comment');
-        BomVal := ParamVal(BomComp, 'Value');
-        if BomVal = '' then BomVal := Comment;
-        Desc := ParamVal(BomComp, 'Description|Part Description');
+        BomVal := Comment;
+        Desc := '';
         Fp := FootprintOf(BomComp);
         AddPart(BomDes, Comment, Desc, Fp, BomVal);
     end;

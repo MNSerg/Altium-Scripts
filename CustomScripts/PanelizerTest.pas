@@ -109,13 +109,13 @@ begin
     end;
 end;
 
-function PTstAddTrack(ABoard : IPCB_Board; PTstX1, PTstY1, PanX2, PanY2 : TCoord; PTstALayer : TLayer) : IPCB_Track;
+function PTstAddTrack(ABoard : IPCB_Board; PTstX1, PTstY1, PTstX2, PTstY2 : TCoord; PTstALayer : TLayer) : IPCB_Track;
 begin
     Result := PCBServer.PCBObjectFactory(eTrackObject, eNoDimension, eCreate_Default);
     Result.X1 := PTstX1;
     Result.Y1 := PTstY1;
-    Result.X2 := PanX2;
-    Result.Y2 := PanY2;
+    Result.X2 := PTstX2;
+    Result.Y2 := PTstY2;
     Result.Layer := PTstALayer;
     Result.Width := PTstLineW;
     ABoard.AddPCBObject(Result);
@@ -130,7 +130,7 @@ begin
     Result.StartAngle := PTstSa;
     Result.EndAngle := PTstEa;
     Result.Layer := PTstALayer;
-    Result.PTstLineWidth := PTstLineW;
+    Result.LineWidth := PTstLineW;
     ABoard.AddPCBObject(Result);
 end;
 
@@ -154,15 +154,34 @@ begin
     PTstAddArc(ABoard, PTstX0 + PTstR, PTstY1 - PTstR, PTstR, 90, 180, PTstALayer);
 end;
 
-{ Вырез: один простой контур на угол (снимаемый паз). Только inward dogbone R
-  внутрь перемычки; внешних «луковиц» в паз нет. Внешний offset D=2R — прямые,
-  острый внешний угол. Шея перемычки = PTstTabW между ближайшими точками дуг. }
-function PTstNeck(L, Rgt, B, Tp : TCoord; var Mx0, Mx1, My0, My1, RR : TCoord) : Boolean;
+{ Вырез как Panelizer 50c84c3; общий вертикальный канал — один раз (SkipWest). }
+
+procedure PTstDrawBoardCell(ABoard : IPCB_Board; Col, Row : Integer; PTstALayer : TLayer);
 var
-    HalfNeck, MidX, MidY : TCoord;
+    L, B, Rgt, Tp : TCoord;
 begin
-    Result := False;
+    L := PTstBoardOriginX(Col);
+    B := PTstBoardOriginY(Row);
+    Rgt := L + MMsToCoord(PTstBoardW);
+    Tp := B + MMsToCoord(PTstBoardH);
+    PTstDrawRoundedRect(ABoard, L, B, Rgt, Tp, 0, PTstALayer);
+end;
+
+procedure PTstDrawMillAroundBoard(ABoard : IPCB_Board; Col, Row : Integer; PTstALayer : TLayer);
+var
+    L, B, Rgt, Tp, D, RR, HalfNeck, MidX, MidY : TCoord;
+    Mx0, Mx1, My0, My1 : TCoord;
+    SkipWest : Boolean;
+begin
+    { Mill как Panelizer 50c84c3: верх/право те же углы. Col>0 — не дублировать запад. }
+    L := PTstBoardOriginX(Col);
+    B := PTstBoardOriginY(Row);
+    Rgt := L + MMsToCoord(PTstBoardW);
+    Tp := B + MMsToCoord(PTstBoardH);
     RR := MMsToCoord(PTstFilletR);
+    D := MMsToCoord(PTstOffMM);
+    if D < 1 then D := RR + RR;
+    if D < 1 then Exit;
     HalfNeck := MMsToCoord(PTstTabW) div 2;
     if HalfNeck < 1 then HalfNeck := 1;
     MidX := (L + Rgt) div 2;
@@ -173,155 +192,41 @@ begin
     My1 := MidY + HalfNeck + RR;
     if (Mx0 <= L) or (Mx1 >= Rgt) or (My0 <= B) or (My1 >= Tp) then Exit;
     if (Mx0 >= Mx1) or (My0 >= My1) then Exit;
-    Result := True;
-end;
+    SkipWest := Col > 0;
 
-{ Горизонтальная кромка (юг/север): рабочий шаблон вертикальных перемычек. }
-procedure PTstDrawGappedH(ABoard : IPCB_Board; X0, X1, YBoard, YInward : TCoord;
-    Mx0, Mx1, RR : TCoord; PTstALayer : TLayer);
-begin
-    { Юг: центры B-R, углы 270,90 и 90,270. Север: Tp+R, 90,270 и 270,90. }
-    PTstAddTrack(ABoard, X0, YBoard, Mx0, YBoard, PTstALayer);
-    PTstAddTrack(ABoard, Mx1, YBoard, X1, YBoard, PTstALayer);
-    if YInward < YBoard then
+    if not SkipWest then
     begin
-        PTstAddArc(ABoard, Mx0, YBoard - RR, RR, 270, 90, PTstALayer);
-        PTstAddArc(ABoard, Mx1, YBoard - RR, RR, 90, 270, PTstALayer);
-    end
-    else
-    begin
-        PTstAddArc(ABoard, Mx0, YBoard + RR, RR, 90, 270, PTstALayer);
-        PTstAddArc(ABoard, Mx1, YBoard + RR, RR, 270, 90, PTstALayer);
-    end;
-end;
-
-{ Вертикальная кромка (запад/восток): тот же алгоритм, одна перестановка осей.
-  Юг 270,90 / 90,270 → восток 180,0 / 0,180 (не копировать запад 0,180 / 180,0). }
-procedure PTstDrawGappedV(ABoard : IPCB_Board; Y0, Y1, XBoard, XInward : TCoord;
-    My0, My1, RR : TCoord; PTstALayer : TLayer);
-begin
-    PTstAddTrack(ABoard, XBoard, Y0, XBoard, My0, PTstALayer);
-    PTstAddTrack(ABoard, XBoard, My1, XBoard, Y1, PTstALayer);
-    if XInward < XBoard then
-    begin
-        { запад: outer левее платы }
-        PTstAddArc(ABoard, XBoard - RR, My0, RR, 0, 180, PTstALayer);
-        PTstAddArc(ABoard, XBoard - RR, My1, RR, 180, 0, PTstALayer);
-    end
-    else
-    begin
-        { восток: дополнение запада }
-        PTstAddArc(ABoard, XBoard + RR, My0, RR, 180, 0, PTstALayer);
-        PTstAddArc(ABoard, XBoard + RR, My1, RR, 0, 180, PTstALayer);
-    end;
-end;
-
-procedure PTstDrawOuterH(ABoard : IPCB_Board; X0, X1, YOuter : TCoord; PTstALayer : TLayer);
-begin
-    PTstAddTrack(ABoard, X0, YOuter, X1, YOuter, PTstALayer);
-end;
-
-procedure PTstDrawOuterV(ABoard : IPCB_Board; Y0, Y1, XOuter : TCoord; PTstALayer : TLayer);
-begin
-    PTstAddTrack(ABoard, XOuter, Y0, XOuter, Y1, PTstALayer);
-end;
-
-procedure PTstDrawBoardCell(ABoard : IPCB_Board; Col, Row : Integer; PTstALayer : TLayer);
-var
-    L, B, Rgt, Tp, D : TCoord;
-begin
-    L := PTstBoardOriginX(Col);
-    B := PTstBoardOriginY(Row);
-    Rgt := L + MMsToCoord(PTstBoardW);
-    Tp := B + MMsToCoord(PTstBoardH);
-    PTstDrawRoundedRect(ABoard, L, B, Rgt, Tp, 0, PTstALayer);
-    D := MMsToCoord(PTstOffMM);
-    if D < 1 then D := MMsToCoord(PTstFilletR) + MMsToCoord(PTstFilletR);
-    { Второй контур: offset наружу. Совпадающие стороны с соседом не рисуем (union). }
-    if Col = 0 then
-        PTstDrawOuterV(ABoard, B - D, Tp + D, L - D, PTstALayer);
-    if Col = PTstCols - 1 then
-        PTstDrawOuterV(ABoard, B - D, Tp + D, Rgt + D, PTstALayer);
-    if Row = 0 then
-        PTstDrawOuterH(ABoard, L - D, Rgt + D, B - D, PTstALayer);
-    if Row = PTstRows - 1 then
-        PTstDrawOuterH(ABoard, L - D, Rgt + D, Tp + D, PTstALayer);
-end;
-
-procedure PTstDrawFrameTabs(ABoard : IPCB_Board; Col, Row : Integer; PTstALayer : TLayer);
-var
-    L, B, Rgt, Tp, D, RR, Mx0, Mx1, My0, My1 : TCoord;
-begin
-    L := PTstBoardOriginX(Col);
-    B := PTstBoardOriginY(Row);
-    Rgt := L + MMsToCoord(PTstBoardW);
-    Tp := B + MMsToCoord(PTstBoardH);
-    if not PTstNeck(L, Rgt, B, Tp, Mx0, Mx1, My0, My1, RR) then Exit;
-    D := MMsToCoord(PTstOffMM);
-    if D < 1 then D := RR + RR;
-    { Внешние стороны: тот же inward-паз, что у рабочей рамки main Panelizer. }
-    if Col = 0 then
-        PTstDrawGappedV(ABoard, B, Tp, L, L - D, My0, My1, RR, PTstALayer);
-    if Col = PTstCols - 1 then
-        PTstDrawGappedV(ABoard, B, Tp, Rgt, Rgt + D, My0, My1, RR, PTstALayer);
-    if Row = 0 then
-        PTstDrawGappedH(ABoard, L, Rgt, B, B - D, Mx0, Mx1, RR, PTstALayer);
-    if Row = PTstRows - 1 then
-        PTstDrawGappedH(ABoard, L, Rgt, Tp, Tp + D, Mx0, Mx1, RR, PTstALayer);
-    { Стык рамки на углах массива: прямые outer без луковиц наружу. }
-    if (Col = 0) and (Row = 0) then
-    begin
+        PTstAddTrack(ABoard, L, B, L, My0, PTstALayer);
+        PTstAddArc(ABoard, L - RR, My0, RR, 0, 180, PTstALayer);
         PTstAddTrack(ABoard, L - D, My0, L - D, B - D, PTstALayer);
-        PTstAddTrack(ABoard, L - D, B - D, Mx0, B - D, PTstALayer);
     end;
-    if (Col = PTstCols - 1) and (Row = 0) then
-    begin
-        PTstAddTrack(ABoard, Mx1, B - D, Rgt + D, B - D, PTstALayer);
-        PTstAddTrack(ABoard, Rgt + D, B - D, Rgt + D, My0, PTstALayer);
-    end;
-    if (Col = PTstCols - 1) and (Row = PTstRows - 1) then
-    begin
-        PTstAddTrack(ABoard, Rgt + D, My1, Rgt + D, Tp + D, PTstALayer);
-        PTstAddTrack(ABoard, Rgt + D, Tp + D, Mx1, Tp + D, PTstALayer);
-    end;
-    if (Col = 0) and (Row = PTstRows - 1) then
-    begin
-        PTstAddTrack(ABoard, Mx0, Tp + D, L - D, Tp + D, PTstALayer);
-        PTstAddTrack(ABoard, L - D, Tp + D, L - D, My1, PTstALayer);
-    end;
-end;
+    PTstAddTrack(ABoard, L - D, B - D, Mx0, B - D, PTstALayer);
+    PTstAddArc(ABoard, Mx0, B - RR, RR, 270, 90, PTstALayer);
+    PTstAddTrack(ABoard, Mx0, B, L, B, PTstALayer);
 
-procedure PTstDrawSharedChannels(ABoard : IPCB_Board; PTstALayer : TLayer);
-var
-    r, c : Integer;
-    L, B, Rgt, Tp, L2, B2, RR, Mx0, Mx1, My0, My1 : TCoord;
-begin
-    { Между столбцами: горизонтальные перемычки на вертикальном зазоре. }
-    for r := 0 to PTstRows - 1 do
-        for c := 0 to PTstCols - 2 do
-        begin
-            L := PTstBoardOriginX(c);
-            B := PTstBoardOriginY(r);
-            Rgt := L + MMsToCoord(PTstBoardW);
-            Tp := B + MMsToCoord(PTstBoardH);
-            L2 := PTstBoardOriginX(c + 1);
-            if not PTstNeck(L, Rgt, B, Tp, Mx0, Mx1, My0, My1, RR) then Continue;
-            PTstDrawGappedV(ABoard, B, Tp, Rgt, L2, My0, My1, RR, PTstALayer);
-            PTstDrawGappedV(ABoard, B, Tp, L2, Rgt, My0, My1, RR, PTstALayer);
-        end;
-    { Между рядами: вертикальные перемычки (рабочий шаблон). }
-    for c := 0 to PTstCols - 1 do
-        for r := 0 to PTstRows - 2 do
-        begin
-            L := PTstBoardOriginX(c);
-            B := PTstBoardOriginY(r);
-            Rgt := L + MMsToCoord(PTstBoardW);
-            Tp := B + MMsToCoord(PTstBoardH);
-            B2 := PTstBoardOriginY(r + 1);
-            if not PTstNeck(L, Rgt, B, Tp, Mx0, Mx1, My0, My1, RR) then Continue;
-            PTstDrawGappedH(ABoard, L, Rgt, Tp, B2, Mx0, Mx1, RR, PTstALayer);
-            PTstDrawGappedH(ABoard, L, Rgt, B2, Tp, Mx0, Mx1, RR, PTstALayer);
-        end;
+    PTstAddTrack(ABoard, Rgt, B, Mx1, B, PTstALayer);
+    PTstAddArc(ABoard, Mx1, B - RR, RR, 90, 270, PTstALayer);
+    PTstAddTrack(ABoard, Mx1, B - D, Rgt + D, B - D, PTstALayer);
+    PTstAddTrack(ABoard, Rgt + D, B - D, Rgt + D, My0, PTstALayer);
+    PTstAddArc(ABoard, Rgt + RR, My0, RR, 0, 180, PTstALayer);
+    PTstAddTrack(ABoard, Rgt, My0, Rgt, B, PTstALayer);
+
+    PTstAddTrack(ABoard, Rgt, Tp, Rgt, My1, PTstALayer);
+    PTstAddArc(ABoard, Rgt + RR, My1, RR, 180, 0, PTstALayer);
+    PTstAddTrack(ABoard, Rgt + D, My1, Rgt + D, Tp + D, PTstALayer);
+    PTstAddTrack(ABoard, Rgt + D, Tp + D, Mx1, Tp + D, PTstALayer);
+    PTstAddArc(ABoard, Mx1, Tp + RR, RR, 270, 90, PTstALayer);
+    PTstAddTrack(ABoard, Mx1, Tp, Rgt, Tp, PTstALayer);
+
+    PTstAddTrack(ABoard, L, Tp, Mx0, Tp, PTstALayer);
+    PTstAddArc(ABoard, Mx0, Tp + RR, RR, 90, 270, PTstALayer);
+    PTstAddTrack(ABoard, Mx0, Tp + D, L - D, Tp + D, PTstALayer);
+    if not SkipWest then
+    begin
+        PTstAddTrack(ABoard, L - D, Tp + D, L - D, My1, PTstALayer);
+        PTstAddArc(ABoard, L - RR, My1, RR, 180, 0, PTstALayer);
+        PTstAddTrack(ABoard, L, My1, L, Tp, PTstALayer);
+    end;
 end;
 
 procedure PTstDrawAllMillPaths(ABoard : IPCB_Board; PTstALayer : TLayer);
@@ -332,9 +237,8 @@ begin
         for c := 0 to PTstCols - 1 do
         begin
             PTstDrawBoardCell(ABoard, c, r, PTstALayer);
-            PTstDrawFrameTabs(ABoard, c, r, PTstALayer);
+            PTstDrawMillAroundBoard(ABoard, c, r, PTstALayer);
         end;
-    PTstDrawSharedChannels(ABoard, PTstALayer);
 end;
 
 procedure PTstDrawCommonOuterContour(ABoard : IPCB_Board; PTstALayer : TLayer);

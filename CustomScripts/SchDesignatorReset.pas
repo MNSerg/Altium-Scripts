@@ -1,14 +1,15 @@
 ﻿{..............................................................................}
 { SchDesignatorReset.pas                                                        }
-{ Сброс десигнаторов и аннотация всего проекта: Down then Across.              }
-{ Sch-итератора в !SCRIPTS нет — только RunProcess + IProject/IDocument.       }
+{ Запись десигнаторов: CreateSchIterator + GetState_SchDesignator.Text.        }
+{ Down then Across, весь проект.                                                }
 {..............................................................................}
 
 var
     DoReset     : Boolean;
     DoAnnotate  : Boolean;
     AllSheets   : Boolean;
-    SheetCnt    : Integer;
+    ChangedCnt  : Integer;
+    PrefixCounters : TStringList;
 
 { Run Script: choose procedure StartSchDesignatorReset (project compiles only this .pas). }
 procedure StartSchDesignatorReset; forward;
@@ -27,30 +28,111 @@ begin
     Result := ConfirmNoYes(Msg);
 end;
 
-procedure SchRunOnSheet(const SchPath : String);
+function SchPadNum(SchN, SchWidth : Integer) : String;
 begin
-    if SchPath <> '' then
+    Result := IntToStr(SchN);
+    while Length(Result) < SchWidth do
+        Result := '0' + Result;
+end;
+
+function SchPrefixOf(const SchDes : String) : String;
+var
+    Schi : Integer;
+    SchC : Char;
+begin
+    Result := '';
+    for Schi := 1 to Length(SchDes) do
     begin
-        try
-            SchServer.LoadSchDocumentByPath(SchPath);
-        except
-        end;
-        try
-            Client.OpenDocument('SCH', SchPath);
-        except
-        end;
+        SchC := SchDes[Schi];
+        if ((SchC >= 'A') and (SchC <= 'Z')) or ((SchC >= 'a') and (SchC <= 'z')) then
+            Result := Result + SchC
+        else
+            Break;
     end;
-    if DoReset then
-    begin
-        ResetParameters;
-        AddStringParameter('Action', 'ResetDesignators');
-        RunProcess('Sch:ResetDesignators');
+    if Result = '' then Result := 'U';
+end;
+
+function SchReadDes(SchComp : ISch_Component) : String;
+begin
+    Result := '';
+    try
+        Result := SchComp.GetState_SchDesignator.Text;
+    except
+        Result := '';
     end;
-    if DoAnnotate then
+end;
+
+procedure SchWriteDes(SchComp : ISch_Component; const NewT : String);
+begin
+    SchComp.GetState_SchDesignator.Text := NewT;
+end;
+
+function SchNextNum(const Prefix : String) : Integer;
+var
+    SchIdx : Integer;
+begin
+    SchIdx := PrefixCounters.IndexOfName(Prefix);
+    if SchIdx < 0 then
     begin
-        { В !SCRIPTS нет имён параметров Down/Across — только RunProcess. }
-        ResetParameters;
-        RunProcess('Sch:Annotate');
+        Result := 1;
+        PrefixCounters.Add(Prefix + '=1');
+    end
+    else
+    begin
+        Result := StrToInt(PrefixCounters.ValueFromIndex[SchIdx]) + 1;
+        PrefixCounters.ValueFromIndex[SchIdx] := IntToStr(Result);
+    end;
+end;
+
+procedure SchAnnotateDoc(SchDoc : ISch_Document);
+var
+    SchIt : ISch_Iterator;
+    SchComp : ISch_Component;
+    SchList : TStringList;
+    Schi : Integer;
+    SchX, SchY : Integer;
+    OldT, NewT, Pref, SortKey : String;
+begin
+    { SchIterator_Create undeclared; CreateSchIterator — фабрика документа. }
+    if SchDoc = nil then Exit;
+    SchList := TStringList.Create;
+    SchServer.ProcessControl.PreProcess(SchDoc, '');
+    try
+        SchIt := SchDoc.CreateSchIterator;
+        SchIt.AddFilter_ObjectSet(MkSet(eSchComponent));
+        SchComp := SchIt.FirstSchObject;
+        while SchComp <> nil do
+        begin
+            SchX := SchComp.Location.X;
+            SchY := SchComp.Location.Y;
+            SortKey := SchPadNum(SchX div 100, 8) + '|' + SchPadNum(2000000000 - SchY, 10);
+            SchList.AddObject(SortKey, SchComp);
+            SchComp := SchIt.NextSchObject;
+        end;
+        SchDoc.DestroySchIterator(SchIt);
+
+        SchList.Sorted := True;
+        for Schi := 0 to SchList.Count - 1 do
+        begin
+            SchComp := SchList.Objects[Schi];
+            OldT := SchReadDes(SchComp);
+            Pref := SchPrefixOf(OldT);
+            if DoReset and (not DoAnnotate) then
+                NewT := Pref + '?'
+            else if DoAnnotate then
+                NewT := Pref + IntToStr(SchNextNum(Pref))
+            else
+                NewT := OldT;
+            if NewT <> OldT then
+            begin
+                SchWriteDes(SchComp, NewT);
+                Inc(ChangedCnt);
+            end;
+        end;
+        SchDoc.GraphicallyInvalidate;
+    finally
+        SchServer.ProcessControl.PostProcess(SchDoc, '');
+        SchList.Free;
     end;
 end;
 
@@ -61,8 +143,11 @@ var
     Schi : Integer;
     SchLogDoc : IDocument;
     SchKind, SchPath : String;
+    SchDoc : ISch_Document;
     Current : ISch_Document;
+    SheetCnt : Integer;
 begin
+    ChangedCnt := 0;
     SheetCnt := 0;
 
     if SchServer = nil then
@@ -87,44 +172,54 @@ begin
             Exit;
     end;
 
-    if AllSheets and (SchProject <> nil) then
-    begin
-        for Schi := 0 to SchProject.DM_LogicalDocumentCount - 1 do
+    PrefixCounters := TStringList.Create;
+    try
+        PrefixCounters.NameValueSeparator := '=';
+
+        if AllSheets and (SchProject <> nil) then
         begin
-            SchLogDoc := SchProject.DM_LogicalDocuments(Schi);
-            SchKind := '';
-            try
-                SchKind := SchLogDoc.DM_DocumentKind;
-            except
-                SchKind := '';
-            end;
-            if (SchKind = 'SCH') or (SchKind = 'SCHDOC') then
+            for Schi := 0 to SchProject.DM_LogicalDocumentCount - 1 do
             begin
-                Inc(SheetCnt);
-                SchPath := '';
-                try
-                    SchPath := SchLogDoc.DM_FullPath;
-                except
+                SchLogDoc := SchProject.DM_LogicalDocuments(Schi);
+                SchKind := '';
+                try SchKind := SchLogDoc.DM_DocumentKind; except SchKind := ''; end;
+                if (SchKind = 'SCH') or (SchKind = 'SCHDOC') then
+                begin
+                    Inc(SheetCnt);
                     SchPath := '';
+                    try SchPath := SchLogDoc.DM_FullPath; except SchPath := ''; end;
+                    try
+                        SchServer.LoadSchDocumentByPath(SchPath);
+                    except
+                    end;
+                    try
+                        Client.OpenDocument('SCH', SchPath);
+                    except
+                    end;
+                    SchDoc := SchServer.GetSchDocumentByPath(SchPath);
+                    if SchDoc = nil then
+                        SchDoc := SchServer.GetCurrentSchDocument;
+                    SchAnnotateDoc(SchDoc);
                 end;
-                SchRunOnSheet(SchPath);
             end;
-        end;
-        if SheetCnt = 0 then
-            SchShowBox(LabelWarnSheets.Caption, 48)
+            if SheetCnt = 0 then
+                SchShowBox(LabelWarnSheets.Caption, 48)
+            else
+                SchShowBox(LabelInfoDone.Caption + IntToStr(ChangedCnt), 64);
+        end
         else
-            SchShowBox(LabelInfoDone.Caption + IntToStr(SheetCnt), 64);
-    end
-    else
-    begin
-        if Current = nil then
         begin
-            SchShowBox(LabelErrDoc.Caption, 16);
-            Exit;
+            if Current = nil then
+            begin
+                SchShowBox(LabelErrDoc.Caption, 16);
+                Exit;
+            end;
+            SchAnnotateDoc(Current);
+            SchShowBox(LabelInfoDone.Caption + IntToStr(ChangedCnt), 64);
         end;
-        Inc(SheetCnt);
-        SchRunOnSheet('');
-        SchShowBox(LabelInfoDone.Caption + IntToStr(SheetCnt), 64);
+    finally
+        PrefixCounters.Free;
+        PrefixCounters := nil;
     end;
 end;
 

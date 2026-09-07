@@ -161,6 +161,7 @@ procedure DrawMillAroundBoard(ABoard : IPCB_Board; Col, Row : Integer; PanALayer
 var
     L, B, Rgt, Tp, D, RR, HalfNeck, MidX, MidY : TCoord;
     Mx0, Mx1, My0, My1 : TCoord;
+    SkipWest : Boolean;
 begin
     L := BoardOriginX(Col);
     B := BoardOriginY(Row);
@@ -180,11 +181,16 @@ begin
     My1 := MidY + HalfNeck + RR;
     if (Mx0 <= L) or (Mx1 >= Rgt) or (My0 <= B) or (My1 >= Tp) then Exit;
     if (Mx0 >= Mx1) or (My0 >= My1) then Exit;
+    { Col>0: западный паз не рисуем — это тот же канал, что восток левого соседа (50c84c3 east). }
+    SkipWest := Col > 0;
 
-    { ЮЗ: внутренние кромки платы → inward 180° в перемычку → внешний offset, без дуги наружу }
-    AddTrack(ABoard, L, B, L, My0, PanALayer);
-    AddArc(ABoard, L - RR, My0, RR, 0, 180, PanALayer);
-    AddTrack(ABoard, L - D, My0, L - D, B - D, PanALayer);
+    { ЮЗ. SkipWest: общий вертикальный канал рисует восток левого соседа (один паз). }
+    if not SkipWest then
+    begin
+        AddTrack(ABoard, L, B, L, My0, PanALayer);
+        AddArc(ABoard, L - RR, My0, RR, 0, 180, PanALayer);
+        AddTrack(ABoard, L - D, My0, L - D, B - D, PanALayer);
+    end;
     AddTrack(ABoard, L - D, B - D, Mx0, B - D, PanALayer);
     AddArc(ABoard, Mx0, B - RR, RR, 270, 90, PanALayer);
     AddTrack(ABoard, Mx0, B, L, B, PanALayer);
@@ -194,14 +200,12 @@ begin
     AddArc(ABoard, Mx1, B - RR, RR, 90, 270, PanALayer);
     AddTrack(ABoard, Mx1, B - D, Rgt + D, B - D, PanALayer);
     AddTrack(ABoard, Rgt + D, B - D, Rgt + D, My0, PanALayer);
-    AddArc(ABoard, Rgt + RR, My0, RR, 180, 0, PanALayer);
+    AddArc(ABoard, Rgt + RR, My0, RR, 0, 180, PanALayer);
     AddTrack(ABoard, Rgt, My0, Rgt, B, PanALayer);
 
-    { СВ: восточная (горизонтальная) перемычка — дополнение западной, как север дополняет юг.
-      Запад низ 0,180 / верх 180,0; восток низ 180,0 / верх 0,180. Иначе оба полукруга
-      совпадают в общем вертикальном зазоре (вертикальные перемычки так не ломаются). }
+    { СВ — геометрия как 50c84c3 (восток/верх не трогать «complement»). }
     AddTrack(ABoard, Rgt, Tp, Rgt, My1, PanALayer);
-    AddArc(ABoard, Rgt + RR, My1, RR, 0, 180, PanALayer);
+    AddArc(ABoard, Rgt + RR, My1, RR, 180, 0, PanALayer);
     AddTrack(ABoard, Rgt + D, My1, Rgt + D, Tp + D, PanALayer);
     AddTrack(ABoard, Rgt + D, Tp + D, Mx1, Tp + D, PanALayer);
     AddArc(ABoard, Mx1, Tp + RR, RR, 270, 90, PanALayer);
@@ -211,9 +215,12 @@ begin
     AddTrack(ABoard, L, Tp, Mx0, Tp, PanALayer);
     AddArc(ABoard, Mx0, Tp + RR, RR, 90, 270, PanALayer);
     AddTrack(ABoard, Mx0, Tp + D, L - D, Tp + D, PanALayer);
-    AddTrack(ABoard, L - D, Tp + D, L - D, My1, PanALayer);
-    AddArc(ABoard, L - RR, My1, RR, 180, 0, PanALayer);
-    AddTrack(ABoard, L, My1, L, Tp, PanALayer);
+    if not SkipWest then
+    begin
+        AddTrack(ABoard, L - D, Tp + D, L - D, My1, PanALayer);
+        AddArc(ABoard, L - RR, My1, RR, 180, 0, PanALayer);
+        AddTrack(ABoard, L, My1, L, Tp, PanALayer);
+    end;
 end;
 
 procedure DrawAllMillPaths(ABoard : IPCB_Board; PanALayer : TLayer);
