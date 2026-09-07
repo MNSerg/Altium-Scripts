@@ -14,6 +14,8 @@ Icons for **DXP → Customizing** (Process Launcher / custom menus). Altium expe
 | GroundPolygons | `24x24/GroundPolygons.bmp` | `32x32/GroundPolygons.bmp` |
 | PcbWizard | `24x24/PcbWizard.bmp` | `32x32/PcbWizard.bmp` |
 | PlaceDesignators | `24x24/PlaceDesignators.bmp` | `32x32/PlaceDesignators.bmp` |
+| Offset | `24x24/Offset.bmp` | `32x32/Offset.bmp` |
+| PanelizerTest | `24x24/PanelizerTest.bmp` | `32x32/PanelizerTest.bmp` |
 
 Copies of the 24×24 set also sit in this folder (`TrackCornerFillet.bmp`, …) so you can pick a file without opening a subfolder.
 

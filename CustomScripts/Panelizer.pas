@@ -194,12 +194,14 @@ begin
     AddArc(ABoard, Mx1, B - RR, RR, 90, 270, PanALayer);
     AddTrack(ABoard, Mx1, B - D, Rgt + D, B - D, PanALayer);
     AddTrack(ABoard, Rgt + D, B - D, Rgt + D, My0, PanALayer);
-    AddArc(ABoard, Rgt + RR, My0, RR, 0, 180, PanALayer);
+    AddArc(ABoard, Rgt + RR, My0, RR, 180, 0, PanALayer);
     AddTrack(ABoard, Rgt, My0, Rgt, B, PanALayer);
 
-    { СВ }
+    { СВ: восточная (горизонтальная) перемычка — дополнение западной, как север дополняет юг.
+      Запад низ 0,180 / верх 180,0; восток низ 180,0 / верх 0,180. Иначе оба полукруга
+      совпадают в общем вертикальном зазоре (вертикальные перемычки так не ломаются). }
     AddTrack(ABoard, Rgt, Tp, Rgt, My1, PanALayer);
-    AddArc(ABoard, Rgt + RR, My1, RR, 180, 0, PanALayer);
+    AddArc(ABoard, Rgt + RR, My1, RR, 0, 180, PanALayer);
     AddTrack(ABoard, Rgt + D, My1, Rgt + D, Tp + D, PanALayer);
     AddTrack(ABoard, Rgt + D, Tp + D, Mx1, Tp + D, PanALayer);
     AddArc(ABoard, Mx1, Tp + RR, RR, 270, 90, PanALayer);

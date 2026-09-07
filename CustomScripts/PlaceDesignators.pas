@@ -14,6 +14,8 @@ var
     SkipHidden : Boolean;
     FixedHeight : TCoord;
     MovedCnt, FailCnt, SkipCnt : Integer;
+    SilPadCache : TStringList;
+    SilNameCache : TStringList;
 
 { Run Script: choose procedure StartPlaceDesignators (project compiles only this .pas). }
 procedure StartPlaceDesignators; forward;
@@ -157,160 +159,136 @@ begin
     end;
 end;
 
+function SilField(const SilS : String; SilIdx : Integer) : String;
+var
+    Rest : String;
+    P, N : Integer;
+begin
+    Rest := SilS;
+    N := 0;
+    Result := '';
+    while Rest <> '' do
+    begin
+        P := Pos(#9, Rest);
+        if P = 0 then
+        begin
+            if N = SilIdx then Result := Rest;
+            Exit;
+        end;
+        if N = SilIdx then
+        begin
+            Result := Copy(Rest, 1, P - 1);
+            Exit;
+        end;
+        Rest := Copy(Rest, P + 1, Length(Rest));
+        Inc(N);
+    end;
+end;
+
+procedure SilCacheAdd(SilList : TStringList; SilL, SilB, SilR, SilT, SilAddr : TCoord);
+begin
+    SilList.Add(IntToStr(SilL) + #9 + IntToStr(SilB) + #9 + IntToStr(SilR) + #9 +
+                IntToStr(SilT) + #9 + IntToStr(SilAddr));
+end;
+
 function NameHitsSilk(SilL, SilB, SilR, SilT : TCoord; SkipCmp : IPCB_Component; SilkLayer : TLayer) : Boolean;
 var
-    SIter : IPCB_SpatialIterator;
-    SilPrim : IPCB_Primitive;
-    RR : TCoordRect;
-    NameAddr : Integer;
+    Sili : Integer;
+    NL, NB, NR, NT, NameAddr, SkipAddr : Integer;
 begin
     Result := False;
-    NameAddr := 0;
+    SkipAddr := 0;
     try
         if (SkipCmp <> nil) and (SkipCmp.Name <> nil) then
-            NameAddr := SkipCmp.Name.I_ObjectAddress;
+            SkipAddr := SkipCmp.Name.I_ObjectAddress;
     except
-        NameAddr := 0;
+        SkipAddr := 0;
     end;
-    SIter := SilBoard.SpatialIterator_Create;
-    SIter.AddFilter_ObjectSet(MkSet(eTextObject));
-    SIter.AddFilter_LayerSet(MkSet(SilkLayer));
-    SIter.AddFilter_Area(SilL, SilB, SilR, SilT);
-    SilPrim := SIter.FirstPCBObject;
-    while SilPrim <> nil do
+    if SilNameCache <> nil then
     begin
-        if (NameAddr = 0) or (SilPrim.I_ObjectAddress <> NameAddr) then
+        for Sili := 0 to SilNameCache.Count - 1 do
         begin
-            RR := SilPrim.BoundingRectangle;
-            if RectsOverlap(SilL, SilB, SilR, SilT, RR.Left, RR.Bottom, RR.Right, RR.Top) then
+            NameAddr := StrToInt(SilField(SilNameCache[Sili], 4));
+            if (SkipAddr <> 0) and (NameAddr = SkipAddr) then Continue;
+            NL := StrToInt(SilField(SilNameCache[Sili], 0));
+            NB := StrToInt(SilField(SilNameCache[Sili], 1));
+            NR := StrToInt(SilField(SilNameCache[Sili], 2));
+            NT := StrToInt(SilField(SilNameCache[Sili], 3));
+            if RectsOverlap(SilL, SilB, SilR, SilT, NL, NB, NR, NT) then
             begin
                 Result := True;
-                SilBoard.SpatialIterator_Destroy(SIter);
                 Exit;
             end;
         end;
-        SilPrim := SIter.NextPCBObject;
+        Exit;
     end;
-    SilBoard.SpatialIterator_Destroy(SIter);
 end;
 
 function NameHitsPad(SilL, SilB, SilR, SilT : TCoord; SkipCmp : IPCB_Component) : Boolean;
 var
-    Extra : TCoord;
-    GIter : IPCB_GroupIterator;
-    SilPad : IPCB_Pad;
-    SIter : IPCB_SpatialIterator;
-    SilPrim : IPCB_Primitive;
-    RR : TCoordRect;
-    PL, PB, PR, PT : TCoord;
+    Sili : Integer;
+    PL, PB, PR, PT, Dummy : Integer;
 begin
-    { Площадки — жёсткое препятствие: BoundingRectangle + 0.25 мм. }
     Result := False;
-    Extra := MMsToCoord(cPadClearMM);
-    SilL := SilL - Extra;
-    SilB := SilB - Extra;
-    SilR := SilR + Extra;
-    SilT := SilT + Extra;
-
-    if SkipCmp <> nil then
+    if SilPadCache = nil then Exit;
+    for Sili := 0 to SilPadCache.Count - 1 do
     begin
-        try
-            GIter := SkipCmp.GroupIterator_Create;
-            GIter.AddFilter_ObjectSet(MkSet(ePadObject));
-            SilPad := GIter.FirstPCBObject;
-            while SilPad <> nil do
-            begin
-                RR := SilPad.BoundingRectangle;
-                PL := RR.Left - Extra;
-                PB := RR.Bottom - Extra;
-                PR := RR.Right + Extra;
-                PT := RR.Top + Extra;
-                if RectsOverlap(SilL, SilB, SilR, SilT, PL, PB, PR, PT) then
-                begin
-                    Result := True;
-                    SkipCmp.GroupIterator_Destroy(GIter);
-                    Exit;
-                end;
-                SilPad := GIter.NextPCBObject;
-            end;
-            SkipCmp.GroupIterator_Destroy(GIter);
-        except
-        end;
-    end;
-
-    SIter := SilBoard.SpatialIterator_Create;
-    SIter.AddFilter_ObjectSet(MkSet(ePadObject));
-    SIter.AddFilter_LayerSet(MkSet(eMultiLayer, eTopLayer, eBottomLayer));
-    SIter.AddFilter_Area(SilL, SilB, SilR, SilT);
-    SilPrim := SIter.FirstPCBObject;
-    while SilPrim <> nil do
-    begin
-        RR := SilPrim.BoundingRectangle;
-        PL := RR.Left - Extra;
-        PB := RR.Bottom - Extra;
-        PR := RR.Right + Extra;
-        PT := RR.Top + Extra;
+        PL := StrToInt(SilField(SilPadCache[Sili], 0));
+        PB := StrToInt(SilField(SilPadCache[Sili], 1));
+        PR := StrToInt(SilField(SilPadCache[Sili], 2));
+        PT := StrToInt(SilField(SilPadCache[Sili], 3));
+        Dummy := StrToInt(SilField(SilPadCache[Sili], 4));
         if RectsOverlap(SilL, SilB, SilR, SilT, PL, PB, PR, PT) then
         begin
             Result := True;
-            SilBoard.SpatialIterator_Destroy(SIter);
             Exit;
         end;
-        SilPrim := SIter.NextPCBObject;
     end;
-    SilBoard.SpatialIterator_Destroy(SIter);
 end;
 
-function CollisionScore(SilL, SilB, SilR, SilT : TCoord; SkipCmp : IPCB_Component; SilkLayer : TLayer) : Integer;
+procedure SilCollectObstacles;
 var
-    SilIter : IPCB_SpatialIterator;
-    SilPrim : IPCB_Primitive;
+    SilIter : IPCB_BoardIterator;
+    SilPad : IPCB_Pad;
+    SilCmp : IPCB_Component;
+    Txt : IPCB_Text;
     RR : TCoordRect;
     Extra : TCoord;
-    NameAddr : Integer;
+    Addr : Integer;
 begin
-    Result := 0;
-    Extra := MMsToCoord(cGapMM);
-    SilL := SilL - Extra; SilB := SilB - Extra; SilR := SilR + Extra; SilT := SilT + Extra;
-    NameAddr := 0;
-    try
-        if (SkipCmp <> nil) and (SkipCmp.Name <> nil) then
-            NameAddr := SkipCmp.Name.I_ObjectAddress;
-    except
-        NameAddr := 0;
-    end;
-
-    SilIter := SilBoard.SpatialIterator_Create;
-    SilIter.AddFilter_ObjectSet(MkSet(ePadObject, eViaObject, eTrackObject, eArcObject, eTextObject, eComponentBodyObject));
-    SilIter.AddFilter_LayerSet(MkSet(SilkLayer, eMultiLayer, eTopLayer, eBottomLayer));
-    SilIter.AddFilter_Area(SilL, SilB, SilR, SilT);
-    SilPrim := SilIter.FirstPCBObject;
-    while SilPrim <> nil do
+    Extra := MMsToCoord(cPadClearMM);
+    SilIter := SilBoard.BoardIterator_Create;
+    SilIter.AddFilter_ObjectSet(MkSet(ePadObject));
+    SilIter.AddFilter_LayerSet(MkSet(eMultiLayer, eTopLayer, eBottomLayer));
+    SilIter.AddFilter_Method(eProcessAll);
+    SilPad := SilIter.FirstPCBObject;
+    while SilPad <> nil do
     begin
-        if (NameAddr <> 0) and (SilPrim.I_ObjectAddress = NameAddr) then
-        begin
-            SilPrim := SilIter.NextPCBObject;
-            Continue;
-        end;
-        RR := SilPrim.BoundingRectangle;
-        if RectsOverlap(SilL, SilB, SilR, SilT, RR.Left, RR.Bottom, RR.Right, RR.Top) then
-        begin
-            if SilPrim.ObjectId = ePadObject then
-                Result := Result + 12
-            else if SilPrim.ObjectId = eViaObject then
-                Result := Result + 10
-            else if SilPrim.ObjectId = eTextObject then
-                Result := Result + 8
-            else
-                Inc(Result);
-        end;
-        SilPrim := SilIter.NextPCBObject;
+        RR := SilPad.BoundingRectangle;
+        SilCacheAdd(SilPadCache, RR.Left - Extra, RR.Bottom - Extra,
+                    RR.Right + Extra, RR.Top + Extra, 0);
+        SilPad := SilIter.NextPCBObject;
     end;
-    SilBoard.SpatialIterator_Destroy(SilIter);
+    SilBoard.BoardIterator_Destroy(SilIter);
 
-    RR := SilBoard.BoardOutline.BoundingRectangle;
-    if (SilL < RR.Left) or (SilB < RR.Bottom) or (SilR > RR.Right) or (SilT > RR.Top) then
-        Result := Result + 50;
+    SilIter := SilBoard.BoardIterator_Create;
+    SilIter.AddFilter_ObjectSet(MkSet(eComponentObject));
+    SilIter.AddFilter_LayerSet(MkSet(eTopLayer, eBottomLayer));
+    SilIter.AddFilter_Method(eProcessAll);
+    SilCmp := SilIter.FirstPCBObject;
+    while SilCmp <> nil do
+    begin
+        Txt := SilCmp.Name;
+        if Txt <> nil then
+        begin
+            RR := Txt.BoundingRectangle;
+            Addr := 0;
+            try Addr := Txt.I_ObjectAddress; except Addr := 0; end;
+            SilCacheAdd(SilNameCache, RR.Left, RR.Bottom, RR.Right, RR.Top, Addr);
+        end;
+        SilCmp := SilIter.NextPCBObject;
+    end;
+    SilBoard.BoardIterator_Destroy(SilIter);
 end;
 
 procedure ApplyRotationForReadability(Txt : IPCB_Text; SilCmp : IPCB_Component; Use90 : Boolean);
@@ -332,7 +310,7 @@ procedure PlaceOne(SilCmp : IPCB_Component);
 var
     Txt : IPCB_Text;
     Court : TCoordRect;
-    Score, Step, Dir : Integer;
+    Step, Dir : Integer;
     TW, TH : TCoord;
     SilL, SilB, SilR, SilT : TCoord;
     Gap, Extra : TCoord;
@@ -347,7 +325,6 @@ var
     BestLegalX, BestLegalY : TCoord;
     BestLegal90 : Boolean;
     HaveLegal : Boolean;
-    Inward : Integer;
 begin
     Txt := SilCmp.Name;
     if Txt = nil then Exit;
@@ -385,71 +362,54 @@ begin
     BestLegal90 := False;
     HaveLegal := False;
 
-    { Снаружи courtyard и внутрь к центру. Легальный = внутри контура, не пад, не чужой шелк. }
-    for Step := 0 to 16 do
+    { Снаружи courtyard. Макс. 8 направлений × 5 шагов — без O(n³) итераторов. }
+    for Step := 0 to 4 do
     begin
-        Extra := Gap + MMsToCoord(0.15) * Step;
-        for Inward := 0 to 8 do
+        Extra := Gap + MMsToCoord(0.3) * Step;
+        for Dir := 0 to 7 do
         begin
-            Extra := Gap + MMsToCoord(0.15) * Step - MMsToCoord(0.15) * Inward;
-            for Dir := 0 to 15 do
-            begin
-                Use90 := False;
-                CandX := SilCX;
-                CandY := SilCY;
-                case Dir of
-                    0: begin CandX := SilCX; CandY := Court.Top + Extra + TH div 2; end;
-                    1: begin CandX := SilCX; CandY := Court.Bottom - Extra - TH div 2; end;
-                    2: begin CandX := Court.Right + Extra + TH div 2; CandY := SilCY; Use90 := True; end;
-                    3: begin CandX := Court.Left - Extra - TH div 2; CandY := SilCY; Use90 := True; end;
-                    4: begin CandX := Court.Right + Extra + TW div 2; CandY := Court.Top + Extra + TH div 2; end;
-                    5: begin CandX := Court.Left - Extra - TW div 2; CandY := Court.Top + Extra + TH div 2; end;
-                    6: begin CandX := Court.Right + Extra + TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
-                    7: begin CandX := Court.Left - Extra - TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
-                    8: begin CandX := Court.Right - TW div 2; CandY := Court.Top + Extra + TH div 2; end;
-                    9: begin CandX := Court.Left + TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
-                    10: begin CandX := Court.Right + Extra + TH div 2; CandY := Court.Top - TH; Use90 := True; end;
-                    11: begin CandX := Court.Left - Extra - TH div 2; CandY := Court.Bottom + TH; Use90 := True; end;
-                    12: begin CandX := SilCX + TW; CandY := Court.Top + Extra + TH div 2; end;
-                    13: begin CandX := SilCX - TW; CandY := Court.Bottom - Extra - TH div 2; end;
-                    14: begin CandX := Court.Right + Extra + TH; CandY := SilCY + TH; Use90 := True; end;
-                    15: begin CandX := Court.Left - Extra - TH; CandY := SilCY - TH; Use90 := True; end;
-                end;
-                if Use90 then
-                begin
-                    SilL := CandX - TH div 2;
-                    SilR := CandX + TH div 2;
-                    SilB := CandY - TW div 2;
-                    SilT := CandY + TW div 2;
-                end
-                else
-                begin
-                    SilL := CandX - TW div 2;
-                    SilR := CandX + TW div 2;
-                    SilB := CandY - TH div 2;
-                    SilT := CandY + TH div 2;
-                end;
-                Inside := RectInsideOutline(SilL, SilB, SilR, SilT);
-                PadHit := NameHitsPad(SilL, SilB, SilR, SilT, SilCmp);
-                SilkHit := NameHitsSilk(SilL, SilB, SilR, SilT, SilCmp, SilkLayer);
-                Legal := Inside and (not PadHit) and (not SilkHit);
-                if Legal then
-                begin
-                    Score := CollisionScore(SilL, SilB, SilR, SilT, SilCmp, SilkLayer);
-                    HaveLegal := True;
-                    if Score < BestLegalScore then
-                    begin
-                        BestLegalScore := Score;
-                        BestLegalX := CandX;
-                        BestLegalY := CandY;
-                        BestLegal90 := Use90;
-                    end;
-                    if BestLegalScore = 0 then Break;
-                end;
+            Use90 := False;
+            CandX := SilCX;
+            CandY := SilCY;
+            case Dir of
+                0: begin CandX := SilCX; CandY := Court.Top + Extra + TH div 2; end;
+                1: begin CandX := SilCX; CandY := Court.Bottom - Extra - TH div 2; end;
+                2: begin CandX := Court.Right + Extra + TH div 2; CandY := SilCY; Use90 := True; end;
+                3: begin CandX := Court.Left - Extra - TH div 2; CandY := SilCY; Use90 := True; end;
+                4: begin CandX := Court.Right + Extra + TW div 2; CandY := Court.Top + Extra + TH div 2; end;
+                5: begin CandX := Court.Left - Extra - TW div 2; CandY := Court.Top + Extra + TH div 2; end;
+                6: begin CandX := Court.Right + Extra + TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
+                7: begin CandX := Court.Left - Extra - TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
             end;
-            if HaveLegal and (BestLegalScore = 0) then Break;
+            if Use90 then
+            begin
+                SilL := CandX - TH div 2;
+                SilR := CandX + TH div 2;
+                SilB := CandY - TW div 2;
+                SilT := CandY + TW div 2;
+            end
+            else
+            begin
+                SilL := CandX - TW div 2;
+                SilR := CandX + TW div 2;
+                SilB := CandY - TH div 2;
+                SilT := CandY + TH div 2;
+            end;
+            Inside := RectInsideOutline(SilL, SilB, SilR, SilT);
+            PadHit := NameHitsPad(SilL, SilB, SilR, SilT, SilCmp);
+            SilkHit := NameHitsSilk(SilL, SilB, SilR, SilT, SilCmp, SilkLayer);
+            Legal := Inside and (not PadHit) and (not SilkHit);
+            if Legal then
+            begin
+                HaveLegal := True;
+                BestLegalScore := Step;
+                BestLegalX := CandX;
+                BestLegalY := CandY;
+                BestLegal90 := Use90;
+                Break;
+            end;
         end;
-        if HaveLegal and (BestLegalScore = 0) then Break;
+        if HaveLegal then Break;
     end;
 
     if not HaveLegal then
@@ -458,6 +418,7 @@ begin
         Exit;
     end;
 
+    { AutoPlaceSilkscreen.pas:1488 — BeginModify, ChangeNameAutoposition, MoveToXY, EndModify. }
     Txt.BeginModify;
     SilCmp.ChangeNameAutoposition := eAutoPos_Manual;
     ApplyRotationForReadability(Txt, SilCmp, BestLegal90);
@@ -479,6 +440,9 @@ begin
     MovedCnt := 0;
     FailCnt := 0;
     SkipCnt := 0;
+    SilPadCache := TStringList.Create;
+    SilNameCache := TStringList.Create;
+    SilCollectObstacles;
 
     { Если выделены компоненты — только они; иначе все. }
     AnySelected := False;
@@ -504,7 +468,7 @@ begin
         begin
             SilIter := SilBoard.BoardIterator_Create;
             SilIter.AddFilter_ObjectSet(MkSet(eComponentObject));
-            SilIter.AddFilter_LayerSet(AllLayers);
+            SilIter.AddFilter_LayerSet(MkSet(eTopLayer, eBottomLayer));
             SilIter.AddFilter_Method(eProcessAll);
             SilCmp := SilIter.FirstPCBObject;
             while SilCmp <> nil do
@@ -516,6 +480,15 @@ begin
         end;
     finally
         PCBServer.PostProcess;
+        SilPadCache.Free;
+        SilNameCache.Free;
+        SilPadCache := nil;
+        SilNameCache := nil;
+    end;
+
+    try
+        SilBoard.ViewManager_FullUpdate;
+    except
     end;
 
     Client.SendMessage('PCB:Zoom', 'Action=Redraw', 255, Client.CurrentView);

@@ -11,6 +11,7 @@ var
     DxfBoard       : IPCB_Board;
     DxfLines    : TStringList;
     HandleCount : Integer;
+    DxfEntCount : Integer;
     LayerItems  : TStringList; { имя для чеклиста = Layer2String }
     LayerIds    : TStringList; { параллельный список IntToStr(TLayer) }
 
@@ -27,17 +28,21 @@ procedure DxfShowBox(const Msg : String; Flags : Integer); forward;
 
 function MMX(DxfX : TCoord) : String;
 begin
+    { Тот же CoordToMMs(coord - Origin), что давал видимые CIRCLE. }
     Result := FormatFloat('0.######', CoordToMMs(DxfX - DxfBoard.XOrigin));
+    if Result = '' then Result := '0';
 end;
 
 function MMY(DxfY : TCoord) : String;
 begin
     Result := FormatFloat('0.######', CoordToMMs(DxfY - DxfBoard.YOrigin));
+    if Result = '' then Result := '0';
 end;
 
 function MMR(DxfR : TCoord) : String;
 begin
     Result := FormatFloat('0.######', CoordToMMs(DxfR));
+    if Result = '' then Result := '0';
 end;
 
 function DxfLayerName(DxfALayer : TLayer) : String;
@@ -93,6 +98,7 @@ begin
     DxfPair(11, MMX(DxfX2));
     DxfPair(21, MMY(DxfY2));
     DxfPair(31, '0.0');
+    Inc(DxfEntCount);
 end;
 
 procedure WriteArc(const LName : String; DxfCX, DxfCY, DxfRadius : TCoord; StartDeg, EndDeg : Double);
@@ -107,6 +113,7 @@ begin
     DxfPair(40, MMR(DxfRadius));
     DxfPair(50, FormatFloat('0.######', StartDeg));
     DxfPair(51, FormatFloat('0.######', EndDeg));
+    Inc(DxfEntCount);
 end;
 
 procedure WriteCircle(const LName : String; DxfCX, DxfCY, DxfRadius : TCoord);
@@ -119,6 +126,7 @@ begin
     DxfPair(20, MMY(DxfCY));
     DxfPair(30, '0.0');
     DxfPair(40, MMR(DxfRadius));
+    Inc(DxfEntCount);
 end;
 
 function IsCopperLayer(DxfALayer : TLayer) : Boolean;
@@ -207,6 +215,11 @@ begin
         Result := ArcTan2(DxfY, DxfX);
 end;
 
+procedure ExportTrackCenterline(const LName : String; DxfT : IPCB_Track);
+begin
+    WriteLine(LName, DxfT.X1, DxfT.Y1, DxfT.X2, DxfT.Y2);
+end;
+
 procedure ExportTrackOutline(const LName : String; DxfT : IPCB_Track);
 var
     Dxfdx, Dxfdy, Len, nx, ny, HwMM, Ang : Double;
@@ -214,16 +227,28 @@ var
     L1x1, L1y1, L1x2, L1y2 : TCoord;
     L2x1, L2y1, L2x2, L2y2 : TCoord;
 begin
-    { Только контур ширины: две параллели ±W/2 и круглые крышки (как у отверстия). }
-    if DxfT.Width < 1 then Exit;
+    { Контур ширины: две параллели ±W/2 и круглые крышки. Узкий трек — осевая LINE. }
+    if DxfT.Width < 1 then
+    begin
+        ExportTrackCenterline(LName, DxfT);
+        Exit;
+    end;
     Dxfdx := CoordToMMs(DxfT.X2 - DxfT.X1);
     Dxfdy := CoordToMMs(DxfT.Y2 - DxfT.Y1);
     Len := Sqrt(Dxfdx * Dxfdx + Dxfdy * Dxfdy);
-    if Len < 0.0001 then Exit;
+    if Len < 0.0001 then
+    begin
+        ExportTrackCenterline(LName, DxfT);
+        Exit;
+    end;
     nx := -Dxfdy / Len;
     ny := Dxfdx / Len;
     HwMM := CoordToMMs(DxfT.Width) / 2.0;
-    if HwMM <= 0 then Exit;
+    if HwMM <= 0 then
+    begin
+        ExportTrackCenterline(LName, DxfT);
+        Exit;
+    end;
 
     L1x1 := DxfOff(DxfT.X1, nx * HwMM);
     L1y1 := DxfOff(DxfT.Y1, ny * HwMM);
@@ -252,7 +277,11 @@ var
     C3x, C3y, C4x, C4y : TCoord;
     RoutMM, RinMM : Double;
 begin
-    if DxfA.LineWidth < 1 then Exit;
+    if DxfA.LineWidth < 1 then
+    begin
+        WriteArc(LName, DxfA.XCenter, DxfA.YCenter, DxfA.Radius, DxfA.StartAngle, DxfA.EndAngle);
+        Exit;
+    end;
     hw := DxfA.LineWidth div 2;
     if hw < 0 then hw := 0;
     ROut := DxfA.Radius + hw;
@@ -428,98 +457,105 @@ begin
     end;
 end;
 
-function PrimitiveOnLayer(DxfPrim : IPCB_Primitive; DxfALayer : TLayer) : Boolean;
+procedure DxfExportPrimitive(DxfPrim : IPCB_Primitive; DxfALayer : TLayer; const LName : String);
 begin
-    Result := False;
+    { Тип, который не пишется — пропускаем, треки/окружности всё равно выйдут. }
     if DxfPrim = nil then Exit;
-    if DxfPrim.Layer = DxfALayer then
-    begin
-        Result := True;
-        Exit;
-    end;
-    if DxfPrim.ObjectId = ePadObject then
-    begin
-        if DxfALayer = eMultiLayer then
-        begin
-            Result := False;
-            Exit;
-        end;
-        if (DxfPrim.Layer = eMultiLayer) and IsCopperLayer(DxfALayer) then
-            Result := True;
-        if (DxfPrim.Layer = DxfALayer) then
-            Result := True;
-    end;
-    if DxfPrim.ObjectId = eViaObject then
-    begin
-        if IsCopperLayer(DxfALayer) or (DxfALayer = eMultiLayer) then
-        begin
-            try
-                Result := DxfPrim.IntersectLayer(DxfALayer);
-            except
-                Result := True;
-            end;
-        end;
-    end;
+    if DxfPrim.ObjectId = eTrackObject then
+        ExportTrackOutline(LName, DxfPrim)
+    else if DxfPrim.ObjectId = eArcObject then
+        ExportArcOutline(LName, DxfPrim)
+    else if DxfPrim.ObjectId = ePadObject then
+        ExportPadOutline(LName, DxfPrim, DxfALayer)
+    else if DxfPrim.ObjectId = eViaObject then
+        ExportViaOutline(LName, DxfPrim, DxfALayer)
+    else if DxfPrim.ObjectId = eFillObject then
+        ExportFillOutline(LName, DxfPrim)
+    else if DxfPrim.ObjectId = eRegionObject then
+        ExportRegionOutline(LName, DxfPrim)
+    else if DxfPrim.ObjectId = ePolyObject then
+        ExportPolygonOutline(LName, DxfPrim);
 end;
 
-procedure ExportHolesLayer;
+procedure DxfScanTypeOnLayer(ObjId : Integer; DxfALayer : TLayer; const LName : String);
+var
+    DxfIter : IPCB_BoardIterator;
+    DxfPrim : IPCB_Primitive;
+begin
+    { Как Fillet.pas / AutoPlaceSilkscreen.pas: один ObjectSet, конкретный LayerSet, First/Next, Destroy. }
+    DxfIter := DxfBoard.BoardIterator_Create;
+    DxfIter.AddFilter_ObjectSet(MkSet(ObjId));
+    DxfIter.AddFilter_LayerSet(MkSet(DxfALayer));
+    DxfIter.AddFilter_Method(eProcessAll);
+    DxfPrim := DxfIter.FirstPCBObject;
+    while DxfPrim <> nil do
+    begin
+        DxfExportPrimitive(DxfPrim, DxfALayer, LName);
+        DxfPrim := DxfIter.NextPCBObject;
+    end;
+    DxfBoard.BoardIterator_Destroy(DxfIter);
+end;
+
+procedure DxfScanHolesOnLayer(DxfALayer : TLayer);
 var
     DxfIter : IPCB_BoardIterator;
     DxfPrim : IPCB_Primitive;
     LName : String;
 begin
     LName := 'HOLES';
-    { PCB iterator: Board.BoardIterator_Create — AutoPlaceSilkscreen.pas:374, Auto_Panelizer.pas:112. }
     DxfIter := DxfBoard.BoardIterator_Create;
-    DxfIter.AddFilter_ObjectSet(MkSet(ePadObject, eViaObject));
-    DxfIter.AddFilter_LayerSet(AllLayers);
+    DxfIter.AddFilter_ObjectSet(MkSet(ePadObject));
+    DxfIter.AddFilter_LayerSet(MkSet(DxfALayer));
     DxfIter.AddFilter_Method(eProcessAll);
     DxfPrim := DxfIter.FirstPCBObject;
     while DxfPrim <> nil do
     begin
         if DxfPrim.HoleSize > 0 then
-        begin
-            if DxfPrim.ObjectId = ePadObject then
-                WriteCircle(LName, DxfPrim.X, DxfPrim.Y, DxfPrim.HoleSize div 2)
-            else
-                WriteCircle(LName, DxfPrim.X, DxfPrim.Y, DxfPrim.HoleSize div 2);
-        end;
+            WriteCircle(LName, DxfPrim.X, DxfPrim.Y, DxfPrim.HoleSize div 2);
+        DxfPrim := DxfIter.NextPCBObject;
+    end;
+    DxfBoard.BoardIterator_Destroy(DxfIter);
+
+    DxfIter := DxfBoard.BoardIterator_Create;
+    DxfIter.AddFilter_ObjectSet(MkSet(eViaObject));
+    DxfIter.AddFilter_LayerSet(MkSet(DxfALayer));
+    DxfIter.AddFilter_Method(eProcessAll);
+    DxfPrim := DxfIter.FirstPCBObject;
+    while DxfPrim <> nil do
+    begin
+        if DxfPrim.HoleSize > 0 then
+            WriteCircle(LName, DxfPrim.X, DxfPrim.Y, DxfPrim.HoleSize div 2);
         DxfPrim := DxfIter.NextPCBObject;
     end;
     DxfBoard.BoardIterator_Destroy(DxfIter);
 end;
 
+procedure ExportHolesLayer;
+begin
+    { Не AllLayers: как Fillet — MkSet конкретного слоя. }
+    DxfScanHolesOnLayer(eMultiLayer);
+    DxfScanHolesOnLayer(eTopLayer);
+    DxfScanHolesOnLayer(eBottomLayer);
+end;
+
 procedure ExportLayer(DxfALayer : TLayer);
 var
-    DxfIter : IPCB_BoardIterator;
-    DxfPrim : IPCB_Primitive;
     LName : String;
 begin
     LName := DxfLayerName(DxfALayer);
-    DxfIter := DxfBoard.BoardIterator_Create;
-    DxfIter.AddFilter_ObjectSet(MkSet(eTrackObject, eArcObject, ePadObject, eViaObject,
-                                   eFillObject, eRegionObject, ePolyObject));
-    DxfIter.AddFilter_LayerSet(AllLayers);
-    DxfIter.AddFilter_Method(eProcessAll);
-
-    DxfPrim := DxfIter.FirstPCBObject;
-    while DxfPrim <> nil do
+    { По одному типу, как Fillet (MkSet из 7 типов на AllLayers давал пустой набор). }
+    DxfScanTypeOnLayer(eTrackObject, DxfALayer, LName);
+    DxfScanTypeOnLayer(eArcObject, DxfALayer, LName);
+    DxfScanTypeOnLayer(ePadObject, DxfALayer, LName);
+    DxfScanTypeOnLayer(eViaObject, DxfALayer, LName);
+    DxfScanTypeOnLayer(eFillObject, DxfALayer, LName);
+    DxfScanTypeOnLayer(eRegionObject, DxfALayer, LName);
+    DxfScanTypeOnLayer(ePolyObject, DxfALayer, LName);
+    if (DxfALayer = eTopLayer) or (DxfALayer = eBottomLayer) then
     begin
-        if PrimitiveOnLayer(DxfPrim, DxfALayer) then
-        begin
-            case DxfPrim.ObjectId of
-                eTrackObject  : ExportTrackOutline(LName, DxfPrim);
-                eArcObject    : ExportArcOutline(LName, DxfPrim);
-                ePadObject    : ExportPadOutline(LName, DxfPrim, DxfALayer);
-                eViaObject    : ExportViaOutline(LName, DxfPrim, DxfALayer);
-                eFillObject   : ExportFillOutline(LName, DxfPrim);
-                eRegionObject : ExportRegionOutline(LName, DxfPrim);
-                ePolyObject   : ExportPolygonOutline(LName, DxfPrim);
-            end;
-        end;
-        DxfPrim := DxfIter.NextPCBObject;
+        DxfScanTypeOnLayer(ePadObject, eMultiLayer, LName);
+        DxfScanTypeOnLayer(eViaObject, eMultiLayer, LName);
     end;
-    DxfBoard.BoardIterator_Destroy(DxfIter);
 end;
 
 procedure WriteDxfHeader(SelectedNames : TStringList);
@@ -661,6 +697,7 @@ var
 begin
     DxfLines := TStringList.Create;
     DxfNames := TStringList.Create;
+    DxfEntCount := 0;
     try
         for Dxfi := 0 to CheckListLayers.Items.Count - 1 do
             if CheckListLayers.Checked[Dxfi] then
@@ -689,7 +726,10 @@ begin
 
         WriteDxfFooter;
         DxfLines.SaveToFile(DxfFileName);
-        DxfShowBox(LabelInfoSaved.Caption + sLineBreak + DxfFileName, 64);
+        if DxfEntCount = 0 then
+            DxfShowBox(LabelEmpty.Caption, 48)
+        else
+            DxfShowBox(LabelInfoSaved.Caption + sLineBreak + DxfFileName, 64);
     finally
         DxfNames.Free;
         DxfLines.Free;

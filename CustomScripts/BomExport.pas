@@ -126,7 +126,8 @@ begin
                 try PName := BomP.DM_Name; except PName := ''; end;
                 if UpperCase(PName) = UpperCase(BomName) then
                 begin
-                    try PText := BomP.DM_Value; except PText := ''; end;
+                    { Не DM_Value — в этом диалекте нет. IParameter: DM_PhysicalValue. }
+                    try PText := BomP.DM_PhysicalValue; except PText := ''; end;
                     if PText <> '' then
                     begin
                         Result := PText;
@@ -207,9 +208,7 @@ begin
         try Comment := BomComp.DM_Comment; except Comment := ''; end;
         if Comment = '' then
             Comment := ParamVal(BomComp, 'Comment');
-        try BomVal := BomComp.DM_Value; except BomVal := ''; end;
-        if BomVal = '' then
-            BomVal := ParamVal(BomComp, 'Value');
+        BomVal := ParamVal(BomComp, 'Value');
         if BomVal = '' then BomVal := Comment;
         Desc := ParamVal(BomComp, 'Description|Part Description');
         Fp := FootprintOf(BomComp);
