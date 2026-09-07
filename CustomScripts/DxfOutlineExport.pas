@@ -23,6 +23,7 @@ procedure TFormDxf.ButtonCancelClick(DxfSender: TObject); forward;
 procedure TFormDxf.ButtonAllClick(DxfSender: TObject); forward;
 procedure TFormDxf.ButtonNoneClick(DxfSender: TObject); forward;
 procedure TFormDxf.ButtonCopperClick(DxfSender: TObject); forward;
+procedure DxfShowBox(const Msg : String; Flags : Integer); forward;
 
 function MMX(DxfX : TCoord) : String;
 begin
@@ -631,20 +632,6 @@ begin
                 Exit;
             end;
         end;
-        for Dxfi := 0 to DxfWS.DM_ProjectCount - 1 do
-        begin
-            DxfPrj := DxfWS.DM_Projects(Dxfi);
-            if DxfPrj = nil then Continue;
-            DxfP := DxfPrj.DM_ProjectFullPath;
-            if Pos('CUSTOMSCRIPTS', UpperCase(DxfP)) > 0 then
-            begin
-                Result := ExtractFilePath(DxfP);
-                Exit;
-            end;
-        end;
-        DxfPrj := DxfWS.DM_FocusedProject;
-        if DxfPrj <> nil then
-            Result := ExtractFilePath(DxfPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -658,45 +645,42 @@ begin
     DxfDir := DxfCS_ScriptFolder;
     if DxfDir <> '' then
     begin
-        DxfP := DxfDir + 'images\' + DxfFileName;
-        if FileExists(DxfP) then begin Result := DxfP; Exit; end;
         DxfP := DxfDir + DxfFileName;
         if FileExists(DxfP) then begin Result := DxfP; Exit; end;
+        DxfP := DxfDir + 'images\' + DxfFileName;
+        if FileExists(DxfP) then begin Result := DxfP; Exit; end;
     end;
+    if FileExists(DxfFileName) then begin Result := DxfFileName; Exit; end;
     DxfP := 'images\' + DxfFileName;
-    if FileExists(DxfP) then begin Result := DxfP; Exit; end;
-    if FileExists(DxfFileName) then Result := DxfFileName;
+    if FileExists(DxfP) then Result := DxfP;
+end;
+
+procedure DxfCS_TryOneHelpFile(const DxfName : String; var DxfDone : Boolean);
+var
+    DxfP : String;
+begin
+    if DxfDone then Exit;
+    DxfP := DxfCS_FindImageFile(DxfName);
+    if (DxfP = '') or (not FileExists(DxfP)) then Exit;
+    try
+        ImageHelp.Picture.LoadFromFile(DxfP);
+        LabelImageHint.Caption := '';
+        DxfDone := True;
+    except
+    end;
 end;
 
 procedure DxfCS_TryLoadHelpImage(const DxfBmpName : String; const DxfPngName : String);
 var
-    DxfP : String;
-    HadPic : Boolean;
+    DxfDone : Boolean;
 begin
-    HadPic := False;
-    try
-        if ImageHelp.Picture.Width > 0 then HadPic := True;
-    except
-        HadPic := False;
-    end;
-    try
-        DxfP := DxfCS_FindImageFile(DxfBmpName);
-        if DxfP = '' then
-            DxfP := DxfCS_FindImageFile(DxfPngName);
-        if DxfP = '' then
-            DxfP := DxfCS_FindImageFile('DxfOutlineExport.bmp');
-        if (DxfP <> '') and FileExists(DxfP) then
-        begin
-            ImageHelp.Picture.LoadFromFile(DxfP);
-            LabelImageHint.Caption := '';
-            Exit;
-        end;
-    except
-    end;
-    if HadPic then
-        LabelImageHint.Caption := ''
-    else
-        LabelImageHint.Caption := 'No image. Put ' + DxfBmpName + ' in images\ next to the scripts.';
+    DxfDone := False;
+    DxfCS_TryOneHelpFile(DxfPngName, DxfDone);
+    DxfCS_TryOneHelpFile(DxfBmpName, DxfDone);
+    DxfCS_TryOneHelpFile('DxfOutlineExport.png', DxfDone);
+    DxfCS_TryOneHelpFile('DxfOutlineExport.bmp', DxfDone);
+    if not DxfDone then
+        LabelImageHint.Caption := 'No image. Put ' + DxfPngName + ' next to the script or in images\.';
 end;
 
 

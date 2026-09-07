@@ -40,38 +40,62 @@ begin
     Result := Distance(FilX1, FilY1, FilX2, FilY2) <= cJoinTol;
 end;
 
-{ DelphiScript: rfReplaceAll in square brackets is an Array Variant, not a set. }
-function FilReplaceChar(const FilS : String; FilA, FilB : Char) : String;
-var
-    Fili : Integer;
-    FilCh : Char;
-begin
-    Result := '';
-    for Fili := 1 to Length(FilS) do
-    begin
-        FilCh := FilS[Fili];
-        if FilCh = FilA then
-            Result := Result + FilB
-        else
-            Result := Result + FilCh;
-    end;
-end;
-
 function FilParseFloat(const FilS : String; var FilV : Double) : Boolean;
 var
     FilT : String;
-    FilCode : Integer;
+    Fili : Integer;
+    FilCh : Char;
+    FilSign : Double;
+    FilScale : Double;
+    FilSeenDigit : Boolean;
+    FilFrac : Boolean;
 begin
     Result := False;
+    FilV := 0;
     FilT := FilS;
     while (Length(FilT) > 0) and (FilT[1] = ' ') do
         FilT := Copy(FilT, 2, Length(FilT));
     while (Length(FilT) > 0) and (FilT[Length(FilT)] = ' ') do
         FilT := Copy(FilT, 1, Length(FilT) - 1);
-    FilT := FilReplaceChar(FilT, ',', '.');
     if FilT = '' then Exit;
-    Val(FilT, FilV, FilCode);
-    Result := (FilCode = 0);
+    FilSign := 1;
+    Fili := 1;
+    if FilT[1] = '-' then
+    begin
+        FilSign := -1;
+        Fili := 2;
+    end
+    else if FilT[1] = '+' then
+        Fili := 2;
+    FilSeenDigit := False;
+    FilFrac := False;
+    FilScale := 1;
+    while Fili <= Length(FilT) do
+    begin
+        FilCh := FilT[Fili];
+        if (FilCh = '.') or (FilCh = ',') then
+        begin
+            if FilFrac then Exit;
+            FilFrac := True;
+        end
+        else if (FilCh >= '0') and (FilCh <= '9') then
+        begin
+            FilSeenDigit := True;
+            if not FilFrac then
+                FilV := FilV * 10 + (Ord(FilCh) - Ord('0'))
+            else
+            begin
+                FilScale := FilScale * 10;
+                FilV := FilV + (Ord(FilCh) - Ord('0')) / FilScale;
+            end;
+        end
+        else
+            Exit;
+        Fili := Fili + 1;
+    end;
+    if not FilSeenDigit then Exit;
+    FilV := FilV * FilSign;
+    Result := True;
 end;
 
 function IsNumericMM(Text : String) : Boolean;
@@ -88,12 +112,7 @@ end;
 
 function FilAskYesNo(const Msg : String) : Boolean;
 begin
-    Result := False;
-    try
-        Result := MessageBox(0, Msg, FormFillet.Caption, 36) = 6;
-    except
-        try Result := ConfirmNoYes(Msg); except end;
-    end;
+    Result := ConfirmNoYes(Msg);
 end;
 
 function TrackEndX(ATrack : IPCB_Track; EndIdx : Integer) : TCoord;
@@ -257,20 +276,6 @@ begin
                 Exit;
             end;
         end;
-        for Fili := 0 to FilWS.DM_ProjectCount - 1 do
-        begin
-            FilPrj := FilWS.DM_Projects(Fili);
-            if FilPrj = nil then Continue;
-            FilP := FilPrj.DM_ProjectFullPath;
-            if Pos('CUSTOMSCRIPTS', UpperCase(FilP)) > 0 then
-            begin
-                Result := ExtractFilePath(FilP);
-                Exit;
-            end;
-        end;
-        FilPrj := FilWS.DM_FocusedProject;
-        if FilPrj <> nil then
-            Result := ExtractFilePath(FilPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -284,45 +289,42 @@ begin
     FilDir := FilCS_ScriptFolder;
     if FilDir <> '' then
     begin
-        FilP := FilDir + 'images\' + FilFileName;
-        if FileExists(FilP) then begin Result := FilP; Exit; end;
         FilP := FilDir + FilFileName;
         if FileExists(FilP) then begin Result := FilP; Exit; end;
+        FilP := FilDir + 'images\' + FilFileName;
+        if FileExists(FilP) then begin Result := FilP; Exit; end;
     end;
+    if FileExists(FilFileName) then begin Result := FilFileName; Exit; end;
     FilP := 'images\' + FilFileName;
-    if FileExists(FilP) then begin Result := FilP; Exit; end;
-    if FileExists(FilFileName) then Result := FilFileName;
+    if FileExists(FilP) then Result := FilP;
+end;
+
+procedure FilCS_TryOneHelpFile(const FilName : String; var FilDone : Boolean);
+var
+    FilP : String;
+begin
+    if FilDone then Exit;
+    FilP := FilCS_FindImageFile(FilName);
+    if (FilP = '') or (not FileExists(FilP)) then Exit;
+    try
+        ImageHelp.Picture.LoadFromFile(FilP);
+        LabelImageHint.Caption := '';
+        FilDone := True;
+    except
+    end;
 end;
 
 procedure FilCS_TryLoadHelpImage(const FilBmpName : String; const FilPngName : String);
 var
-    FilP : String;
-    HadPic : Boolean;
+    FilDone : Boolean;
 begin
-    HadPic := False;
-    try
-        if ImageHelp.Picture.Width > 0 then HadPic := True;
-    except
-        HadPic := False;
-    end;
-    try
-        FilP := FilCS_FindImageFile(FilBmpName);
-        if FilP = '' then
-            FilP := FilCS_FindImageFile(FilPngName);
-        if FilP = '' then
-            FilP := FilCS_FindImageFile('TrackCornerFillet.bmp');
-        if (FilP <> '') and FileExists(FilP) then
-        begin
-            ImageHelp.Picture.LoadFromFile(FilP);
-            LabelImageHint.Caption := '';
-            Exit;
-        end;
-    except
-    end;
-    if HadPic then
-        LabelImageHint.Caption := ''
-    else
-        LabelImageHint.Caption := 'No image. Put ' + FilBmpName + ' in images\ next to the scripts.';
+    FilDone := False;
+    FilCS_TryOneHelpFile(FilPngName, FilDone);
+    FilCS_TryOneHelpFile(FilBmpName, FilDone);
+    FilCS_TryOneHelpFile('TrackCornerFillet.png', FilDone);
+    FilCS_TryOneHelpFile('TrackCornerFillet.bmp', FilDone);
+    if not FilDone then
+        LabelImageHint.Caption := 'No image. Put ' + FilPngName + ' next to the script or in images\.';
 end;
 
 

@@ -26,12 +26,7 @@ end;
 
 function GndAskYesNo(const Msg : String) : Boolean;
 begin
-    Result := False;
-    try
-        Result := MessageBox(0, Msg, FormGnd.Caption, 36) = 6;
-    except
-        try Result := ConfirmNoYes(Msg); except end;
-    end;
+    Result := ConfirmNoYes(Msg);
 end;
 
 function FindNet(const GndName : String) : IPCB_Net;
@@ -245,20 +240,6 @@ begin
                 Exit;
             end;
         end;
-        for Gndi := 0 to GndWS.DM_ProjectCount - 1 do
-        begin
-            GndPrj := GndWS.DM_Projects(Gndi);
-            if GndPrj = nil then Continue;
-            GndP := GndPrj.DM_ProjectFullPath;
-            if Pos('CUSTOMSCRIPTS', UpperCase(GndP)) > 0 then
-            begin
-                Result := ExtractFilePath(GndP);
-                Exit;
-            end;
-        end;
-        GndPrj := GndWS.DM_FocusedProject;
-        if GndPrj <> nil then
-            Result := ExtractFilePath(GndPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -272,45 +253,42 @@ begin
     GndDir := GndCS_ScriptFolder;
     if GndDir <> '' then
     begin
-        GndP := GndDir + 'images\' + GndFileName;
-        if FileExists(GndP) then begin Result := GndP; Exit; end;
         GndP := GndDir + GndFileName;
         if FileExists(GndP) then begin Result := GndP; Exit; end;
+        GndP := GndDir + 'images\' + GndFileName;
+        if FileExists(GndP) then begin Result := GndP; Exit; end;
     end;
+    if FileExists(GndFileName) then begin Result := GndFileName; Exit; end;
     GndP := 'images\' + GndFileName;
-    if FileExists(GndP) then begin Result := GndP; Exit; end;
-    if FileExists(GndFileName) then Result := GndFileName;
+    if FileExists(GndP) then Result := GndP;
+end;
+
+procedure GndCS_TryOneHelpFile(const GndName : String; var GndDone : Boolean);
+var
+    GndP : String;
+begin
+    if GndDone then Exit;
+    GndP := GndCS_FindImageFile(GndName);
+    if (GndP = '') or (not FileExists(GndP)) then Exit;
+    try
+        ImageHelp.Picture.LoadFromFile(GndP);
+        LabelImageHint.Caption := '';
+        GndDone := True;
+    except
+    end;
 end;
 
 procedure GndCS_TryLoadHelpImage(const GndBmpName : String; const GndPngName : String);
 var
-    GndP : String;
-    HadPic : Boolean;
+    GndDone : Boolean;
 begin
-    HadPic := False;
-    try
-        if ImageHelp.Picture.Width > 0 then HadPic := True;
-    except
-        HadPic := False;
-    end;
-    try
-        GndP := GndCS_FindImageFile(GndBmpName);
-        if GndP = '' then
-            GndP := GndCS_FindImageFile(GndPngName);
-        if GndP = '' then
-            GndP := GndCS_FindImageFile('GroundPolygons.bmp');
-        if (GndP <> '') and FileExists(GndP) then
-        begin
-            ImageHelp.Picture.LoadFromFile(GndP);
-            LabelImageHint.Caption := '';
-            Exit;
-        end;
-    except
-    end;
-    if HadPic then
-        LabelImageHint.Caption := ''
-    else
-        LabelImageHint.Caption := 'No image. Put ' + GndBmpName + ' in images\ next to the scripts.';
+    GndDone := False;
+    GndCS_TryOneHelpFile(GndPngName, GndDone);
+    GndCS_TryOneHelpFile(GndBmpName, GndDone);
+    GndCS_TryOneHelpFile('GroundPolygons.png', GndDone);
+    GndCS_TryOneHelpFile('GroundPolygons.bmp', GndDone);
+    if not GndDone then
+        LabelImageHint.Caption := 'No image. Put ' + GndPngName + ' next to the script or in images\.';
 end;
 
 

@@ -21,38 +21,62 @@ begin
     ShowMessage(Msg);
 end;
 
-{ DelphiScript: rfReplaceAll in square brackets is an Array Variant, not a set. }
-function WizReplaceChar(const WizS : String; WizA, WizB : Char) : String;
-var
-    Wizi : Integer;
-    WizCh : Char;
-begin
-    Result := '';
-    for Wizi := 1 to Length(WizS) do
-    begin
-        WizCh := WizS[Wizi];
-        if WizCh = WizA then
-            Result := Result + WizB
-        else
-            Result := Result + WizCh;
-    end;
-end;
-
 function WizParseFloat(const WizS : String; var WizV : Double) : Boolean;
 var
     WizT : String;
-    WizCode : Integer;
+    Wizi : Integer;
+    WizCh : Char;
+    WizSign : Double;
+    WizScale : Double;
+    WizSeenDigit : Boolean;
+    WizFrac : Boolean;
 begin
     Result := False;
+    WizV := 0;
     WizT := WizS;
     while (Length(WizT) > 0) and (WizT[1] = ' ') do
         WizT := Copy(WizT, 2, Length(WizT));
     while (Length(WizT) > 0) and (WizT[Length(WizT)] = ' ') do
         WizT := Copy(WizT, 1, Length(WizT) - 1);
-    WizT := WizReplaceChar(WizT, ',', '.');
     if WizT = '' then Exit;
-    Val(WizT, WizV, WizCode);
-    Result := (WizCode = 0);
+    WizSign := 1;
+    Wizi := 1;
+    if WizT[1] = '-' then
+    begin
+        WizSign := -1;
+        Wizi := 2;
+    end
+    else if WizT[1] = '+' then
+        Wizi := 2;
+    WizSeenDigit := False;
+    WizFrac := False;
+    WizScale := 1;
+    while Wizi <= Length(WizT) do
+    begin
+        WizCh := WizT[Wizi];
+        if (WizCh = '.') or (WizCh = ',') then
+        begin
+            if WizFrac then Exit;
+            WizFrac := True;
+        end
+        else if (WizCh >= '0') and (WizCh <= '9') then
+        begin
+            WizSeenDigit := True;
+            if not WizFrac then
+                WizV := WizV * 10 + (Ord(WizCh) - Ord('0'))
+            else
+            begin
+                WizScale := WizScale * 10;
+                WizV := WizV + (Ord(WizCh) - Ord('0')) / WizScale;
+            end;
+        end
+        else
+            Exit;
+        Wizi := Wizi + 1;
+    end;
+    if not WizSeenDigit then Exit;
+    WizV := WizV * WizSign;
+    Result := True;
 end;
 
 function AddTrackL(WizX1, WizY1, WizX2, WizY2 : TCoord; WizALayer : TLayer; Width : TCoord) : IPCB_Track;
@@ -363,20 +387,6 @@ begin
                 Exit;
             end;
         end;
-        for Wizi := 0 to WizWS.DM_ProjectCount - 1 do
-        begin
-            WizPrj := WizWS.DM_Projects(Wizi);
-            if WizPrj = nil then Continue;
-            WizP := WizPrj.DM_ProjectFullPath;
-            if Pos('CUSTOMSCRIPTS', UpperCase(WizP)) > 0 then
-            begin
-                Result := ExtractFilePath(WizP);
-                Exit;
-            end;
-        end;
-        WizPrj := WizWS.DM_FocusedProject;
-        if WizPrj <> nil then
-            Result := ExtractFilePath(WizPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -390,45 +400,42 @@ begin
     WizDir := WizCS_ScriptFolder;
     if WizDir <> '' then
     begin
-        WizP := WizDir + 'images\' + WizFileName;
-        if FileExists(WizP) then begin Result := WizP; Exit; end;
         WizP := WizDir + WizFileName;
         if FileExists(WizP) then begin Result := WizP; Exit; end;
+        WizP := WizDir + 'images\' + WizFileName;
+        if FileExists(WizP) then begin Result := WizP; Exit; end;
     end;
+    if FileExists(WizFileName) then begin Result := WizFileName; Exit; end;
     WizP := 'images\' + WizFileName;
-    if FileExists(WizP) then begin Result := WizP; Exit; end;
-    if FileExists(WizFileName) then Result := WizFileName;
+    if FileExists(WizP) then Result := WizP;
+end;
+
+procedure WizCS_TryOneHelpFile(const WizName : String; var WizDone : Boolean);
+var
+    WizP : String;
+begin
+    if WizDone then Exit;
+    WizP := WizCS_FindImageFile(WizName);
+    if (WizP = '') or (not FileExists(WizP)) then Exit;
+    try
+        ImageHelp.Picture.LoadFromFile(WizP);
+        LabelImageHint.Caption := '';
+        WizDone := True;
+    except
+    end;
 end;
 
 procedure WizCS_TryLoadHelpImage(const WizBmpName : String; const WizPngName : String);
 var
-    WizP : String;
-    HadPic : Boolean;
+    WizDone : Boolean;
 begin
-    HadPic := False;
-    try
-        if ImageHelp.Picture.Width > 0 then HadPic := True;
-    except
-        HadPic := False;
-    end;
-    try
-        WizP := WizCS_FindImageFile(WizBmpName);
-        if WizP = '' then
-            WizP := WizCS_FindImageFile(WizPngName);
-        if WizP = '' then
-            WizP := WizCS_FindImageFile('PcbWizard.bmp');
-        if (WizP <> '') and FileExists(WizP) then
-        begin
-            ImageHelp.Picture.LoadFromFile(WizP);
-            LabelImageHint.Caption := '';
-            Exit;
-        end;
-    except
-    end;
-    if HadPic then
-        LabelImageHint.Caption := ''
-    else
-        LabelImageHint.Caption := 'No image. Put ' + WizBmpName + ' in images\ next to the scripts.';
+    WizDone := False;
+    WizCS_TryOneHelpFile(WizPngName, WizDone);
+    WizCS_TryOneHelpFile(WizBmpName, WizDone);
+    WizCS_TryOneHelpFile('PcbWizard.png', WizDone);
+    WizCS_TryOneHelpFile('PcbWizard.bmp', WizDone);
+    if not WizDone then
+        LabelImageHint.Caption := 'No image. Put ' + WizPngName + ' next to the script or in images\.';
 end;
 
 

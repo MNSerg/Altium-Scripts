@@ -25,12 +25,7 @@ end;
 
 function SchAskYesNo(const Msg : String) : Boolean;
 begin
-    Result := False;
-    try
-        Result := MessageBox(0, Msg, FormAnnot.Caption, 36) = 6;
-    except
-        try Result := ConfirmNoYes(Msg); except end;
-    end;
+    Result := ConfirmNoYes(Msg);
 end;
 
 function SchPadNum(SchN, SchWidth : Integer) : String;
@@ -319,20 +314,6 @@ begin
                 Exit;
             end;
         end;
-        for Schi := 0 to SchWS.DM_ProjectCount - 1 do
-        begin
-            SchPrj := SchWS.DM_Projects(Schi);
-            if SchPrj = nil then Continue;
-            SchP := SchPrj.DM_ProjectFullPath;
-            if Pos('CUSTOMSCRIPTS', UpperCase(SchP)) > 0 then
-            begin
-                Result := ExtractFilePath(SchP);
-                Exit;
-            end;
-        end;
-        SchPrj := SchWS.DM_FocusedProject;
-        if SchPrj <> nil then
-            Result := ExtractFilePath(SchPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -346,45 +327,42 @@ begin
     SchDir := SchCS_ScriptFolder;
     if SchDir <> '' then
     begin
-        SchP := SchDir + 'images\' + SchFileName;
-        if FileExists(SchP) then begin Result := SchP; Exit; end;
         SchP := SchDir + SchFileName;
         if FileExists(SchP) then begin Result := SchP; Exit; end;
+        SchP := SchDir + 'images\' + SchFileName;
+        if FileExists(SchP) then begin Result := SchP; Exit; end;
     end;
+    if FileExists(SchFileName) then begin Result := SchFileName; Exit; end;
     SchP := 'images\' + SchFileName;
-    if FileExists(SchP) then begin Result := SchP; Exit; end;
-    if FileExists(SchFileName) then Result := SchFileName;
+    if FileExists(SchP) then Result := SchP;
+end;
+
+procedure SchCS_TryOneHelpFile(const SchName : String; var SchDone : Boolean);
+var
+    SchP : String;
+begin
+    if SchDone then Exit;
+    SchP := SchCS_FindImageFile(SchName);
+    if (SchP = '') or (not FileExists(SchP)) then Exit;
+    try
+        ImageHelp.Picture.LoadFromFile(SchP);
+        LabelImageHint.Caption := '';
+        SchDone := True;
+    except
+    end;
 end;
 
 procedure SchCS_TryLoadHelpImage(const SchBmpName : String; const SchPngName : String);
 var
-    SchP : String;
-    HadPic : Boolean;
+    SchDone : Boolean;
 begin
-    HadPic := False;
-    try
-        if ImageHelp.Picture.Width > 0 then HadPic := True;
-    except
-        HadPic := False;
-    end;
-    try
-        SchP := SchCS_FindImageFile(SchBmpName);
-        if SchP = '' then
-            SchP := SchCS_FindImageFile(SchPngName);
-        if SchP = '' then
-            SchP := SchCS_FindImageFile('SchDesignatorReset.bmp');
-        if (SchP <> '') and FileExists(SchP) then
-        begin
-            ImageHelp.Picture.LoadFromFile(SchP);
-            LabelImageHint.Caption := '';
-            Exit;
-        end;
-    except
-    end;
-    if HadPic then
-        LabelImageHint.Caption := ''
-    else
-        LabelImageHint.Caption := 'No image. Put ' + SchBmpName + ' in images\ next to the scripts.';
+    SchDone := False;
+    SchCS_TryOneHelpFile(SchPngName, SchDone);
+    SchCS_TryOneHelpFile(SchBmpName, SchDone);
+    SchCS_TryOneHelpFile('SchDesignatorReset.png', SchDone);
+    SchCS_TryOneHelpFile('SchDesignatorReset.bmp', SchDone);
+    if not SchDone then
+        LabelImageHint.Caption := 'No image. Put ' + SchPngName + ' next to the script or in images\.';
 end;
 
 

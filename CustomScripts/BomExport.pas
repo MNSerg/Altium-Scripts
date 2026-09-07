@@ -105,24 +105,8 @@ begin
 end;
 
 function FootprintOf(BomComp : ISch_Component) : String;
-var
-    Impl : ISch_Implementation;
-    Bomi : Integer;
 begin
     Result := ParamVal(BomComp, 'Footprint|PCBFootprint');
-    if Result <> '' then Exit;
-    try
-        for Bomi := 0 to BomComp.ImplementationCount - 1 do
-        begin
-            Impl := BomComp.Implementations[Bomi];
-            if Impl.ModelType = 'PCB' then
-            begin
-                Result := Impl.ModelName;
-                Exit;
-            end;
-        end;
-    except
-    end;
 end;
 
 procedure AddPart(const BomDes, Comment, Description, Footprint, Value : String);
@@ -359,20 +343,6 @@ begin
                 Exit;
             end;
         end;
-        for Bomi := 0 to BomWS.DM_ProjectCount - 1 do
-        begin
-            BomPrj := BomWS.DM_Projects(Bomi);
-            if BomPrj = nil then Continue;
-            BomP := BomPrj.DM_ProjectFullPath;
-            if Pos('CUSTOMSCRIPTS', UpperCase(BomP)) > 0 then
-            begin
-                Result := ExtractFilePath(BomP);
-                Exit;
-            end;
-        end;
-        BomPrj := BomWS.DM_FocusedProject;
-        if BomPrj <> nil then
-            Result := ExtractFilePath(BomPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -386,45 +356,42 @@ begin
     BomDir := BomCS_ScriptFolder;
     if BomDir <> '' then
     begin
-        BomP := BomDir + 'images\' + BomFileName;
-        if FileExists(BomP) then begin Result := BomP; Exit; end;
         BomP := BomDir + BomFileName;
         if FileExists(BomP) then begin Result := BomP; Exit; end;
+        BomP := BomDir + 'images\' + BomFileName;
+        if FileExists(BomP) then begin Result := BomP; Exit; end;
     end;
+    if FileExists(BomFileName) then begin Result := BomFileName; Exit; end;
     BomP := 'images\' + BomFileName;
-    if FileExists(BomP) then begin Result := BomP; Exit; end;
-    if FileExists(BomFileName) then Result := BomFileName;
+    if FileExists(BomP) then Result := BomP;
+end;
+
+procedure BomCS_TryOneHelpFile(const BomName : String; var BomDone : Boolean);
+var
+    BomP : String;
+begin
+    if BomDone then Exit;
+    BomP := BomCS_FindImageFile(BomName);
+    if (BomP = '') or (not FileExists(BomP)) then Exit;
+    try
+        ImageHelp.Picture.LoadFromFile(BomP);
+        LabelImageHint.Caption := '';
+        BomDone := True;
+    except
+    end;
 end;
 
 procedure BomCS_TryLoadHelpImage(const BomBmpName : String; const BomPngName : String);
 var
-    BomP : String;
-    HadPic : Boolean;
+    BomDone : Boolean;
 begin
-    HadPic := False;
-    try
-        if ImageHelp.Picture.Width > 0 then HadPic := True;
-    except
-        HadPic := False;
-    end;
-    try
-        BomP := BomCS_FindImageFile(BomBmpName);
-        if BomP = '' then
-            BomP := BomCS_FindImageFile(BomPngName);
-        if BomP = '' then
-            BomP := BomCS_FindImageFile('BomExport.bmp');
-        if (BomP <> '') and FileExists(BomP) then
-        begin
-            ImageHelp.Picture.LoadFromFile(BomP);
-            LabelImageHint.Caption := '';
-            Exit;
-        end;
-    except
-    end;
-    if HadPic then
-        LabelImageHint.Caption := ''
-    else
-        LabelImageHint.Caption := 'No image. Put ' + BomBmpName + ' in images\ next to the scripts.';
+    BomDone := False;
+    BomCS_TryOneHelpFile(BomPngName, BomDone);
+    BomCS_TryOneHelpFile(BomBmpName, BomDone);
+    BomCS_TryOneHelpFile('BomExport.png', BomDone);
+    BomCS_TryOneHelpFile('BomExport.bmp', BomDone);
+    if not BomDone then
+        LabelImageHint.Caption := 'No image. Put ' + BomPngName + ' next to the script or in images\.';
 end;
 
 

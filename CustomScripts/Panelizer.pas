@@ -30,38 +30,62 @@ procedure TFormPanel.FormPanelShow(PanSender: TObject); forward;
 function BoardOriginX(Col : Integer) : TCoord; forward;
 function BoardOriginY(Row : Integer) : TCoord; forward;
 
-{ DelphiScript: rfReplaceAll in square brackets is an Array Variant, not a set. }
-function PanReplaceChar(const PanS : String; PanA, PanB : Char) : String;
-var
-    Pani : Integer;
-    PanCh : Char;
-begin
-    Result := '';
-    for Pani := 1 to Length(PanS) do
-    begin
-        PanCh := PanS[Pani];
-        if PanCh = PanA then
-            Result := Result + PanB
-        else
-            Result := Result + PanCh;
-    end;
-end;
-
 function PanParseFloat(const PanS : String; var PanV : Double) : Boolean;
 var
     PanT : String;
-    PanCode : Integer;
+    Pani : Integer;
+    PanCh : Char;
+    PanSign : Double;
+    PanScale : Double;
+    PanSeenDigit : Boolean;
+    PanFrac : Boolean;
 begin
     Result := False;
+    PanV := 0;
     PanT := PanS;
     while (Length(PanT) > 0) and (PanT[1] = ' ') do
         PanT := Copy(PanT, 2, Length(PanT));
     while (Length(PanT) > 0) and (PanT[Length(PanT)] = ' ') do
         PanT := Copy(PanT, 1, Length(PanT) - 1);
-    PanT := PanReplaceChar(PanT, ',', '.');
     if PanT = '' then Exit;
-    Val(PanT, PanV, PanCode);
-    Result := (PanCode = 0);
+    PanSign := 1;
+    Pani := 1;
+    if PanT[1] = '-' then
+    begin
+        PanSign := -1;
+        Pani := 2;
+    end
+    else if PanT[1] = '+' then
+        Pani := 2;
+    PanSeenDigit := False;
+    PanFrac := False;
+    PanScale := 1;
+    while Pani <= Length(PanT) do
+    begin
+        PanCh := PanT[Pani];
+        if (PanCh = '.') or (PanCh = ',') then
+        begin
+            if PanFrac then Exit;
+            PanFrac := True;
+        end
+        else if (PanCh >= '0') and (PanCh <= '9') then
+        begin
+            PanSeenDigit := True;
+            if not PanFrac then
+                PanV := PanV * 10 + (Ord(PanCh) - Ord('0'))
+            else
+            begin
+                PanScale := PanScale * 10;
+                PanV := PanV + (Ord(PanCh) - Ord('0')) / PanScale;
+            end;
+        end
+        else
+            Exit;
+        Pani := Pani + 1;
+    end;
+    if not PanSeenDigit then Exit;
+    PanV := PanV * PanSign;
+    Result := True;
 end;
 
 function ParsePositive(const PanS : String; var PanV : Double) : Boolean;
@@ -427,20 +451,6 @@ begin
                 Exit;
             end;
         end;
-        for Pani := 0 to PanWS.DM_ProjectCount - 1 do
-        begin
-            PanPrj := PanWS.DM_Projects(Pani);
-            if PanPrj = nil then Continue;
-            PanP := PanPrj.DM_ProjectFullPath;
-            if Pos('CUSTOMSCRIPTS', UpperCase(PanP)) > 0 then
-            begin
-                Result := ExtractFilePath(PanP);
-                Exit;
-            end;
-        end;
-        PanPrj := PanWS.DM_FocusedProject;
-        if PanPrj <> nil then
-            Result := ExtractFilePath(PanPrj.DM_ProjectFullPath);
     except
         Result := '';
     end;
@@ -454,45 +464,42 @@ begin
     PanDir := PanCS_ScriptFolder;
     if PanDir <> '' then
     begin
-        PanP := PanDir + 'images\' + PanFileName;
-        if FileExists(PanP) then begin Result := PanP; Exit; end;
         PanP := PanDir + PanFileName;
         if FileExists(PanP) then begin Result := PanP; Exit; end;
+        PanP := PanDir + 'images\' + PanFileName;
+        if FileExists(PanP) then begin Result := PanP; Exit; end;
     end;
+    if FileExists(PanFileName) then begin Result := PanFileName; Exit; end;
     PanP := 'images\' + PanFileName;
-    if FileExists(PanP) then begin Result := PanP; Exit; end;
-    if FileExists(PanFileName) then Result := PanFileName;
+    if FileExists(PanP) then Result := PanP;
+end;
+
+procedure PanCS_TryOneHelpFile(const PanName : String; var PanDone : Boolean);
+var
+    PanP : String;
+begin
+    if PanDone then Exit;
+    PanP := PanCS_FindImageFile(PanName);
+    if (PanP = '') or (not FileExists(PanP)) then Exit;
+    try
+        ImageHelp.Picture.LoadFromFile(PanP);
+        LabelImageHint.Caption := '';
+        PanDone := True;
+    except
+    end;
 end;
 
 procedure PanCS_TryLoadHelpImage(const PanBmpName : String; const PanPngName : String);
 var
-    PanP : String;
-    HadPic : Boolean;
+    PanDone : Boolean;
 begin
-    HadPic := False;
-    try
-        if ImageHelp.Picture.Width > 0 then HadPic := True;
-    except
-        HadPic := False;
-    end;
-    try
-        PanP := PanCS_FindImageFile(PanBmpName);
-        if PanP = '' then
-            PanP := PanCS_FindImageFile(PanPngName);
-        if PanP = '' then
-            PanP := PanCS_FindImageFile('Panelizer.bmp');
-        if (PanP <> '') and FileExists(PanP) then
-        begin
-            ImageHelp.Picture.LoadFromFile(PanP);
-            LabelImageHint.Caption := '';
-            Exit;
-        end;
-    except
-    end;
-    if HadPic then
-        LabelImageHint.Caption := ''
-    else
-        LabelImageHint.Caption := 'No image. Put ' + PanBmpName + ' in images\ next to the scripts.';
+    PanDone := False;
+    PanCS_TryOneHelpFile(PanPngName, PanDone);
+    PanCS_TryOneHelpFile(PanBmpName, PanDone);
+    PanCS_TryOneHelpFile('Panelizer.png', PanDone);
+    PanCS_TryOneHelpFile('Panelizer.bmp', PanDone);
+    if not PanDone then
+        LabelImageHint.Caption := 'No image. Put ' + PanPngName + ' next to the script or in images\.';
 end;
 
 
