@@ -190,52 +190,66 @@ begin
     AddLayerIfMissing(eMechanical15);
 end;
 
+{ Смещение в мм, затем обратно в TCoord — без Round(абсолютная координата) (32-bit overflow). }
+function DxfOff(Base : TCoord; OffMM : Double) : TCoord;
+begin
+    Result := Base + MMsToCoord(OffMM);
+end;
+
+function DxfAtan2(DxfY, DxfX : Double) : Double;
+begin
+    if (DxfX = 0) and (DxfY = 0) then
+        Result := 0
+    else
+        Result := ArcTan2(DxfY, DxfX);
+end;
+
 procedure ExportTrackOutline(const LName : String; DxfT : IPCB_Track);
 var
-    Dxfdx, Dxfdy, Len, nx, ny, hw : Double;
+    Dxfdx, Dxfdy, Len, nx, ny, HwMM, Ang : Double;
+    CapR : TCoord;
     L1x1, L1y1, L1x2, L1y2 : TCoord;
     L2x1, L2y1, L2x2, L2y2 : TCoord;
-    Ang : Double;
-    StartDeg, EndDeg : Double;
 begin
-    Dxfdx := DxfT.X2 - DxfT.X1;
-    Dxfdy := DxfT.Y2 - DxfT.Y1;
+    { Только контур ширины: две параллели ±W/2 и круглые крышки (как у отверстия). }
+    if DxfT.Width < 1 then Exit;
+    Dxfdx := CoordToMMs(DxfT.X2 - DxfT.X1);
+    Dxfdy := CoordToMMs(DxfT.Y2 - DxfT.Y1);
     Len := Sqrt(Dxfdx * Dxfdx + Dxfdy * Dxfdy);
-    if Len < 1 then Exit;
+    if Len < 0.0001 then Exit;
     nx := -Dxfdy / Len;
     ny := Dxfdx / Len;
-    hw := DxfT.Width / 2.0;
+    HwMM := CoordToMMs(DxfT.Width) / 2.0;
+    if HwMM <= 0 then Exit;
 
-    L1x1 := Round(DxfT.X1 + nx * hw);
-    L1y1 := Round(DxfT.Y1 + ny * hw);
-    L1x2 := Round(DxfT.X2 + nx * hw);
-    L1y2 := Round(DxfT.Y2 + ny * hw);
-    L2x1 := Round(DxfT.X1 - nx * hw);
-    L2y1 := Round(DxfT.Y1 - ny * hw);
-    L2x2 := Round(DxfT.X2 - nx * hw);
-    L2y2 := Round(DxfT.Y2 - ny * hw);
+    L1x1 := DxfOff(DxfT.X1, nx * HwMM);
+    L1y1 := DxfOff(DxfT.Y1, ny * HwMM);
+    L1x2 := DxfOff(DxfT.X2, nx * HwMM);
+    L1y2 := DxfOff(DxfT.Y2, ny * HwMM);
+    L2x1 := DxfOff(DxfT.X1, -nx * HwMM);
+    L2y1 := DxfOff(DxfT.Y1, -ny * HwMM);
+    L2x2 := DxfOff(DxfT.X2, -nx * HwMM);
+    L2y2 := DxfOff(DxfT.Y2, -ny * HwMM);
 
     WriteLine(LName, L1x1, L1y1, L1x2, L1y2);
     WriteLine(LName, L2x1, L2y1, L2x2, L2y2);
 
-    { Круглые крышки: полуокружности на концах, перпендикуляр к направлению. }
-    Ang := ArcTan2(Dxfdy, Dxfdx) * 180.0 / DxfPiValue;
-    { На конце 1 (старт): полукруг с внешней стороны, охватывающий 180°. }
-    StartDeg := Ang + 90;
-    EndDeg := Ang + 270;
-    WriteArc(LName, DxfT.X1, DxfT.Y1, DxfT.Width div 2, StartDeg, EndDeg);
-    StartDeg := Ang - 90;
-    EndDeg := Ang + 90;
-    WriteArc(LName, DxfT.X2, DxfT.Y2, DxfT.Width div 2, StartDeg, EndDeg);
+    CapR := DxfT.Width div 2;
+    if CapR < 1 then Exit;
+    Ang := DxfAtan2(Dxfdy, Dxfdx) * 180.0 / DxfPiValue;
+    WriteArc(LName, DxfT.X1, DxfT.Y1, CapR, Ang + 90, Ang + 270);
+    WriteArc(LName, DxfT.X2, DxfT.Y2, CapR, Ang - 90, Ang + 90);
 end;
 
 procedure ExportArcOutline(const LName : String; DxfA : IPCB_Arc);
 var
     hw, RIn, ROut : TCoord;
-    DxfSa, DxfEa : Double;
+    DxfSa, DxfEa, Ca, Sa : Double;
     C1x, C1y, C2x, C2y : TCoord;
     C3x, C3y, C4x, C4y : TCoord;
+    RoutMM, RinMM : Double;
 begin
+    if DxfA.LineWidth < 1 then Exit;
     hw := DxfA.LineWidth div 2;
     if hw < 0 then hw := 0;
     ROut := DxfA.Radius + hw;
@@ -249,111 +263,103 @@ begin
     else
         WriteCircle(LName, DxfA.XCenter, DxfA.YCenter, hw);
 
-    { Радиальные соединения на торцах дуги. }
-    C1x := Round(DxfA.XCenter + ROut * Cos(DxfSa * DxfPiValue / 180));
-    C1y := Round(DxfA.YCenter + ROut * Sin(DxfSa * DxfPiValue / 180));
-    C2x := Round(DxfA.XCenter + Max(RIn, 0) * Cos(DxfSa * DxfPiValue / 180));
-    C2y := Round(DxfA.YCenter + Max(RIn, 0) * Sin(DxfSa * DxfPiValue / 180));
-    C3x := Round(DxfA.XCenter + ROut * Cos(DxfEa * DxfPiValue / 180));
-    C3y := Round(DxfA.YCenter + ROut * Sin(DxfEa * DxfPiValue / 180));
-    C4x := Round(DxfA.XCenter + Max(RIn, 0) * Cos(DxfEa * DxfPiValue / 180));
-    C4y := Round(DxfA.YCenter + Max(RIn, 0) * Sin(DxfEa * DxfPiValue / 180));
-    if RIn > 0 then
-    begin
-        WriteLine(LName, C1x, C1y, C2x, C2y);
-        WriteLine(LName, C3x, C3y, C4x, C4y);
-    end;
+    if RIn <= 0 then Exit;
+    RoutMM := CoordToMMs(ROut);
+    RinMM := CoordToMMs(RIn);
+    Ca := Cos(DxfSa * DxfPiValue / 180);
+    Sa := Sin(DxfSa * DxfPiValue / 180);
+    C1x := DxfOff(DxfA.XCenter, RoutMM * Ca);
+    C1y := DxfOff(DxfA.YCenter, RoutMM * Sa);
+    C2x := DxfOff(DxfA.XCenter, RinMM * Ca);
+    C2y := DxfOff(DxfA.YCenter, RinMM * Sa);
+    Ca := Cos(DxfEa * DxfPiValue / 180);
+    Sa := Sin(DxfEa * DxfPiValue / 180);
+    C3x := DxfOff(DxfA.XCenter, RoutMM * Ca);
+    C3y := DxfOff(DxfA.YCenter, RoutMM * Sa);
+    C4x := DxfOff(DxfA.XCenter, RinMM * Ca);
+    C4y := DxfOff(DxfA.YCenter, RinMM * Sa);
+    WriteLine(LName, C1x, C1y, C2x, C2y);
+    WriteLine(LName, C3x, C3y, C4x, C4y);
+end;
+
+procedure DxfRotPt(CX, CY : TCoord; RelXMM, RelYMM, Deg : Double; var OX, OY : TCoord);
+var
+    Rad, NX, NY : Double;
+begin
+    Rad := Deg * DxfPiValue / 180.0;
+    NX := RelXMM * Cos(Rad) - RelYMM * Sin(Rad);
+    NY := RelXMM * Sin(Rad) + RelYMM * Cos(Rad);
+    OX := DxfOff(CX, NX);
+    OY := DxfOff(CY, NY);
 end;
 
 procedure ExportPadOutline(const LName : String; DxfPad : IPCB_Pad; DxfALayer : TLayer);
 var
     SX, SY, DxfX, DxfY : TCoord;
     Shape : TShape;
-    CR : Integer;
     Dxfi : Integer;
-    Ang, DxfR : Double;
+    Ang, Rot, Hx, Hy : Double;
     Px, Py, Qx, Qy : TCoord;
+    P0x, P0y, P1x, P1y, P2x, P2y, P3x, P3y : TCoord;
 begin
-    { Размер площадки на данном слое. Для SMT — Top/Bottom size. }
+    { Тот же XY, что у рабочих CIRCLE отверстий: Pad.X/Y, размер — XSize/YSize (TCoord). }
+    if DxfALayer = eMultiLayer then Exit;
     DxfX := DxfPad.X;
     DxfY := DxfPad.Y;
+    SX := DxfPad.XSize;
+    SY := DxfPad.YSize;
+    if (SX <= 0) or (SY <= 0) then Exit;
+    Rot := 0;
     try
-        SX := DxfPad.TopXSize;
-        SY := DxfPad.TopYSize;
-        if (DxfALayer = eBottomLayer) or (DxfPad.Layer = eBottomLayer) then
-        begin
-            SX := DxfPad.BotXSize;
-            SY := DxfPad.BotYSize;
-        end;
+        Rot := DxfPad.Rotation;
     except
-        SX := DxfPad.XSize;
-        SY := DxfPad.YSize;
+        Rot := 0;
     end;
 
-    if (SX <= 0) or (SY <= 0) then Exit;
-
-    { TShape: eRounded, eRectangular, eOctagonal, eCircleShape, eRoundRectShape. }
     Shape := eRectangular;
     try
-        Shape := DxfPad.TopShape;
+        Shape := DxfPad.ShapeOnLayer(DxfALayer);
     except
         try
-            Shape := DxfPad.ShapeOnLayer(DxfALayer);
+            Shape := DxfPad.TopShape;
         except
             Shape := eRectangular;
         end;
     end;
 
-    if (Shape = eRounded) or (Shape = eCircleShape) then
+    if (Shape = eRounded) or (Shape = eCircleShape) or (Abs(SX - SY) < 50) then
     begin
-        if Abs(SX - SY) < 10 then
+        if Abs(SX - SY) < 50 then
         begin
             WriteCircle(LName, DxfX, DxfY, SX div 2);
             Exit;
         end;
     end;
 
-    CR := 0;
-    if Shape = eRoundRectShape then
-    begin
-        CR := SX div 5;
-        if CR > SY div 2 then CR := SY div 2;
-        if CR < 1 then CR := 1;
-    end;
-
-    if CR > 0 then
-    begin
-        WriteLine(LName, DxfX - SX div 2 + CR, DxfY - SY div 2, DxfX + SX div 2 - CR, DxfY - SY div 2);
-        WriteLine(LName, DxfX + SX div 2, DxfY - SY div 2 + CR, DxfX + SX div 2, DxfY + SY div 2 - CR);
-        WriteLine(LName, DxfX + SX div 2 - CR, DxfY + SY div 2, DxfX - SX div 2 + CR, DxfY + SY div 2);
-        WriteLine(LName, DxfX - SX div 2, DxfY + SY div 2 - CR, DxfX - SX div 2, DxfY - SY div 2 + CR);
-        WriteArc(LName, DxfX - SX div 2 + CR, DxfY - SY div 2 + CR, CR, 180, 270);
-        WriteArc(LName, DxfX + SX div 2 - CR, DxfY - SY div 2 + CR, CR, 270, 0);
-        WriteArc(LName, DxfX + SX div 2 - CR, DxfY + SY div 2 - CR, CR, 0, 90);
-        WriteArc(LName, DxfX - SX div 2 + CR, DxfY + SY div 2 - CR, CR, 90, 180);
-        Exit;
-    end;
+    Hx := CoordToMMs(SX) / 2.0;
+    Hy := CoordToMMs(SY) / 2.0;
 
     if Shape = eOctagonal then
     begin
-        DxfR := SX / 2.0;
         for Dxfi := 0 to 7 do
         begin
-            Ang := (22.5 + Dxfi * 45) * DxfPiValue / 180;
-            Px := Round(DxfX + DxfR * Cos(Ang));
-            Py := Round(DxfY + DxfR * Sin(Ang));
-            Ang := (22.5 + (Dxfi + 1) * 45) * DxfPiValue / 180;
-            Qx := Round(DxfX + DxfR * Cos(Ang));
-            Qy := Round(DxfY + DxfR * Sin(Ang));
+            Ang := (22.5 + Dxfi * 45);
+            DxfRotPt(DxfX, DxfY, Hx * Cos(Ang * DxfPiValue / 180), Hy * Sin(Ang * DxfPiValue / 180), Rot, Px, Py);
+            Ang := (22.5 + (Dxfi + 1) * 45);
+            DxfRotPt(DxfX, DxfY, Hx * Cos(Ang * DxfPiValue / 180), Hy * Sin(Ang * DxfPiValue / 180), Rot, Qx, Qy);
             WriteLine(LName, Px, Py, Qx, Qy);
         end;
         Exit;
     end;
 
-    WriteLine(LName, DxfX - SX div 2, DxfY - SY div 2, DxfX + SX div 2, DxfY - SY div 2);
-    WriteLine(LName, DxfX + SX div 2, DxfY - SY div 2, DxfX + SX div 2, DxfY + SY div 2);
-    WriteLine(LName, DxfX + SX div 2, DxfY + SY div 2, DxfX - SX div 2, DxfY + SY div 2);
-    WriteLine(LName, DxfX - SX div 2, DxfY + SY div 2, DxfX - SX div 2, DxfY - SY div 2);
+    DxfRotPt(DxfX, DxfY, -Hx, -Hy, Rot, P0x, P0y);
+    DxfRotPt(DxfX, DxfY,  Hx, -Hy, Rot, P1x, P1y);
+    DxfRotPt(DxfX, DxfY,  Hx,  Hy, Rot, P2x, P2y);
+    DxfRotPt(DxfX, DxfY, -Hx,  Hy, Rot, P3x, P3y);
+    WriteLine(LName, P0x, P0y, P1x, P1y);
+    WriteLine(LName, P1x, P1y, P2x, P2y);
+    WriteLine(LName, P2x, P2y, P3x, P3y);
+    WriteLine(LName, P3x, P3y, P0x, P0y);
 end;
 
 procedure ExportViaOutline(const LName : String; DxfVia : IPCB_Via; DxfALayer : TLayer);
@@ -485,9 +491,14 @@ begin
     end;
     if DxfPrim.ObjectId = ePadObject then
     begin
+        if DxfALayer = eMultiLayer then
+        begin
+            Result := False;
+            Exit;
+        end;
         if (DxfPrim.Layer = eMultiLayer) and IsCopperLayer(DxfALayer) then
             Result := True;
-        if (DxfALayer = eMultiLayer) and (DxfPrim.Layer = eMultiLayer) then
+        if (DxfPrim.Layer = DxfALayer) then
             Result := True;
     end;
     if DxfPrim.ObjectId = eViaObject then
@@ -664,6 +675,15 @@ begin
     if (DxfP = '') or (not FileExists(DxfP)) then Exit;
     try
         ImageHelp.Picture.LoadFromFile(DxfP);
+        ImageHelp.Stretch := True;
+        try
+            ImageHelp.Proportional := True;
+        except
+        end;
+        try
+            ImageHelp.Center := True;
+        except
+        end;
         LabelImageHint.Caption := '';
         DxfDone := True;
     except

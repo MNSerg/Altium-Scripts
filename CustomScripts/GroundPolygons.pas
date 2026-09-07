@@ -272,6 +272,15 @@ begin
     if (GndP = '') or (not FileExists(GndP)) then Exit;
     try
         ImageHelp.Picture.LoadFromFile(GndP);
+        ImageHelp.Stretch := True;
+        try
+            ImageHelp.Proportional := True;
+        except
+        end;
+        try
+            ImageHelp.Center := True;
+        except
+        end;
         LabelImageHint.Caption := '';
         GndDone := True;
     except

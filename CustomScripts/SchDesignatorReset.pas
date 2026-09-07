@@ -52,6 +52,63 @@ begin
     if Result = '' then Result := 'U';
 end;
 
+function SchDesText(SchComp : ISch_Component) : String;
+var
+    SchIt : ISch_Iterator;
+    SchP : ISch_Parameter;
+    PName : String;
+begin
+    { Не Comp.Designator — в этом диалекте идентификатор Designator нет. }
+    Result := '';
+    try
+        SchIt := SchComp.SchIterator_Create;
+        SchIt.AddFilter_ObjectSet(MkSet(eParameter));
+        SchP := SchIt.FirstSchObject;
+        while SchP <> nil do
+        begin
+            PName := '';
+            try PName := SchP.Name; except PName := ''; end;
+            if UpperCase(PName) = 'DESIGNATOR' then
+            begin
+                try Result := SchP.Text; except Result := ''; end;
+                SchComp.SchIterator_Destroy(SchIt);
+                Exit;
+            end;
+            SchP := SchIt.NextSchObject;
+        end;
+        SchComp.SchIterator_Destroy(SchIt);
+    except
+        Result := '';
+    end;
+end;
+
+procedure SchSetDes(SchComp : ISch_Component; const NewT : String);
+var
+    SchIt : ISch_Iterator;
+    SchP : ISch_Parameter;
+    PName : String;
+begin
+    try
+        SchIt := SchComp.SchIterator_Create;
+        SchIt.AddFilter_ObjectSet(MkSet(eParameter));
+        SchP := SchIt.FirstSchObject;
+        while SchP <> nil do
+        begin
+            PName := '';
+            try PName := SchP.Name; except PName := ''; end;
+            if UpperCase(PName) = 'DESIGNATOR' then
+            begin
+                SchP.Text := NewT;
+                SchComp.SchIterator_Destroy(SchIt);
+                Exit;
+            end;
+            SchP := SchIt.NextSchObject;
+        end;
+        SchComp.SchIterator_Destroy(SchIt);
+    except
+    end;
+end;
+
 function IsLockedDesignator(SchComp : ISch_Component) : Boolean;
 begin
     Result := False;
@@ -75,7 +132,6 @@ procedure ResetSheet(SchSchDoc : ISch_Document);
 var
     SchIter : ISch_Iterator;
     SchComp : ISch_Component;
-    SchDes  : ISch_Designator;
     Text : String;
     Pref : String;
 begin
@@ -94,10 +150,9 @@ begin
                 else
                 begin
                     try
-                        SchDes := SchComp.Designator;
-                        Text := SchDes.Text;
+                        Text := SchDesText(SchComp);
                         Pref := DesignatorPrefix(Text);
-                        SchDes.Text := Pref + '?';
+                        SchSetDes(SchComp, Pref + '?');
                         Inc(ChangedCnt);
                     except
                     end;
@@ -150,7 +205,7 @@ begin
         for Schi := 0 to SchList.Count - 1 do
         begin
             SchComp := SchList.Objects[Schi];
-            Prefix := DesignatorPrefix(SchComp.Designator.Text);
+            Prefix := DesignatorPrefix(SchDesText(SchComp));
             SchIdx := PrefixCounters.IndexOfName(Prefix);
             if SchIdx < 0 then
             begin
@@ -162,7 +217,7 @@ begin
                 Num := StrToInt(PrefixCounters.ValueFromIndex[SchIdx]) + 1;
                 PrefixCounters.ValueFromIndex[SchIdx] := IntToStr(Num);
             end;
-            SchComp.Designator.Text := Prefix + IntToStr(Num);
+            SchSetDes(SchComp, Prefix + IntToStr(Num));
             Inc(ChangedCnt);
         end;
         SchSchDoc.GraphicallyInvalidate;
@@ -346,6 +401,15 @@ begin
     if (SchP = '') or (not FileExists(SchP)) then Exit;
     try
         ImageHelp.Picture.LoadFromFile(SchP);
+        ImageHelp.Stretch := True;
+        try
+            ImageHelp.Proportional := True;
+        except
+        end;
+        try
+            ImageHelp.Center := True;
+        except
+        end;
         LabelImageHint.Caption := '';
         SchDone := True;
     except

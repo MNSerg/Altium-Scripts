@@ -139,10 +139,18 @@ var
     SilPrim : IPCB_Primitive;
     RR : TCoordRect;
     Extra : TCoord;
+    NameAddr : Integer;
 begin
     Result := 0;
     Extra := MMsToCoord(cGapMM);
     SilL := SilL - Extra; SilB := SilB - Extra; SilR := SilR + Extra; SilT := SilT + Extra;
+    NameAddr := 0;
+    try
+        if (SkipCmp <> nil) and (SkipCmp.Name <> nil) then
+            NameAddr := SkipCmp.Name.I_ObjectAddress;
+    except
+        NameAddr := 0;
+    end;
 
     SilIter := SilBoard.SpatialIterator_Create;
     SilIter.AddFilter_ObjectSet(MkSet(ePadObject, eViaObject, eTrackObject, eArcObject, eTextObject, eComponentBodyObject));
@@ -151,27 +159,27 @@ begin
     SilPrim := SilIter.FirstPCBObject;
     while SilPrim <> nil do
     begin
-        if (SkipCmp <> nil) and (SilPrim.I_ObjectAddress = SkipCmp.I_ObjectAddress) then
+        if (NameAddr <> 0) and (SilPrim.I_ObjectAddress = NameAddr) then
         begin
             SilPrim := SilIter.NextPCBObject;
             Continue;
         end;
-        if SilPrim.ObjectId = eTextObject then
-        begin
-            if SilPrim.Component = SkipCmp then
-            begin
-                SilPrim := SilIter.NextPCBObject;
-                Continue;
-            end;
-        end;
         RR := SilPrim.BoundingRectangle;
         if RectsOverlap(SilL, SilB, SilR, SilT, RR.Left, RR.Bottom, RR.Right, RR.Top) then
-            Inc(Result);
+        begin
+            if SilPrim.ObjectId = ePadObject then
+                Result := Result + 12
+            else if SilPrim.ObjectId = eViaObject then
+                Result := Result + 10
+            else if SilPrim.ObjectId = eTextObject then
+                Result := Result + 8
+            else
+                Inc(Result);
+        end;
         SilPrim := SilIter.NextPCBObject;
     end;
     SilBoard.SpatialIterator_Destroy(SilIter);
 
-    { Край платы. }
     RR := SilBoard.BoardOutline.BoundingRectangle;
     if (SilL < RR.Left) or (SilB < RR.Bottom) or (SilR > RR.Right) or (SilT > RR.Top) then
         Result := Result + 50;
@@ -196,15 +204,14 @@ procedure PlaceOne(SilCmp : IPCB_Component);
 var
     Txt : IPCB_Text;
     Court : TCoordRect;
-    BestScore, Score, Sili : Integer;
+    BestScore, Score, Step, Dir : Integer;
     BestX, BestY : TCoord;
     Best90 : Boolean;
     TW, TH : TCoord;
     SilL, SilB, SilR, SilT : TCoord;
-    Gap : TCoord;
-    SilCX, SilCY : TCoord;
-    CandsX, CandsY : array[0..7] of TCoord;
-    Cands90 : array[0..7] of Boolean;
+    Gap, Extra : TCoord;
+    SilCX, SilCY, CandX, CandY : TCoord;
+    Use90 : Boolean;
     SilkLayer : TLayer;
 begin
     Txt := SilCmp.Name;
@@ -237,44 +244,59 @@ begin
     SilCX := (Court.Left + Court.Right) div 2;
     SilCY := (Court.Bottom + Court.Top) div 2;
 
-    { 0: сверху 0°, 1: снизу 0°, 2: слева 90°, 3: справа 90°,
-      4..7 те же со сдвигом. }
-    CandsX[0] := SilCX; CandsY[0] := Court.Top + Gap + TH div 2; Cands90[0] := False;
-    CandsX[1] := SilCX; CandsY[1] := Court.Bottom - Gap - TH div 2; Cands90[1] := False;
-    CandsX[2] := Court.Left - Gap - TH div 2; CandsY[2] := SilCY; Cands90[2] := True;
-    CandsX[3] := Court.Right + Gap + TH div 2; CandsY[3] := SilCY; Cands90[3] := True;
-    CandsX[4] := Court.Left + TW div 2; CandsY[4] := Court.Top + Gap + TH div 2; Cands90[4] := False;
-    CandsX[5] := Court.Right - TW div 2; CandsY[5] := Court.Bottom - Gap - TH div 2; Cands90[5] := False;
-    CandsX[6] := Court.Left - Gap - TH div 2; CandsY[6] := Court.Top - TH; Cands90[6] := True;
-    CandsX[7] := Court.Right + Gap + TH div 2; CandsY[7] := Court.Bottom + TH; Cands90[7] := True;
-
     BestScore := 100000;
     BestX := Txt.XLocation;
     BestY := Txt.YLocation;
     Best90 := False;
 
-    for Sili := 0 to 7 do
+    { 12 позиций вокруг courtyard × шаги смещения 0.2 мм. }
+    for Step := 0 to 6 do
     begin
-        SilL := CandsX[Sili] - TW div 2;
-        SilR := CandsX[Sili] + TW div 2;
-        SilB := CandsY[Sili] - TH div 2;
-        SilT := CandsY[Sili] + TH div 2;
-        if Cands90[Sili] then
+        Extra := Gap + MMsToCoord(0.2) * Step;
+        for Dir := 0 to 11 do
         begin
-            SilL := CandsX[Sili] - TH div 2;
-            SilR := CandsX[Sili] + TH div 2;
-            SilB := CandsY[Sili] - TW div 2;
-            SilT := CandsY[Sili] + TW div 2;
+            Use90 := False;
+            CandX := SilCX;
+            CandY := SilCY;
+            case Dir of
+                0: begin CandX := SilCX; CandY := Court.Top + Extra + TH div 2; end;
+                1: begin CandX := SilCX; CandY := Court.Bottom - Extra - TH div 2; end;
+                2: begin CandX := Court.Right + Extra + TH div 2; CandY := SilCY; Use90 := True; end;
+                3: begin CandX := Court.Left - Extra - TH div 2; CandY := SilCY; Use90 := True; end;
+                4: begin CandX := Court.Right + Extra + TW div 2; CandY := Court.Top + Extra + TH div 2; end;
+                5: begin CandX := Court.Left - Extra - TW div 2; CandY := Court.Top + Extra + TH div 2; end;
+                6: begin CandX := Court.Right + Extra + TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
+                7: begin CandX := Court.Left - Extra - TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
+                8: begin CandX := Court.Right - TW div 2; CandY := Court.Top + Extra + TH div 2; end;
+                9: begin CandX := Court.Left + TW div 2; CandY := Court.Bottom - Extra - TH div 2; end;
+                10: begin CandX := Court.Right + Extra + TH div 2; CandY := Court.Top - TH; Use90 := True; end;
+                11: begin CandX := Court.Left - Extra - TH div 2; CandY := Court.Bottom + TH; Use90 := True; end;
+            end;
+            if Use90 then
+            begin
+                SilL := CandX - TH div 2;
+                SilR := CandX + TH div 2;
+                SilB := CandY - TW div 2;
+                SilT := CandY + TW div 2;
+            end
+            else
+            begin
+                SilL := CandX - TW div 2;
+                SilR := CandX + TW div 2;
+                SilB := CandY - TH div 2;
+                SilT := CandY + TH div 2;
+            end;
+            Score := CollisionScore(SilL, SilB, SilR, SilT, SilCmp, SilkLayer);
+            if Score < BestScore then
+            begin
+                BestScore := Score;
+                BestX := CandX;
+                BestY := CandY;
+                Best90 := Use90;
+            end;
+            if BestScore = 0 then Break;
         end;
-        Score := CollisionScore(SilL, SilB, SilR, SilT, SilCmp, SilkLayer);
-        { Предпочитаем верх/право при равенстве. }
-        if Score < BestScore then
-        begin
-            BestScore := Score;
-            BestX := CandsX[Sili];
-            BestY := CandsY[Sili];
-            Best90 := Cands90[Sili];
-        end;
+        if BestScore = 0 then Break;
     end;
 
     Txt.BeginModify;
@@ -284,7 +306,7 @@ begin
     Txt.EndModify;
     Txt.GraphicallyInvalidate;
     Inc(MovedCnt);
-    if BestScore >= 50 then Inc(FailCnt);
+    if BestScore > 0 then Inc(FailCnt);
 end;
 
 procedure DoPlace;
@@ -401,6 +423,15 @@ begin
     if (SilP = '') or (not FileExists(SilP)) then Exit;
     try
         ImageHelp.Picture.LoadFromFile(SilP);
+        ImageHelp.Stretch := True;
+        try
+            ImageHelp.Proportional := True;
+        except
+        end;
+        try
+            ImageHelp.Center := True;
+        except
+        end;
         LabelImageHint.Caption := '';
         SilDone := True;
     except

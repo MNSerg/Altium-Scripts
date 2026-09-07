@@ -419,6 +419,15 @@ begin
     if (WizP = '') or (not FileExists(WizP)) then Exit;
     try
         ImageHelp.Picture.LoadFromFile(WizP);
+        ImageHelp.Stretch := True;
+        try
+            ImageHelp.Proportional := True;
+        except
+        end;
+        try
+            ImageHelp.Center := True;
+        except
+        end;
         LabelImageHint.Caption := '';
         WizDone := True;
     except

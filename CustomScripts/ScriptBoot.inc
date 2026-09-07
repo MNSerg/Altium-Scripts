@@ -8,4 +8,5 @@
 { Image path: this .PrjScr folder, then images\  (not focused PCB project)     }
 { Do not read EXE command-line args (native AV in DelphiScript).                             }
 { Form must have ImageHelp (TImage) and LabelImageHint (TLabel).               }
-{ TImage: only Left/Top/Width/Height — no Stretch/Proportional/Center.         }
+{ TImage DFM: only Left/Top/Width/Height (Stretch in DFM on empty TImage = AV). }
+{ After LoadFromFile: Stretch := True; Proportional/Center if the dialect has them. }

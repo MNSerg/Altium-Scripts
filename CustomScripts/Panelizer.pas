@@ -154,16 +154,17 @@ begin
     AddArc(ABoard, PanX0 + PanR, PanY1 - PanR, PanR, 90, 180, PanALayer);
 end;
 
-{ Вырез в заготовке: кольцо ширины = диаметр фрезы (2*R), разрывы = перемычки. }
+{ Вырез: кольцо ширины 2R без линий внутри паза. На плечах перемычки — полукруг R. }
 procedure DrawMillAroundBoard(ABoard : IPCB_Board; Col, Row : Integer; PanALayer : TLayer);
 var
-    L, B, Rgt, Tp, D, HalfTab, Mx0, Mx1, My0, My1 : TCoord;
+    L, B, Rgt, Tp, D, RR, HalfTab, Mx0, Mx1, My0, My1 : TCoord;
 begin
     L := BoardOriginX(Col);
     B := BoardOriginY(Row);
     Rgt := L + MMsToCoord(BoardW);
     Tp := B + MMsToCoord(BoardH);
-    D := MMsToCoord(FilletR + FilletR);
+    RR := MMsToCoord(FilletR);
+    D := RR + RR;
     if D < 1 then Exit;
     HalfTab := MMsToCoord(TabW) div 2;
     if HalfTab < 1 then HalfTab := 1;
@@ -171,46 +172,47 @@ begin
     Mx1 := (L + Rgt) div 2 + HalfTab;
     My0 := (B + Tp) div 2 - HalfTab;
     My1 := (B + Tp) div 2 + HalfTab;
-    if Mx0 < L + 1 then Mx0 := L + 1;
-    if Mx1 > Rgt - 1 then Mx1 := Rgt - 1;
-    if My0 < B + 1 then My0 := B + 1;
-    if My1 > Tp - 1 then My1 := Tp - 1;
+    if Mx0 < L + RR then Mx0 := L + RR;
+    if Mx1 > Rgt - RR then Mx1 := Rgt - RR;
+    if My0 < B + RR then My0 := B + RR;
+    if My1 > Tp - RR then My1 := Tp - RR;
+    if (Mx0 >= Mx1) or (My0 >= My1) then Exit;
 
-    { SW: внутренний край = контур платы, внешний = смещение на диаметр, дуга снаружи. }
-    AddTrack(ABoard, L, B, Mx0, B, PanALayer);
-    AddTrack(ABoard, Mx0, B, Mx0, B - D, PanALayer);
-    AddTrack(ABoard, Mx0, B - D, L, B - D, PanALayer);
+    { SW: внутренний угол платы + внешний offset D + 2 полукруга на перемычках. }
+    AddTrack(ABoard, Mx0, B, L, B, PanALayer);
+    AddTrack(ABoard, L, B, L, My0, PanALayer);
+    AddTrack(ABoard, L - D, My0, L - D, B, PanALayer);
     AddArc(ABoard, L, B, D, 180, 270, PanALayer);
-    AddTrack(ABoard, L - D, B, L - D, My0, PanALayer);
-    AddTrack(ABoard, L - D, My0, L, My0, PanALayer);
-    AddTrack(ABoard, L, My0, L, B, PanALayer);
+    AddTrack(ABoard, L, B - D, Mx0, B - D, PanALayer);
+    AddArc(ABoard, L - RR, My0, RR, 180, 0, PanALayer);
+    AddArc(ABoard, Mx0, B - RR, RR, 90, 270, PanALayer);
 
     { SE }
     AddTrack(ABoard, Mx1, B, Rgt, B, PanALayer);
-    AddTrack(ABoard, Mx1, B, Mx1, B - D, PanALayer);
-    AddTrack(ABoard, Mx1, B - D, Rgt, B - D, PanALayer);
+    AddTrack(ABoard, Rgt, B, Rgt, My0, PanALayer);
+    AddTrack(ABoard, Rgt + D, My0, Rgt + D, B, PanALayer);
     AddArc(ABoard, Rgt, B, D, 270, 0, PanALayer);
-    AddTrack(ABoard, Rgt + D, B, Rgt + D, My0, PanALayer);
-    AddTrack(ABoard, Rgt + D, My0, Rgt, My0, PanALayer);
-    AddTrack(ABoard, Rgt, My0, Rgt, B, PanALayer);
+    AddTrack(ABoard, Rgt, B - D, Mx1, B - D, PanALayer);
+    AddArc(ABoard, Rgt + RR, My0, RR, 180, 0, PanALayer);
+    AddArc(ABoard, Mx1, B - RR, RR, 270, 90, PanALayer);
 
     { NE }
     AddTrack(ABoard, Mx1, Tp, Rgt, Tp, PanALayer);
-    AddTrack(ABoard, Mx1, Tp, Mx1, Tp + D, PanALayer);
-    AddTrack(ABoard, Mx1, Tp + D, Rgt, Tp + D, PanALayer);
+    AddTrack(ABoard, Rgt, Tp, Rgt, My1, PanALayer);
+    AddTrack(ABoard, Rgt + D, My1, Rgt + D, Tp, PanALayer);
     AddArc(ABoard, Rgt, Tp, D, 0, 90, PanALayer);
-    AddTrack(ABoard, Rgt + D, Tp, Rgt + D, My1, PanALayer);
-    AddTrack(ABoard, Rgt + D, My1, Rgt, My1, PanALayer);
-    AddTrack(ABoard, Rgt, My1, Rgt, Tp, PanALayer);
+    AddTrack(ABoard, Rgt, Tp + D, Mx1, Tp + D, PanALayer);
+    AddArc(ABoard, Rgt + RR, My1, RR, 0, 180, PanALayer);
+    AddArc(ABoard, Mx1, Tp + RR, RR, 270, 90, PanALayer);
 
     { NW }
-    AddTrack(ABoard, L, Tp, Mx0, Tp, PanALayer);
-    AddTrack(ABoard, Mx0, Tp, Mx0, Tp + D, PanALayer);
-    AddTrack(ABoard, Mx0, Tp + D, L, Tp + D, PanALayer);
+    AddTrack(ABoard, Mx0, Tp, L, Tp, PanALayer);
+    AddTrack(ABoard, L, Tp, L, My1, PanALayer);
+    AddTrack(ABoard, L - D, My1, L - D, Tp, PanALayer);
     AddArc(ABoard, L, Tp, D, 90, 180, PanALayer);
-    AddTrack(ABoard, L - D, Tp, L - D, My1, PanALayer);
-    AddTrack(ABoard, L - D, My1, L, My1, PanALayer);
-    AddTrack(ABoard, L, My1, L, Tp, PanALayer);
+    AddTrack(ABoard, L, Tp + D, Mx0, Tp + D, PanALayer);
+    AddArc(ABoard, L - RR, My1, RR, 0, 180, PanALayer);
+    AddArc(ABoard, Mx0, Tp + RR, RR, 90, 270, PanALayer);
 end;
 
 procedure DrawAllMillPaths(ABoard : IPCB_Board; PanALayer : TLayer);
@@ -483,6 +485,15 @@ begin
     if (PanP = '') or (not FileExists(PanP)) then Exit;
     try
         ImageHelp.Picture.LoadFromFile(PanP);
+        ImageHelp.Stretch := True;
+        try
+            ImageHelp.Proportional := True;
+        except
+        end;
+        try
+            ImageHelp.Center := True;
+        except
+        end;
         LabelImageHint.Caption := '';
         PanDone := True;
     except

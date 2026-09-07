@@ -54,6 +54,45 @@ begin
     Result := BomT;
 end;
 
+function BomUtf8Char(BomCp : Integer) : String;
+begin
+    if BomCp < 0 then BomCp := 0;
+    if BomCp < 128 then
+        Result := Chr(BomCp)
+    else if BomCp < 2048 then
+        Result := Chr(192 + (BomCp div 64)) + Chr(128 + (BomCp mod 64))
+    else
+        Result := Chr(224 + (BomCp div 4096)) +
+                  Chr(128 + ((BomCp div 64) mod 64)) +
+                  Chr(128 + (BomCp mod 64));
+end;
+
+function BomWin1251Cp(B : Integer) : Integer;
+begin
+    Result := B;
+    if (B >= 192) and (B <= 255) then
+        Result := 1040 + (B - 192);
+    if B = 168 then Result := 1025;
+    if B = 184 then Result := 1105;
+end;
+
+function BomToUtf8(const BomS : String) : String;
+var
+    Bomi, Cp, MaxCp : Integer;
+begin
+    MaxCp := 0;
+    for Bomi := 1 to Length(BomS) do
+        if Ord(BomS[Bomi]) > MaxCp then MaxCp := Ord(BomS[Bomi]);
+    Result := '';
+    for Bomi := 1 to Length(BomS) do
+    begin
+        Cp := Ord(BomS[Bomi]);
+        if MaxCp <= 255 then
+            Cp := BomWin1251Cp(Cp);
+        Result := Result + BomUtf8Char(Cp);
+    end;
+end;
+
 function ParamVal(BomComp : ISch_Component; const BomNames : String) : String;
 var
     BomIter : ISch_Iterator;
@@ -151,16 +190,8 @@ begin
     while BomComp <> nil do
     begin
         { Ничего не исключаем: DNP, графические, NoBOM, механические — всё. }
-        try
-            BomDes := BomComp.Designator.Text;
-        except
-            BomDes := '';
-        end;
-        try
-            Comment := BomComp.Comment.Text;
-        except
-            Comment := ParamVal(BomComp, 'Comment');
-        end;
+        BomDes := ParamVal(BomComp, 'Designator');
+        Comment := ParamVal(BomComp, 'Comment');
         Desc := ParamVal(BomComp, 'Description|Part Description');
         Fp := FootprintOf(BomComp);
         BomVal := ParamVal(BomComp, 'Value');
@@ -252,7 +283,7 @@ begin
         Xml.Add('<?xml version="1.0" encoding="UTF-8"?>');
         Xml.Add('<BomSettings generator="CustomScripts.BomExport" version="1.1">');
         Xml.Add('  <Output>' + XmlEsc(XlsPath) + '</Output>');
-        Xml.Add('  <Format>SpreadsheetML (.xls)</Format>');
+          Xml.Add('  <Format>Excel HTML (.xls), UTF-8</Format>');
         Xml.Add('  <GroupBy>Comment,Value,Description,Footprint(internal)</GroupBy>');
         Xml.Add('  <ExcludeParts>None</ExcludeParts>');
         Xml.Add('  <Columns>Comment,Designator,Description,Quantity,Value</Columns>');
@@ -270,43 +301,44 @@ var
     Bomi : Integer;
     Parts : TStringList;
     Qty : Integer;
+    CellC, CellD, CellE, CellV : String;
 begin
+    { HTML Spreadsheet as .xls — Excel opens without XML security warning. UTF-8 BOM. }
     Lines := TStringList.Create;
     Parts := TStringList.Create;
     Parts.Delimiter := '|';
     Parts.StrictDelimiter := True;
     try
-        Lines.Add('<?xml version="1.0"?>');
-        Lines.Add('<?mso-application progid="Excel.Sheet"?>');
-        Lines.Add('<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"');
-        Lines.Add(' xmlns:o="urn:schemas-microsoft-com:office:office"');
+        Lines.Add(Chr(239) + Chr(187) + Chr(191) + '<html xmlns:o="urn:schemas-microsoft-com:office:office"');
         Lines.Add(' xmlns:x="urn:schemas-microsoft-com:office:excel"');
-        Lines.Add(' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">');
-        Lines.Add(' <Worksheet ss:Name="BOM">');
-        Lines.Add('  <Table>');
-        Lines.Add('   <Row>');
-        Lines.Add('    <Cell><Data ss:Type="String">Comment</Data></Cell>');
-        Lines.Add('    <Cell><Data ss:Type="String">Designator</Data></Cell>');
-        Lines.Add('    <Cell><Data ss:Type="String">Description</Data></Cell>');
-        Lines.Add('    <Cell><Data ss:Type="String">Quantity</Data></Cell>');
-        Lines.Add('    <Cell><Data ss:Type="String">Value</Data></Cell>');
-        Lines.Add('   </Row>');
+        Lines.Add(' xmlns="http://www.w3.org/TR/REC-html40">');
+        Lines.Add('<head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">');
+        Lines.Add('<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>');
+        Lines.Add('<x:Name>BOM</x:Name><x:WorksheetOptions><x:FreezePanes/><x:FrozenNoSplit/>');
+        Lines.Add('<x:SplitHorizontal>1</x:SplitHorizontal><x:TopRowBottomPane>1</x:TopRowBottomPane>');
+        Lines.Add('</x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->');
+        Lines.Add('<style>');
+        Lines.Add('th { font-weight:bold; background:#DDDDDD; border:1px solid #666666; }');
+        Lines.Add('td { border:1px solid #999999; vertical-align:top; }');
+        Lines.Add('td.des { mso-number-format:"\@"; white-space:normal; }');
+        Lines.Add('col.c { width:120pt; } col.d { width:220pt; } col.e { width:220pt; } col.q { width:50pt; } col.v { width:100pt; }');
+        Lines.Add('</style></head><body><table border="1" cellspacing="0" cellpadding="4">');
+        Lines.Add('<colgroup><col class="c"><col class="d"><col class="e"><col class="q"><col class="v"></colgroup>');
+        Lines.Add('<tr><th>Comment</th><th>Designator</th><th>Description</th><th>Quantity</th><th>Value</th></tr>');
         for Bomi := 0 to Groups.Count - 1 do
         begin
             Qty := StrToInt(QtyList[Bomi]);
             Parts.DelimitedText := ExtraFields[Bomi];
             while Parts.Count < 3 do Parts.Add('');
-            Lines.Add('   <Row>');
-            Lines.Add('    <Cell><Data ss:Type="String">' + XmlEsc(Parts[0]) + '</Data></Cell>');
-            Lines.Add('    <Cell><Data ss:Type="String">' + XmlEsc(DesLists[Bomi]) + '</Data></Cell>');
-            Lines.Add('    <Cell><Data ss:Type="String">' + XmlEsc(Parts[1]) + '</Data></Cell>');
-            Lines.Add('    <Cell><Data ss:Type="Number">' + IntToStr(Qty) + '</Data></Cell>');
-            Lines.Add('    <Cell><Data ss:Type="String">' + XmlEsc(Parts[2]) + '</Data></Cell>');
-            Lines.Add('   </Row>');
+            CellC := BomToUtf8(XmlEsc(Parts[0]));
+            CellD := BomToUtf8(XmlEsc(DesLists[Bomi]));
+            CellE := BomToUtf8(XmlEsc(Parts[1]));
+            CellV := BomToUtf8(XmlEsc(Parts[2]));
+            Lines.Add('<tr><td>' + CellC + '</td><td class="des">' + CellD +
+                      '</td><td>' + CellE + '</td><td align="right">' + IntToStr(Qty) +
+                      '</td><td>' + CellV + '</td></tr>');
         end;
-        Lines.Add('  </Table>');
-        Lines.Add(' </Worksheet>');
-        Lines.Add('</Workbook>');
+        Lines.Add('</table></body></html>');
         Lines.SaveToFile(OutPath);
         WriteSettingsXml(OutPath);
         BomShowBox(LabelInfoDone.Caption + OutPath + sLineBreak +
@@ -375,6 +407,15 @@ begin
     if (BomP = '') or (not FileExists(BomP)) then Exit;
     try
         ImageHelp.Picture.LoadFromFile(BomP);
+        ImageHelp.Stretch := True;
+        try
+            ImageHelp.Proportional := True;
+        except
+        end;
+        try
+            ImageHelp.Center := True;
+        except
+        end;
         LabelImageHint.Caption := '';
         BomDone := True;
     except
