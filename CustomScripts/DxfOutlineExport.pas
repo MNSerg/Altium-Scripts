@@ -1,9 +1,7 @@
 {..............................................................................}
 { DxfOutlineExport.pas                                                          }
-{ Экспорт выбранных слоёв PCB в ASCII DXF R12 линиями и дугами.                }
-{ Геометрия — полный контур меди (ширина трека, крышки, площадки),              }
-{ НЕ залитые POLYLINE-полигоны и НЕ осевые линии нулевой ширины.               }
-{ Файл пишется скриптом, без ExportDXF Altium.                                  }
+{ Экспорт слоёв PCB в ASCII DXF R12: контуры меди LINE/ARC, шелкография,       }
+{ отверстия CIRCLE на отдельном слое HOLES. Без ExportDXF Altium.              }
 {..............................................................................}
 
 const
@@ -24,6 +22,7 @@ procedure TFormDxf.ButtonCancelClick(Sender: TObject); forward;
 procedure TFormDxf.ButtonAllClick(Sender: TObject); forward;
 procedure TFormDxf.ButtonNoneClick(Sender: TObject); forward;
 procedure TFormDxf.ButtonCopperClick(Sender: TObject); forward;
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String); forward;
 
 function MMX(X : TCoord) : String;
 begin
@@ -125,9 +124,16 @@ end;
 function IsDefaultChecked(ALayer : TLayer) : Boolean;
 begin
     Result := IsCopperLayer(ALayer) or
-              (ALayer = eTopOverlay) or (ALayer = eBottomOverlay) or
-              (ALayer = eKeepOutLayer) or
-              (ALayer = eMechanical1);
+              (ALayer = eTopOverlay) or (ALayer = eBottomOverlay);
+end;
+
+procedure AddLayerIfMissing(ALayer : TLayer);
+begin
+    if LayerIds.IndexOf(IntToStr(ALayer)) < 0 then
+    begin
+        LayerItems.Add(Layer2String(ALayer));
+        LayerIds.Add(IntToStr(ALayer));
+    end;
 end;
 
 procedure CollectBoardLayers;
@@ -139,6 +145,8 @@ var
 begin
     LayerItems.Clear;
     LayerIds.Clear;
+    LayerItems.Add('Отверстия (HOLES) — круги сверловки');
+    LayerIds.Add('HOLES');
 
     { Сигнальные / плоскости через V7 stack, если есть. }
     try
@@ -163,31 +171,22 @@ begin
         end;
     end;
 
-    procedure AddIfMissing(ALayer : TLayer);
-    begin
-        if LayerIds.IndexOf(IntToStr(ALayer)) < 0 then
-        begin
-            LayerItems.Add(Layer2String(ALayer));
-            LayerIds.Add(IntToStr(ALayer));
-        end;
-    end;
-
-    AddIfMissing(eTopLayer);
-    AddIfMissing(eBottomLayer);
-    AddIfMissing(eTopOverlay);
-    AddIfMissing(eBottomOverlay);
-    AddIfMissing(eTopSolder);
-    AddIfMissing(eBottomSolder);
-    AddIfMissing(eTopPaste);
-    AddIfMissing(eBottomPaste);
-    AddIfMissing(eKeepOutLayer);
-    AddIfMissing(eMultiLayer);
-    AddIfMissing(eMechanical1);
-    AddIfMissing(eMechanical2);
-    AddIfMissing(eMechanical3);
-    AddIfMissing(eMechanical4);
-    AddIfMissing(eMechanical13);
-    AddIfMissing(eMechanical15);
+    AddLayerIfMissing(eTopLayer);
+    AddLayerIfMissing(eBottomLayer);
+    AddLayerIfMissing(eTopOverlay);
+    AddLayerIfMissing(eBottomOverlay);
+    AddLayerIfMissing(eTopSolder);
+    AddLayerIfMissing(eBottomSolder);
+    AddLayerIfMissing(eTopPaste);
+    AddLayerIfMissing(eBottomPaste);
+    AddLayerIfMissing(eKeepOutLayer);
+    AddLayerIfMissing(eMultiLayer);
+    AddLayerIfMissing(eMechanical1);
+    AddLayerIfMissing(eMechanical2);
+    AddLayerIfMissing(eMechanical3);
+    AddLayerIfMissing(eMechanical4);
+    AddLayerIfMissing(eMechanical13);
+    AddLayerIfMissing(eMechanical15);
 end;
 
 procedure ExportTrackOutline(const LName : String; T : IPCB_Track);
@@ -306,8 +305,6 @@ begin
             if Abs(SX - SY) < 10 then
             begin
                 WriteCircle(LName, X, Y, SX div 2);
-                if Pad.HoleSize > 0 then
-                    WriteCircle(LName, X, Y, Pad.HoleSize div 2);
                 Exit;
             end;
         end;
@@ -318,8 +315,6 @@ begin
         if (Pad.TopShape = eRound) or (Pad.Shape = eRound) then
         begin
             WriteCircle(LName, X, Y, SX div 2);
-            if Pad.HoleSize > 0 then
-                WriteCircle(LName, X, Y, Pad.HoleSize div 2);
             Exit;
         end;
     except
@@ -361,8 +356,6 @@ begin
                     Qy := Round(Y + R * Sin(Ang));
                     WriteLine(LName, Px, Py, Qx, Qy);
                 end;
-                if Pad.HoleSize > 0 then
-                    WriteCircle(LName, X, Y, Pad.HoleSize div 2);
                 Exit;
             end;
         except
@@ -373,9 +366,6 @@ begin
         WriteLine(LName, X + SX div 2, Y + SY div 2, X - SX div 2, Y + SY div 2);
         WriteLine(LName, X - SX div 2, Y + SY div 2, X - SX div 2, Y - SY div 2);
     end;
-
-    if Pad.HoleSize > 0 then
-        WriteCircle(LName, X, Y, Pad.HoleSize div 2);
 end;
 
 procedure ExportViaOutline(const LName : String; Via : IPCB_Via; ALayer : TLayer);
@@ -388,8 +378,6 @@ begin
         Outer := Via.HoleSize + MMsToCoord(0.3);
     end;
     WriteCircle(LName, Via.X, Via.Y, Outer div 2);
-    if Via.HoleSize > 0 then
-        WriteCircle(LName, Via.X, Via.Y, Via.HoleSize div 2);
 end;
 
 procedure ExportFillOutline(const LName : String; Fill : IPCB_Fill);
@@ -527,6 +515,32 @@ begin
     end;
 end;
 
+procedure ExportHolesLayer;
+var
+    Iter : IPCB_BoardIterator;
+    Prim : IPCB_Primitive;
+    LName : String;
+begin
+    LName := 'HOLES';
+    Iter := Board.BoardIterator_Create;
+    Iter.AddFilter_ObjectSet(MkSet(ePadObject, eViaObject));
+    Iter.AddFilter_LayerSet(AllLayers);
+    Iter.AddFilter_Method(eProcessAll);
+    Prim := Iter.FirstPCBObject;
+    while Prim <> nil do
+    begin
+        if Prim.HoleSize > 0 then
+        begin
+            if Prim.ObjectId = ePadObject then
+                WriteCircle(LName, Prim.X, Prim.Y, Prim.HoleSize div 2)
+            else
+                WriteCircle(LName, Prim.X, Prim.Y, Prim.HoleSize div 2);
+        end;
+        Prim := Iter.NextPCBObject;
+    end;
+    Board.BoardIterator_Destroy(Iter);
+end;
+
 procedure ExportLayer(ALayer : TLayer);
 var
     Iter : IPCB_BoardIterator;
@@ -604,6 +618,51 @@ begin
     DxfPair(0, 'EOF');
 end;
 
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String);
+var
+    Cands : TStringList;
+    i : Integer;
+    P : String;
+    WS : IWorkspace;
+    Prj : IProject;
+begin
+    if Img = nil then Exit;
+    Cands := TStringList.Create;
+    try
+        try Cands.Add(ExtractFilePath(ParamStr(0)) + 'images\' + FileName); except end;
+        try
+            WS := GetWorkspace;
+            if WS <> nil then
+                for i := 0 to WS.DM_ProjectCount - 1 do
+                begin
+                    Prj := WS.DM_Projects(i);
+                    if Prj <> nil then
+                        Cands.Add(ExtractFilePath(Prj.DM_ProjectFullPath) + 'images\' + FileName);
+                end;
+        except
+        end;
+        Cands.Add('images\' + FileName);
+        Cands.Add('CustomScripts\images\' + FileName);
+        for i := 0 to Cands.Count - 1 do
+        begin
+            P := Cands[i];
+            if (P <> '') and FileExists(P) then
+            begin
+                try
+                    Img.Picture.LoadFromFile(P);
+                    if Hint <> nil then Hint.Caption := 'Замените картинку: images\' + FileName;
+                    Exit;
+                except
+                end;
+            end;
+        end;
+        if Hint <> nil then
+            Hint.Caption := 'Нет картинки. Положите ' + FileName + ' в images\ рядом со скриптами.';
+    finally
+        Cands.Free;
+    end;
+end;
+
 procedure DoExport(FileName : String);
 var
     i : Integer;
@@ -615,7 +674,12 @@ begin
     try
         for i := 0 to CheckListLayers.Items.Count - 1 do
             if CheckListLayers.Checked[i] then
-                Names.Add(DxfLayerName(StrToInt(LayerIds[i])));
+            begin
+                if LayerIds[i] = 'HOLES' then
+                    Names.Add('HOLES')
+                else
+                    Names.Add(DxfLayerName(StrToInt(LayerIds[i])));
+            end;
 
         WriteDxfHeader(Names);
 
@@ -623,8 +687,13 @@ begin
         begin
             if CheckListLayers.Checked[i] then
             begin
-                ALayer := StrToInt(LayerIds[i]);
-                ExportLayer(ALayer);
+                if LayerIds[i] = 'HOLES' then
+                    ExportHolesLayer
+                else
+                begin
+                    ALayer := StrToInt(LayerIds[i]);
+                    ExportLayer(ALayer);
+                end;
             end;
         end;
 
@@ -645,12 +714,18 @@ var
     i : Integer;
     ALayer : TLayer;
 begin
+    LoadHelpImage(ImageHelp, LabelImageHint, 'DxfExport.png');
     CheckListLayers.Items.Clear;
     for i := 0 to LayerItems.Count - 1 do
     begin
         CheckListLayers.Items.Add(LayerItems[i]);
-        ALayer := StrToInt(LayerIds[i]);
-        CheckListLayers.Checked[i] := IsDefaultChecked(ALayer);
+        if LayerIds[i] = 'HOLES' then
+            CheckListLayers.Checked[i] := True
+        else
+        begin
+            ALayer := StrToInt(LayerIds[i]);
+            CheckListLayers.Checked[i] := IsDefaultChecked(ALayer);
+        end;
     end;
 end;
 
@@ -677,8 +752,13 @@ var
 begin
     for i := 0 to CheckListLayers.Items.Count - 1 do
     begin
-        ALayer := StrToInt(LayerIds[i]);
-        CheckListLayers.Checked[i] := IsCopperLayer(ALayer);
+        if LayerIds[i] = 'HOLES' then
+            CheckListLayers.Checked[i] := False
+        else
+        begin
+            ALayer := StrToInt(LayerIds[i]);
+            CheckListLayers.Checked[i] := IsCopperLayer(ALayer);
+        end;
     end;
 end;
 

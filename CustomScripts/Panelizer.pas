@@ -1,6 +1,6 @@
 {..............................................................................}
 { Panelizer.pas                                                                 }
-{ Массив плат (Embedded Board Array) + контур заготовки + перемычки под фрезу  }
+{ Массив плат 4×2 (столбцы×ряды) + перемычки mouse-bite БЕЗ отверстий          }
 { и общий внешний контур на механическом слое.                                  }
 {..............................................................................}
 
@@ -25,6 +25,8 @@ procedure _Start; forward;
 procedure TFormPanel.ButtonBrowseClick(Sender: TObject); forward;
 procedure TFormPanel.ButtonOKClick(Sender: TObject); forward;
 procedure TFormPanel.ButtonCancelClick(Sender: TObject); forward;
+procedure TFormPanel.FormPanelShow(Sender: TObject); forward;
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String); forward;
 
 function ParsePositive(const S : String; var V : Double) : Boolean;
 begin
@@ -93,7 +95,7 @@ begin
     AddArc(ABoard, X0 + R, Y1 - R, R, 90, 180, ALayer);
 end;
 
-{ Перемычка между двумя горизонтально соседними платами (в зазоре). }
+{ Перемычка mouse-bite: узкая перемычка БЕЗ отверстий, со скруглением стыка. }
 procedure DrawHTab(ABoard : IPCB_Board; GapLeft, GapRight, MidY, HalfTab, R : TCoord; ALayer : TLayer);
 var
     Y1, Y2 : TCoord;
@@ -401,6 +403,63 @@ end;
 procedure TFormPanel.ButtonCancelClick(Sender: TObject);
 begin
     FormPanel.Close;
+end;
+
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String);
+var
+    Cands : TStringList;
+    i : Integer;
+    P : String;
+    WS : IWorkspace;
+    Prj : IProject;
+begin
+    if Img = nil then Exit;
+    Cands := TStringList.Create;
+    try
+        try Cands.Add(ExtractFilePath(ParamStr(0)) + 'images\' + FileName); except end;
+        try
+            WS := GetWorkspace;
+            if WS <> nil then
+                for i := 0 to WS.DM_ProjectCount - 1 do
+                begin
+                    Prj := WS.DM_Projects(i);
+                    if Prj <> nil then
+                        Cands.Add(ExtractFilePath(Prj.DM_ProjectFullPath) + 'images\' + FileName);
+                end;
+        except
+        end;
+        Cands.Add('images\' + FileName);
+        Cands.Add('CustomScripts\images\' + FileName);
+        for i := 0 to Cands.Count - 1 do
+        begin
+            P := Cands[i];
+            if (P <> '') and FileExists(P) then
+            begin
+                try
+                    Img.Picture.LoadFromFile(P);
+                    if Hint <> nil then Hint.Caption := 'Замените картинку: images\' + FileName;
+                    Exit;
+                except
+                end;
+            end;
+        end;
+        if Hint <> nil then
+            Hint.Caption := 'Нет картинки. Положите ' + FileName + ' в images\ рядом со скриптами.';
+    finally
+        Cands.Free;
+    end;
+end;
+
+procedure TFormPanel.FormPanelShow(Sender: TObject);
+begin
+    LoadHelpImage(ImageHelp, LabelImageHint, 'Panelizer.png');
+    EditCols.Text := '4';
+    EditRows.Text := '2';
+    EditGapX.Text := '2';
+    EditGapY.Text := '2';
+    EditMargin.Text := '10';
+    EditTab.Text := '4';
+    EditFillet.Text := '1';
 end;
 
 procedure Start;

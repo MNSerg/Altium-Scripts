@@ -10,7 +10,6 @@ const
 
 var
     Board : IPCB_Board;
-    OnlySelected : Boolean;
     SkipHidden : Boolean;
     FixedHeight : TCoord;
     MovedCnt, FailCnt, SkipCnt : Integer;
@@ -19,6 +18,8 @@ procedure Start; forward;
 procedure _Start; forward;
 procedure TFormSilk.ButtonOKClick(Sender: TObject); forward;
 procedure TFormSilk.ButtonCancelClick(Sender: TObject); forward;
+procedure TFormSilk.FormSilkShow(Sender: TObject); forward;
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String); forward;
 
 function RectsOverlap(L1, B1, R1, T1, L2, B2, R2, T2 : TCoord) : Boolean;
 begin
@@ -222,15 +223,13 @@ begin
     FailCnt := 0;
     SkipCnt := 0;
 
+    { Если выделены компоненты — только они; иначе все. }
     AnySelected := False;
-    if OnlySelected then
+    for i := 0 to Board.SelectecObjectCount - 1 do
     begin
-        for i := 0 to Board.SelectecObjectCount - 1 do
-        begin
-            Prim := Board.SelectecObject(i);
-            if Prim.ObjectId = eComponentObject then
-                AnySelected := True;
-        end;
+        Prim := Board.SelectecObject(i);
+        if Prim.ObjectId = eComponentObject then
+            AnySelected := True;
     end;
 
     PCBServer.PreProcess;
@@ -269,11 +268,62 @@ begin
              'Десигнаторы');
 end;
 
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String);
+var
+    Cands : TStringList;
+    i : Integer;
+    P : String;
+    WS : IWorkspace;
+    Prj : IProject;
+begin
+    if Img = nil then Exit;
+    Cands := TStringList.Create;
+    try
+        try Cands.Add(ExtractFilePath(ParamStr(0)) + 'images\' + FileName); except end;
+        try
+            WS := GetWorkspace;
+            if WS <> nil then
+                for i := 0 to WS.DM_ProjectCount - 1 do
+                begin
+                    Prj := WS.DM_Projects(i);
+                    if Prj <> nil then
+                        Cands.Add(ExtractFilePath(Prj.DM_ProjectFullPath) + 'images\' + FileName);
+                end;
+        except
+        end;
+        Cands.Add('images\' + FileName);
+        Cands.Add('CustomScripts\images\' + FileName);
+        for i := 0 to Cands.Count - 1 do
+        begin
+            P := Cands[i];
+            if (P <> '') and FileExists(P) then
+            begin
+                try
+                    Img.Picture.LoadFromFile(P);
+                    if Hint <> nil then Hint.Caption := 'Замените картинку: images\' + FileName;
+                    Exit;
+                except
+                end;
+            end;
+        end;
+        if Hint <> nil then
+            Hint.Caption := 'Нет картинки. Положите ' + FileName + ' в images\ рядом со скриптами.';
+    finally
+        Cands.Free;
+    end;
+end;
+
+procedure TFormSilk.FormSilkShow(Sender: TObject);
+begin
+    LoadHelpImage(ImageHelp, LabelImageHint, 'PlaceDesignators.png');
+    EditH.Text := '0';
+    CheckSkipHidden.Checked := True;
+end;
+
 procedure TFormSilk.ButtonOKClick(Sender: TObject);
 var
     H : Double;
 begin
-    OnlySelected := CheckSelected.Checked;
     SkipHidden := CheckSkipHidden.Checked;
     try
         H := StrToFloat(EditH.Text);
@@ -304,7 +354,6 @@ begin
         ShowError('Нет открытого PCB-документа.');
         Exit;
     end;
-    EditH.Text := '0';
     FormSilk.ShowModal;
 end;
 

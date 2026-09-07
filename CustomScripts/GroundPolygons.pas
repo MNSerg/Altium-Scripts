@@ -1,12 +1,12 @@
 {..............................................................................}
 { GroundPolygons.pas                                                            }
 { Полигоны GND по контуру платы на всех сигнальных медных слоях.               }
+{ Зазоры не задаются скриптом — действуют правила проектирования.               }
 {..............................................................................}
 
 var
     Board     : IPCB_Board;
     NetName   : String;
-    ClearMM   : Double;
     UseSolid  : Boolean;
     ReplaceAll: Integer; { -1 не спрашивали, 0 skip, 1 replace }
     Created   : Integer;
@@ -16,6 +16,8 @@ procedure Start; forward;
 procedure _Start; forward;
 procedure TFormGnd.ButtonOKClick(Sender: TObject); forward;
 procedure TFormGnd.ButtonCancelClick(Sender: TObject); forward;
+procedure TFormGnd.FormGndShow(Sender: TObject); forward;
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String); forward;
 
 function FindNet(const Name : String) : IPCB_Net;
 var
@@ -166,10 +168,7 @@ begin
         Poly.RestoreUndersizedPolygons := True;
     except
     end;
-    try
-        Poly.ClearanceGap := MMsToCoord(ClearMM);
-    except
-    end;
+    { ClearanceGap не задаём: зазоры полигона — из правил проектирования. }
     try
         Poly.MinPrimLength := MMsToCoord(0.1);
     except
@@ -220,21 +219,62 @@ begin
              'Полигоны GND');
 end;
 
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String);
+var
+    Cands : TStringList;
+    i : Integer;
+    P : String;
+    WS : IWorkspace;
+    Prj : IProject;
+begin
+    if Img = nil then Exit;
+    Cands := TStringList.Create;
+    try
+        try Cands.Add(ExtractFilePath(ParamStr(0)) + 'images\' + FileName); except end;
+        try
+            WS := GetWorkspace;
+            if WS <> nil then
+                for i := 0 to WS.DM_ProjectCount - 1 do
+                begin
+                    Prj := WS.DM_Projects(i);
+                    if Prj <> nil then
+                        Cands.Add(ExtractFilePath(Prj.DM_ProjectFullPath) + 'images\' + FileName);
+                end;
+        except
+        end;
+        Cands.Add('images\' + FileName);
+        Cands.Add('CustomScripts\images\' + FileName);
+        for i := 0 to Cands.Count - 1 do
+        begin
+            P := Cands[i];
+            if (P <> '') and FileExists(P) then
+            begin
+                try
+                    Img.Picture.LoadFromFile(P);
+                    if Hint <> nil then Hint.Caption := 'Замените картинку: images\' + FileName;
+                    Exit;
+                except
+                end;
+            end;
+        end;
+        if Hint <> nil then
+            Hint.Caption := 'Нет картинки. Положите ' + FileName + ' в images\ рядом со скриптами.';
+    finally
+        Cands.Free;
+    end;
+end;
+
+procedure TFormGnd.FormGndShow(Sender: TObject);
+begin
+    LoadHelpImage(ImageHelp, LabelImageHint, 'GroundPolygons.png');
+    EditNet.Text := 'GND';
+    CheckSolid.Checked := True;
+end;
+
 procedure TFormGnd.ButtonOKClick(Sender: TObject);
 begin
     NetName := EditNet.Text;
     if NetName = '' then NetName := 'GND';
-    try
-        ClearMM := StrToFloat(EditClr.Text);
-    except
-        ShowError('Некорректный зазор (мм).');
-        Exit;
-    end;
-    if ClearMM < 0 then
-    begin
-        ShowError('Зазор не может быть отрицательным.');
-        Exit;
-    end;
     UseSolid := CheckSolid.Checked;
     FormGnd.Close;
     DoCreate;
@@ -253,8 +293,6 @@ begin
         ShowError('Нет открытого PCB-документа.');
         Exit;
     end;
-    EditNet.Text := 'GND';
-    EditClr.Text := '0.2';
     FormGnd.ShowModal;
 end;
 

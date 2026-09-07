@@ -1,42 +1,38 @@
 {..............................................................................}
 { BomExport.pas                                                                 }
-{ Сбор BOM: группировка Comment+Footprint (+MPN), исключение DNP/графики.      }
-{ CSV UTF-8 + сопроводительный XML настроек.                                    }
+{ BOM в Excel (SpreadsheetML, *.xls) без COM. Все компоненты, группировка.     }
+{ Столбцы: Comment, Designator, Description, Quantity, Value.                   }
 {..............................................................................}
 
 var
     OutPath     : String;
-    ExcludeDnp  : Boolean;
-    GroupByMpn  : Boolean;
-    Groups      : TStringList; { key -> qty in Objects as integer via string value }
+    Groups      : TStringList; { key -> qty in Objects }
     DesLists    : TStringList; { key -> concatenated designators }
-    ExtraFields : TStringList; { key -> pipe-separated fields }
+    ExtraFields : TStringList; { key -> Comment|Description|Value }
 
 procedure Start; forward;
 procedure _Start; forward;
 procedure TFormBom.ButtonBrowseClick(Sender: TObject); forward;
 procedure TFormBom.ButtonOKClick(Sender: TObject); forward;
 procedure TFormBom.ButtonCancelClick(Sender: TObject); forward;
+procedure TFormBom.FormBomShow(Sender: TObject); forward;
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String); forward;
 
-function CsvEscape(const S : String) : String;
+function XmlEsc(const S : String) : String;
 var
     T : String;
 begin
     T := S;
-    if (Pos('"', T) > 0) or (Pos(',', T) > 0) or (Pos(sLineBreak, T) > 0) then
-    begin
-        T := StringReplace(T, '"', '""', [rfReplaceAll]);
-        Result := '"' + T + '"';
-    end
-    else
-        Result := T;
+    T := StringReplace(T, '&', '&amp;', [rfReplaceAll]);
+    T := StringReplace(T, '<', '&lt;', [rfReplaceAll]);
+    T := StringReplace(T, '>', '&gt;', [rfReplaceAll]);
+    T := StringReplace(T, '"', '&quot;', [rfReplaceAll]);
+    Result := T;
 end;
 
 function ParamVal(Comp : ISch_Component; const Names : String) : String;
 var
     P : ISch_Parameter;
-    Iter : ISch_Iterator;
-    One : String;
     Rest, Name : String;
     PosSep : Integer;
 begin
@@ -67,33 +63,6 @@ begin
     end;
 end;
 
-function IsDnpOrNoBom(Comp : ISch_Component) : Boolean;
-var
-    K : Integer;
-    V : String;
-begin
-    Result := False;
-    try
-        K := Comp.ComponentKind;
-        if (K = eComponentKind_Graphical) or (K = eComponentKind_Standard_NoBOM) then
-        begin
-            Result := True;
-            Exit;
-        end;
-        if K = eComponentKind_Mechanical then
-        begin
-            { Mechanical без Fitted — исключаем. }
-            Result := True;
-        end;
-    except
-    end;
-    V := UpperCase(ParamVal(Comp, 'DNP|DoNotFit|Do Not Fit|Fitted|NotFitted'));
-    if (V = 'DNP') or (V = 'TRUE') or (V = 'YES') or (V = '1') or (V = 'NOTFITTED') or (V = 'NOT FITTED') then
-        Result := True;
-    if UpperCase(ParamVal(Comp, 'Fitted')) = 'FALSE' then
-        Result := True;
-end;
-
 function FootprintOf(Comp : ISch_Component) : String;
 var
     Impl : ISch_Implementation;
@@ -115,17 +84,15 @@ begin
     end;
 end;
 
-procedure AddPart(const Des, Comment, Description, Footprint, Value, Mfr, Mpn, Sup, Spn : String);
+procedure AddPart(const Des, Comment, Description, Footprint, Value : String);
 var
     Key, Fields : String;
     Idx, Qty : Integer;
 begin
-    if GroupByMpn and (Mpn <> '') then
-        Key := UpperCase(Comment) + '||' + UpperCase(Footprint) + '||' + UpperCase(Mpn)
-    else
-        Key := UpperCase(Comment) + '||' + UpperCase(Footprint);
-
-    Fields := Comment + '|' + Description + '|' + Footprint + '|' + Value + '|' + Mfr + '|' + Mpn + '|' + Sup + '|' + Spn;
+    { Ключ группировки: Comment+Value+Description; footprint только внутри, без столбца. }
+    Key := UpperCase(Comment) + '||' + UpperCase(Value) + '||' +
+           UpperCase(Description) + '||' + UpperCase(Footprint);
+    Fields := Comment + '|' + Description + '|' + Value;
 
     Idx := Groups.IndexOf(Key);
     if Idx < 0 then
@@ -141,7 +108,7 @@ begin
         Groups.Objects[Idx] := TObject(Qty);
         if DesLists[Idx] = '' then
             DesLists[Idx] := Des
-        else
+        else if Des <> '' then
             DesLists[Idx] := DesLists[Idx] + ', ' + Des;
     end;
 end;
@@ -150,7 +117,7 @@ procedure HarvestSchDoc(Doc : ISch_Document);
 var
     Iter : ISch_Iterator;
     Comp : ISch_Component;
-    Des, Comment, Desc, Fp, Val, Mfr, Mpn, Sup, Spn : String;
+    Des, Comment, Desc, Fp, Val : String;
 begin
     if Doc = nil then Exit;
     Iter := Doc.SchIterator_Create;
@@ -158,28 +125,22 @@ begin
     Comp := Iter.FirstSchObject;
     while Comp <> nil do
     begin
-        if (not ExcludeDnp) or (not IsDnpOrNoBom(Comp)) then
-        begin
-            try
-                Des := Comp.Designator.Text;
-            except
-                Des := '';
-            end;
-            try
-                Comment := Comp.Comment.Text;
-            except
-                Comment := ParamVal(Comp, 'Comment');
-            end;
-            Desc := ParamVal(Comp, 'Description|Part Description');
-            Fp := FootprintOf(Comp);
-            Val := ParamVal(Comp, 'Value');
-            if Val = '' then Val := Comment;
-            Mfr := ParamVal(Comp, 'Manufacturer|Mfr');
-            Mpn := ParamVal(Comp, 'Manufacturer Part Number|ManufacturerPartNumber|MPN|PartNumber');
-            Sup := ParamVal(Comp, 'Supplier|Supplier 1|Supplier1');
-            Spn := ParamVal(Comp, 'Supplier Part Number|Supplier Part Number 1|SPN');
-            AddPart(Des, Comment, Desc, Fp, Val, Mfr, Mpn, Sup, Spn);
+        { Ничего не исключаем: DNP, графические, NoBOM, механические — всё. }
+        try
+            Des := Comp.Designator.Text;
+        except
+            Des := '';
         end;
+        try
+            Comment := Comp.Comment.Text;
+        except
+            Comment := ParamVal(Comp, 'Comment');
+        end;
+        Desc := ParamVal(Comp, 'Description|Part Description');
+        Fp := FootprintOf(Comp);
+        Val := ParamVal(Comp, 'Value');
+        if Val = '' then Val := Comment;
+        AddPart(Des, Comment, Desc, Fp, Val);
         Comp := Iter.NextSchObject;
     end;
     Doc.SchIterator_Destroy(Iter);
@@ -201,7 +162,7 @@ begin
     if WS = nil then Exit;
     Project := WS.DM_FocusedProject;
 
-    if (SchServer <> nil) then
+    if SchServer <> nil then
     begin
         if Project <> nil then
         begin
@@ -225,7 +186,7 @@ begin
 
     if Groups.Count > 0 then Exit;
 
-    { Fallback: компоненты PCB, UniqueID источника. }
+    { Fallback: компоненты PCB. }
     if PCBServer = nil then Exit;
     Board := PCBServer.GetCurrentPCBBoard;
     if Board = nil then Exit;
@@ -244,34 +205,28 @@ begin
         if Comment = '' then
         try Comment := Cmp.SourceLibReference; except Comment := ''; end;
         try Fp := Cmp.Pattern; except Fp := ''; end;
-        AddPart(Des, Comment, '', Fp, Comment, '', '', '', '');
+        AddPart(Des, Comment, '', Fp, Comment);
         Cmp := Iter.NextPCBObject;
     end;
     Board.BoardIterator_Destroy(Iter);
 end;
 
-procedure WriteSettingsXml(const CsvPath : String);
+procedure WriteSettingsXml(const XlsPath : String);
 var
     Xml : TStringList;
     XmlPath : String;
 begin
-    XmlPath := ChangeFileExt(CsvPath, '.bom.settings.xml');
+    XmlPath := ChangeFileExt(XlsPath, '.bom.settings.xml');
     Xml := TStringList.Create;
     try
         Xml.Add('<?xml version="1.0" encoding="UTF-8"?>');
-        Xml.Add('<BomSettings generator="CustomScripts.BomExport" version="1.0">');
-        Xml.Add('  <Output>' + CsvPath + '</Output>');
-        Xml.Add('  <Format>CSV</Format>');
-        if GroupByMpn then
-            Xml.Add('  <GroupBy>Comment,Footprint,MPN</GroupBy>')
-        else
-            Xml.Add('  <GroupBy>Comment,Footprint</GroupBy>');
-        if ExcludeDnp then
-            Xml.Add('  <ExcludeDNP>True</ExcludeDNP>')
-        else
-            Xml.Add('  <ExcludeDNP>False</ExcludeDNP>');
-        Xml.Add('  <Columns>Designator,Quantity,Comment,Description,Footprint,Value,Manufacturer,Manufacturer Part Number,Supplier,Supplier Part Number</Columns>');
-        Xml.Add('  <Notes>Grouped unique lines. Graphical/NoBOM/DNP excluded when enabled. Not an Altium OutJob, companion settings only.</Notes>');
+        Xml.Add('<BomSettings generator="CustomScripts.BomExport" version="1.1">');
+        Xml.Add('  <Output>' + XmlEsc(XlsPath) + '</Output>');
+        Xml.Add('  <Format>SpreadsheetML (.xls)</Format>');
+        Xml.Add('  <GroupBy>Comment,Value,Description,Footprint(internal)</GroupBy>');
+        Xml.Add('  <ExcludeParts>None</ExcludeParts>');
+        Xml.Add('  <Columns>Comment,Designator,Description,Quantity,Value</Columns>');
+        Xml.Add('  <Notes>All parts included (DNP, graphical, NoBOM, mechanical). Excel opens SpreadsheetML .xls without COM.</Notes>');
         Xml.Add('</BomSettings>');
         Xml.SaveToFile(XmlPath);
     finally
@@ -279,42 +234,54 @@ begin
     end;
 end;
 
-procedure WriteCsv;
+procedure WriteExcel;
 var
     Lines : TStringList;
     i : Integer;
     Parts : TStringList;
     Qty : Integer;
-    Fields : String;
 begin
     Lines := TStringList.Create;
     Parts := TStringList.Create;
     Parts.Delimiter := '|';
     Parts.StrictDelimiter := True;
     try
-        Lines.Add('Designator,Quantity,Comment,Description,Footprint,Value,Manufacturer,Manufacturer Part Number,Supplier,Supplier Part Number');
+        Lines.Add('<?xml version="1.0"?>');
+        Lines.Add('<?mso-application progid="Excel.Sheet"?>');
+        Lines.Add('<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"');
+        Lines.Add(' xmlns:o="urn:schemas-microsoft-com:office:office"');
+        Lines.Add(' xmlns:x="urn:schemas-microsoft-com:office:excel"');
+        Lines.Add(' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">');
+        Lines.Add(' <Worksheet ss:Name="BOM">');
+        Lines.Add('  <Table>');
+        Lines.Add('   <Row>');
+        Lines.Add('    <Cell><Data ss:Type="String">Comment</Data></Cell>');
+        Lines.Add('    <Cell><Data ss:Type="String">Designator</Data></Cell>');
+        Lines.Add('    <Cell><Data ss:Type="String">Description</Data></Cell>');
+        Lines.Add('    <Cell><Data ss:Type="String">Quantity</Data></Cell>');
+        Lines.Add('    <Cell><Data ss:Type="String">Value</Data></Cell>');
+        Lines.Add('   </Row>');
         for i := 0 to Groups.Count - 1 do
         begin
             Qty := Integer(Groups.Objects[i]);
             Parts.DelimitedText := ExtraFields[i];
-            while Parts.Count < 8 do Parts.Add('');
-            Lines.Add(
-                CsvEscape(DesLists[i]) + ',' +
-                IntToStr(Qty) + ',' +
-                CsvEscape(Parts[0]) + ',' +
-                CsvEscape(Parts[1]) + ',' +
-                CsvEscape(Parts[2]) + ',' +
-                CsvEscape(Parts[3]) + ',' +
-                CsvEscape(Parts[4]) + ',' +
-                CsvEscape(Parts[5]) + ',' +
-                CsvEscape(Parts[6]) + ',' +
-                CsvEscape(Parts[7])
-            );
+            while Parts.Count < 3 do Parts.Add('');
+            Lines.Add('   <Row>');
+            Lines.Add('    <Cell><Data ss:Type="String">' + XmlEsc(Parts[0]) + '</Data></Cell>');
+            Lines.Add('    <Cell><Data ss:Type="String">' + XmlEsc(DesLists[i]) + '</Data></Cell>');
+            Lines.Add('    <Cell><Data ss:Type="String">' + XmlEsc(Parts[1]) + '</Data></Cell>');
+            Lines.Add('    <Cell><Data ss:Type="Number">' + IntToStr(Qty) + '</Data></Cell>');
+            Lines.Add('    <Cell><Data ss:Type="String">' + XmlEsc(Parts[2]) + '</Data></Cell>');
+            Lines.Add('   </Row>');
         end;
+        Lines.Add('  </Table>');
+        Lines.Add(' </Worksheet>');
+        Lines.Add('</Workbook>');
         Lines.SaveToFile(OutPath);
         WriteSettingsXml(OutPath);
         ShowInfo('BOM записан: ' + OutPath + sLineBreak +
                  'Строк: ' + IntToStr(Groups.Count) + sLineBreak +
+                 'Формат: Excel SpreadsheetML (.xls)' + sLineBreak +
                  'Настройки: ' + ChangeFileExt(OutPath, '.bom.settings.xml'),
                  'BOM');
     finally
@@ -323,16 +290,68 @@ begin
     end;
 end;
 
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String);
+var
+    Cands : TStringList;
+    i : Integer;
+    P : String;
+    WS : IWorkspace;
+    Prj : IProject;
+begin
+    if Img = nil then Exit;
+    Cands := TStringList.Create;
+    try
+        try Cands.Add(ExtractFilePath(ParamStr(0)) + 'images\' + FileName); except end;
+        try
+            WS := GetWorkspace;
+            if WS <> nil then
+                for i := 0 to WS.DM_ProjectCount - 1 do
+                begin
+                    Prj := WS.DM_Projects(i);
+                    if Prj <> nil then
+                        Cands.Add(ExtractFilePath(Prj.DM_ProjectFullPath) + 'images\' + FileName);
+                end;
+        except
+        end;
+        Cands.Add('images\' + FileName);
+        Cands.Add('CustomScripts\images\' + FileName);
+        for i := 0 to Cands.Count - 1 do
+        begin
+            P := Cands[i];
+            if (P <> '') and FileExists(P) then
+            begin
+                try
+                    Img.Picture.LoadFromFile(P);
+                    if Hint <> nil then Hint.Caption := 'Замените картинку: images\' + FileName;
+                    Exit;
+                except
+                end;
+            end;
+        end;
+        if Hint <> nil then
+            Hint.Caption := 'Нет картинки. Положите ' + FileName + ' в images\ рядом со скриптами.';
+    finally
+        Cands.Free;
+    end;
+end;
+
+procedure TFormBom.FormBomShow(Sender: TObject);
+begin
+    LoadHelpImage(ImageHelp, LabelImageHint, 'BomExport.png');
+    if EditPath.Text = '' then
+        EditPath.Text := 'bom.xls';
+end;
+
 procedure TFormBom.ButtonBrowseClick(Sender: TObject);
 var
     Dlg : TSaveDialog;
 begin
     Dlg := TSaveDialog.Create(nil);
     try
-        Dlg.Title := 'Сохранить BOM CSV';
-        Dlg.Filter := 'CSV (*.csv)|*.csv';
-        Dlg.DefaultExt := 'csv';
-        Dlg.FileName := 'bom.csv';
+        Dlg.Title := 'Сохранить BOM Excel';
+        Dlg.Filter := 'Excel (*.xls)|*.xls|Все файлы (*.*)|*.*';
+        Dlg.DefaultExt := 'xls';
+        Dlg.FileName := 'bom.xls';
         if Dlg.Execute then
             EditPath.Text := Dlg.FileName;
     finally
@@ -345,11 +364,13 @@ begin
     OutPath := EditPath.Text;
     if OutPath = '' then
     begin
-        ShowError('Укажите путь к CSV.');
+        ShowError('Укажите путь к файлу .xls.');
         Exit;
     end;
-    ExcludeDnp := CheckDnp.Checked;
-    GroupByMpn := CheckGroupMpn.Checked;
+    if LowerCase(ExtractFileExt(OutPath)) = '.csv' then
+        OutPath := ChangeFileExt(OutPath, '.xls');
+    if LowerCase(ExtractFileExt(OutPath)) = '' then
+        OutPath := OutPath + '.xls';
     FormBom.Close;
 
     Groups := TStringList.Create;
@@ -360,7 +381,7 @@ begin
         if Groups.Count = 0 then
             ShowWarning('Компоненты не найдены. Откройте схему или PCB проекта.')
         else
-            WriteCsv;
+            WriteExcel;
     finally
         Groups.Free;
         DesLists.Free;
@@ -375,7 +396,7 @@ end;
 
 procedure Start;
 begin
-    EditPath.Text := 'bom.csv';
+    EditPath.Text := 'bom.xls';
     FormBom.ShowModal;
 end;
 

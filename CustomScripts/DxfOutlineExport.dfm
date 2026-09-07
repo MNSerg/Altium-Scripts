@@ -3,8 +3,8 @@ object FormDxf: TFormDxf
   Top = 0
   BorderStyle = bsDialog
   Caption = 'DXF: '#1082#1086#1085#1090#1091#1088#1099' '#1089#1083#1086#1105#1074' '#1083#1080#1085#1080#1103#1084#1080
-  ClientHeight = 420
-  ClientWidth = 420
+  ClientHeight = 460
+  ClientWidth = 740
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -16,24 +16,44 @@ object FormDxf: TFormDxf
   OnShow = FormDxfShow
   PixelsPerInch = 96
   TextHeight = 13
+  object ImageHelp: TImage
+    Left = 8
+    Top = 8
+    Width = 320
+    Height = 214
+    Center = True
+    Proportional = True
+    Stretch = True
+  end
+  object LabelImageHint: TLabel
+    Left = 8
+    Top = 226
+    Width = 320
+    Height = 36
+    AutoSize = False
+    Caption = 'images\DxfExport.png'
+    WordWrap = True
+  end
   object LabelLayers: TLabel
-    Left = 16
-    Top = 12
-    Width = 280
-    Height = 13
-    Caption = #1042#1099#1073#1077#1088#1080#1090#1077' '#1089#1083#1086#1080' PCB ('#1082#1072#1078#1076#1099#1081' '#1089#1090#1072#1085#1077#1090' '#1089#1083#1086#1077#1084' DXF'):'
+    Left = 340
+    Top = 8
+    Width = 380
+    Height = 28
+    AutoSize = False
+    Caption = #1052#1077#1076#1100' = '#1082#1086#1085#1090#1091#1088#1099' LINE/ARC. '#1054#1090#1074#1077#1088#1089#1090#1080#1103' = '#1089#1083#1086#1081' HOLES ('#1082#1088#1091#1075#1080'). '#1064#1077#1083#1082#1086#1075#1088#1072#1092#1080#1103' = Overlay.'
+    WordWrap = True
   end
   object CheckListLayers: TCheckListBox
-    Left = 16
-    Top = 32
-    Width = 388
-    Height = 280
+    Left = 340
+    Top = 40
+    Width = 384
+    Height = 320
     ItemHeight = 13
     TabOrder = 0
   end
   object ButtonAll: TButton
-    Left = 16
-    Top = 320
+    Left = 340
+    Top = 368
     Width = 90
     Height = 25
     Caption = #1042#1089#1077
@@ -41,8 +61,8 @@ object FormDxf: TFormDxf
     OnClick = ButtonAllClick
   end
   object ButtonNone: TButton
-    Left = 112
-    Top = 320
+    Left = 436
+    Top = 368
     Width = 90
     Height = 25
     Caption = #1057#1085#1103#1090#1100
@@ -50,8 +70,8 @@ object FormDxf: TFormDxf
     OnClick = ButtonNoneClick
   end
   object ButtonCopper: TButton
-    Left = 208
-    Top = 320
+    Left = 532
+    Top = 368
     Width = 120
     Height = 25
     Caption = #1058#1086#1083#1100#1082#1086' '#1084#1077#1076#1100
@@ -59,8 +79,8 @@ object FormDxf: TFormDxf
     OnClick = ButtonCopperClick
   end
   object ButtonOK: TButton
-    Left = 112
-    Top = 372
+    Left = 436
+    Top = 420
     Width = 90
     Height = 25
     Caption = 'OK'
@@ -69,8 +89,8 @@ object FormDxf: TFormDxf
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
-    Left = 216
-    Top = 372
+    Left = 540
+    Top = 420
     Width = 90
     Height = 25
     Cancel = True

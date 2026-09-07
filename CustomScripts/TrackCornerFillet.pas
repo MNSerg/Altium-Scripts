@@ -24,7 +24,10 @@ procedure Start; forward;
 procedure _Start; forward;
 procedure TFormFillet.ButtonOKClick(Sender: TObject); forward;
 procedure TFormFillet.ButtonCancelClick(Sender: TObject); forward;
+procedure TFormFillet.FormFilletShow(Sender: TObject); forward;
 procedure DoFilletWork; forward;
+procedure ExpandConnectedPath; forward;
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String); forward;
 
 function Distance(X1, Y1, X2, Y2 : TCoord) : Double;
 begin
@@ -169,6 +172,127 @@ begin
 end;
 
 { Сколько выделенных треков/дуг сходятся в точке. T-стык: >= 3. }
+function CountAllAtPoint(Xp, Yp : TCoord; ALayer : TLayer) : Integer;
+var
+    SIter : IPCB_SpatialIterator;
+    Other : IPCB_Primitive;
+begin
+    Result := 0;
+    SIter := Board.SpatialIterator_Create;
+    SIter.AddFilter_ObjectSet(MkSet(eTrackObject, eArcObject));
+    SIter.AddFilter_LayerSet(MkSet(ALayer));
+    SIter.AddFilter_Area(Xp - cJoinTol, Yp - cJoinTol, Xp + cJoinTol, Yp + cJoinTol);
+    Other := SIter.FirstPCBObject;
+    while Other <> nil do
+    begin
+        if Other.ObjectId = eTrackObject then
+        begin
+            if SamePoint(Other.X1, Other.Y1, Xp, Yp) or SamePoint(Other.X2, Other.Y2, Xp, Yp) then
+                Inc(Result);
+        end
+        else if Other.ObjectId = eArcObject then
+        begin
+            if SamePoint(Other.StartX, Other.StartY, Xp, Yp) or SamePoint(Other.EndX, Other.EndY, Xp, Yp) then
+                Inc(Result);
+        end;
+        Other := SIter.NextPCBObject;
+    end;
+    Board.SpatialIterator_Destroy(SIter);
+end;
+
+{ Добирает состыкованный путь той же цепи/слоя (квадрат из 1 сегмента → 4). T-стыки не трогаем. }
+procedure ExpandConnectedPath;
+var
+    Changed : Boolean;
+    Guard, i, EndIdx : Integer;
+    Prim, Other : IPCB_Primitive;
+    Xp, Yp : TCoord;
+begin
+    Guard := 0;
+    repeat
+        Changed := False;
+        Inc(Guard);
+        i := 0;
+        while i < Board.SelectecObjectCount do
+        begin
+            Prim := Board.SelectecObject(i);
+            if (Prim.ObjectId = eTrackObject) or (Prim.ObjectId = eArcObject) then
+            begin
+                for EndIdx := 1 to 2 do
+                begin
+                    if Prim.ObjectId = eTrackObject then
+                    begin
+                        if EndIdx = 1 then begin Xp := Prim.X1; Yp := Prim.Y1; end
+                        else begin Xp := Prim.X2; Yp := Prim.Y2; end;
+                    end
+                    else
+                    begin
+                        if EndIdx = 1 then begin Xp := Prim.StartX; Yp := Prim.StartY; end
+                        else begin Xp := Prim.EndX; Yp := Prim.EndY; end;
+                    end;
+                    if CountAllAtPoint(Xp, Yp, Prim.Layer) = 2 then
+                    begin
+                        Other := FindConnectedAtEnd(Prim, EndIdx, False);
+                        if (Other <> nil) and (not Other.Selected) then
+                        begin
+                            Other.Selected := True;
+                            Changed := True;
+                        end;
+                    end;
+                end;
+            end;
+            Inc(i);
+        end;
+    until (not Changed) or (Guard > 8000);
+end;
+
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String);
+var
+    Cands : TStringList;
+    i : Integer;
+    P : String;
+    WS : IWorkspace;
+    Prj : IProject;
+begin
+    if Img = nil then Exit;
+    Cands := TStringList.Create;
+    try
+        try Cands.Add(ExtractFilePath(ParamStr(0)) + 'images\' + FileName); except end;
+        try
+            WS := GetWorkspace;
+            if WS <> nil then
+            begin
+                for i := 0 to WS.DM_ProjectCount - 1 do
+                begin
+                    Prj := WS.DM_Projects(i);
+                    if Prj <> nil then
+                        Cands.Add(ExtractFilePath(Prj.DM_ProjectFullPath) + 'images\' + FileName);
+                end;
+            end;
+        except
+        end;
+        Cands.Add('images\' + FileName);
+        Cands.Add('CustomScripts\images\' + FileName);
+        for i := 0 to Cands.Count - 1 do
+        begin
+            P := Cands[i];
+            if (P <> '') and FileExists(P) then
+            begin
+                try
+                    Img.Picture.LoadFromFile(P);
+                    if Hint <> nil then Hint.Caption := 'Замените картинку: images\' + FileName;
+                    Exit;
+                except
+                end;
+            end;
+        end;
+        if Hint <> nil then
+            Hint.Caption := 'Нет картинки. Положите ' + FileName + ' в images\ рядом со скриптами.';
+    finally
+        Cands.Free;
+    end;
+end;
+
 function CountSelectedAtPoint(Xp, Yp : TCoord; IgnoreAddr : Integer) : Integer;
 var
     i : Integer;
@@ -592,6 +716,12 @@ begin
     FormFillet.Close;
 end;
 
+procedure TFormFillet.FormFilletShow(Sender: TObject);
+begin
+    LoadHelpImage(ImageHelp, LabelImageHint, 'Fillet.png');
+    EditRadius.Text := FloatToStr(cDefaultRadiusMM);
+end;
+
 procedure Start;
 var
     i : Integer;
@@ -616,11 +746,11 @@ begin
 
     if Board.SelectecObjectCount = 0 then
     begin
-        ShowWarning('Выделите один или несколько сегментов трека (и существующие дуги скруглений).');
+        ShowWarning('Выделите один сегмент или весь путь трека (квадрат из 4 сегментов даст 4 скругления).');
         Exit;
     end;
 
-    EditRadius.Text := FloatToStr(cDefaultRadiusMM);
+    ExpandConnectedPath;
     FormFillet.ShowModal;
 end;
 

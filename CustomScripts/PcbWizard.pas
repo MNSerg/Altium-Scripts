@@ -13,6 +13,8 @@ procedure Start; forward;
 procedure _Start; forward;
 procedure TFormWizard.ButtonOKClick(Sender: TObject); forward;
 procedure TFormWizard.ButtonCancelClick(Sender: TObject); forward;
+procedure TFormWizard.FormWizardShow(Sender: TObject); forward;
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String); forward;
 
 function AddTrackL(X1, Y1, X2, Y2 : TCoord; ALayer : TLayer; Width : TCoord) : IPCB_Track;
 begin
@@ -139,10 +141,7 @@ begin
     Poly.PolyHatchStyle := ePolySolid;
     N := FindNetGnd;
     if N <> nil then Poly.Net := N;
-    try
-        Poly.ClearanceGap := MMsToCoord(0.2);
-    except
-    end;
+    { Зазоры полигона — из правил проектирования, не из скрипта. }
     Poly.PointCount := 4;
     Seg.Kind := ePolySegmentLine;
     Seg.vx := X0; Seg.vy := Y0; Poly.Segments[0] := Seg;
@@ -280,7 +279,7 @@ begin
     try
         CopperCount := StrToInt(ComboLayers.Text);
     except
-        CopperCount := 2;
+        CopperCount := 4;
     end;
     if FilletMM * 2 >= Wmm then begin ShowError('Радиус скругления слишком большой для ширины.'); Exit; end;
     if FilletMM * 2 >= Hmm then begin ShowError('Радиус скругления слишком большой для высоты.'); Exit; end;
@@ -291,6 +290,60 @@ end;
 procedure TFormWizard.ButtonCancelClick(Sender: TObject);
 begin
     FormWizard.Close;
+end;
+
+procedure LoadHelpImage(Img : TImage; Hint : TLabel; const FileName : String);
+var
+    Cands : TStringList;
+    i : Integer;
+    P : String;
+    WS : IWorkspace;
+    Prj : IProject;
+begin
+    if Img = nil then Exit;
+    Cands := TStringList.Create;
+    try
+        try Cands.Add(ExtractFilePath(ParamStr(0)) + 'images\' + FileName); except end;
+        try
+            WS := GetWorkspace;
+            if WS <> nil then
+                for i := 0 to WS.DM_ProjectCount - 1 do
+                begin
+                    Prj := WS.DM_Projects(i);
+                    if Prj <> nil then
+                        Cands.Add(ExtractFilePath(Prj.DM_ProjectFullPath) + 'images\' + FileName);
+                end;
+        except
+        end;
+        Cands.Add('images\' + FileName);
+        Cands.Add('CustomScripts\images\' + FileName);
+        for i := 0 to Cands.Count - 1 do
+        begin
+            P := Cands[i];
+            if (P <> '') and FileExists(P) then
+            begin
+                try
+                    Img.Picture.LoadFromFile(P);
+                    if Hint <> nil then Hint.Caption := 'Замените картинку: images\' + FileName;
+                    Exit;
+                except
+                end;
+            end;
+        end;
+        if Hint <> nil then
+            Hint.Caption := 'Нет картинки. Положите ' + FileName + ' в images\ рядом со скриптами.';
+    finally
+        Cands.Free;
+    end;
+end;
+
+procedure TFormWizard.FormWizardShow(Sender: TObject);
+begin
+    LoadHelpImage(ImageHelp, LabelImageHint, 'PcbWizard.png');
+    EditGrid.Text := '0.1';
+    ComboLayers.ItemIndex := 1; { 4 медных слоя }
+    ComboLayers.Text := '4';
+    CheckFourHoles.Checked := True;
 end;
 
 procedure Start;
