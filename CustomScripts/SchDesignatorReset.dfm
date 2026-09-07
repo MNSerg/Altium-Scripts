@@ -5,9 +5,9 @@ object FormAnnot: TFormAnnot
   Caption = #1057#1073#1088#1086#1089' '#1080' '#1072#1085#1085#1086#1090#1072#1094#1080#1103' '#1076#1077#1089#1080#1075#1085#1072#1090#1086#1088#1086#1074
   ClientHeight = 340
   ClientWidth = 740
-  Color = $001E1A1A
+  Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
-  Font.Color = $00F0F0F0
+  Font.Color = clWindowText
   Font.Height = -12
   Font.Name = 'Segoe UI'
   Font.Style = []
@@ -24,7 +24,7 @@ object FormAnnot: TFormAnnot
   end
   object LabelImageHint: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -39,7 +39,7 @@ object FormAnnot: TFormAnnot
   end
   object LabelInfo: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -54,7 +54,7 @@ object FormAnnot: TFormAnnot
   end
   object CheckReset: TCheckBox
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -68,7 +68,7 @@ object FormAnnot: TFormAnnot
   end
   object CheckAnnotate: TCheckBox
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -84,7 +84,7 @@ object FormAnnot: TFormAnnot
   end
   object CheckAllSheets: TCheckBox
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -99,9 +99,8 @@ object FormAnnot: TFormAnnot
     TabOrder = 2
   end
   object ButtonOK: TButton
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -116,9 +115,8 @@ object FormAnnot: TFormAnnot
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []

@@ -30,6 +30,23 @@ procedure TFormPanel.FormPanelShow(PanSender: TObject); forward;
 function BoardOriginX(Col : Integer) : TCoord; forward;
 function BoardOriginY(Row : Integer) : TCoord; forward;
 
+{ DelphiScript: rfReplaceAll in square brackets is an Array Variant, not a set. }
+function PanReplaceChar(const PanS : String; PanA, PanB : Char) : String;
+var
+    Pani : Integer;
+    PanCh : Char;
+begin
+    Result := '';
+    for Pani := 1 to Length(PanS) do
+    begin
+        PanCh := PanS[Pani];
+        if PanCh = PanA then
+            Result := Result + PanB
+        else
+            Result := Result + PanCh;
+    end;
+end;
+
 function PanParseFloat(const PanS : String; var PanV : Double) : Boolean;
 var
     PanT : String;
@@ -37,13 +54,13 @@ begin
     Result := False;
     PanT := PanS;
     try
-        PanV := StrToFloat(StringReplace(PanT, ',', '.', [rfReplaceAll]));
+        PanV := StrToFloat(PanReplaceChar(PanT, ',', '.'));
         Result := True;
         Exit;
     except
     end;
     try
-        PanV := StrToFloat(StringReplace(PanT, '.', ',', [rfReplaceAll]));
+        PanV := StrToFloat(PanReplaceChar(PanT, '.', ','));
         Result := True;
     except
         Result := False;

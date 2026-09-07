@@ -40,6 +40,23 @@ begin
     Result := Distance(FilX1, FilY1, FilX2, FilY2) <= cJoinTol;
 end;
 
+{ DelphiScript: rfReplaceAll in square brackets is an Array Variant, not a set. }
+function FilReplaceChar(const FilS : String; FilA, FilB : Char) : String;
+var
+    Fili : Integer;
+    FilCh : Char;
+begin
+    Result := '';
+    for Fili := 1 to Length(FilS) do
+    begin
+        FilCh := FilS[Fili];
+        if FilCh = FilA then
+            Result := Result + FilB
+        else
+            Result := Result + FilCh;
+    end;
+end;
+
 function FilParseFloat(const FilS : String; var FilV : Double) : Boolean;
 var
     FilT : String;
@@ -47,13 +64,13 @@ begin
     Result := False;
     FilT := FilS;
     try
-        FilV := StrToFloat(StringReplace(FilT, ',', '.', [rfReplaceAll]));
+        FilV := StrToFloat(FilReplaceChar(FilT, ',', '.'));
         Result := True;
         Exit;
     except
     end;
     try
-        FilV := StrToFloat(StringReplace(FilT, '.', ',', [rfReplaceAll]));
+        FilV := StrToFloat(FilReplaceChar(FilT, '.', ','));
         Result := True;
     except
         Result := False;

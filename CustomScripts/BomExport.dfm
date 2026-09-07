@@ -5,9 +5,9 @@ object FormBom: TFormBom
   Caption = #1069#1082#1089#1087#1086#1088#1090' BOM (Excel)'
   ClientHeight = 360
   ClientWidth = 740
-  Color = $001E1A1A
+  Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
-  Font.Color = $00F0F0F0
+  Font.Color = clWindowText
   Font.Height = -12
   Font.Name = 'Segoe UI'
   Font.Style = []
@@ -24,7 +24,7 @@ object FormBom: TFormBom
   end
   object LabelImageHint: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -39,7 +39,7 @@ object FormBom: TFormBom
   end
   object LabelPath: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -51,9 +51,8 @@ object FormBom: TFormBom
     Caption = #1060#1072#1081#1083' Excel (.xls):'
   end
   object EditPath: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -65,9 +64,8 @@ object FormBom: TFormBom
     TabOrder = 0
   end
   object ButtonBrowse: TButton
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -82,7 +80,7 @@ object FormBom: TFormBom
   end
   object LabelCols: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -96,9 +94,8 @@ object FormBom: TFormBom
     WordWrap = True
   end
   object ButtonOK: TButton
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -113,9 +110,8 @@ object FormBom: TFormBom
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []

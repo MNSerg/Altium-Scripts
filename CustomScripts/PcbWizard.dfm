@@ -5,9 +5,9 @@ object FormWizard: TFormWizard
   Caption = #1052#1072#1089#1090#1077#1088' '#1085#1086#1074#1086#1081' PCB'
   ClientHeight = 500
   ClientWidth = 760
-  Color = $001E1A1A
+  Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
-  Font.Color = $00F0F0F0
+  Font.Color = clWindowText
   Font.Height = -12
   Font.Name = 'Segoe UI'
   Font.Style = []
@@ -24,7 +24,7 @@ object FormWizard: TFormWizard
   end
   object LabelImageHint: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -39,7 +39,7 @@ object FormWizard: TFormWizard
   end
   object LabelW: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -51,9 +51,8 @@ object FormWizard: TFormWizard
     Caption = #1064#1080#1088#1080#1085#1072', '#1084#1084':'
   end
   object EditW: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -67,7 +66,7 @@ object FormWizard: TFormWizard
   end
   object LabelH: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -79,9 +78,8 @@ object FormWizard: TFormWizard
     Caption = #1042#1099#1089#1086#1090#1072', '#1084#1084':'
   end
   object EditH: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -95,7 +93,7 @@ object FormWizard: TFormWizard
   end
   object LabelFillet: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -107,9 +105,8 @@ object FormWizard: TFormWizard
     Caption = #1057#1082#1088#1091#1075#1083#1077#1085#1080#1077' '#1082#1086#1085#1090#1091#1088#1072', '#1084#1084':'
   end
   object EditFillet: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -123,7 +120,7 @@ object FormWizard: TFormWizard
   end
   object LabelHole: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -135,9 +132,8 @@ object FormWizard: TFormWizard
     Caption = #1054#1090#1074#1077#1088#1089#1090#1080#1077' '#1082#1088#1077#1087#1077#1078#1072', '#1084#1084':'
   end
   object EditHole: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -151,7 +147,7 @@ object FormWizard: TFormWizard
   end
   object LabelPad: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -163,9 +159,8 @@ object FormWizard: TFormWizard
     Caption = #1044#1080#1072#1084#1077#1090#1088' '#1087#1083#1086#1097#1072#1076#1082#1080', '#1084#1084':'
   end
   object EditPad: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -179,7 +174,7 @@ object FormWizard: TFormWizard
   end
   object LabelMargin: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -191,9 +186,8 @@ object FormWizard: TFormWizard
     Caption = #1054#1090#1089#1090#1091#1087' '#1086#1090' '#1091#1075#1083#1072', '#1084#1084':'
   end
   object EditMargin: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -207,7 +201,7 @@ object FormWizard: TFormWizard
   end
   object LabelGrid: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -219,9 +213,8 @@ object FormWizard: TFormWizard
     Caption = #1057#1077#1090#1082#1072', '#1084#1084':'
   end
   object EditGrid: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -235,7 +228,7 @@ object FormWizard: TFormWizard
   end
   object LabelLayers: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -247,9 +240,8 @@ object FormWizard: TFormWizard
     Caption = #1052#1077#1076#1085#1099#1093' '#1089#1083#1086#1105#1074' (2/4/6):'
   end
   object ComboLayers: TComboBox
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -269,7 +261,7 @@ object FormWizard: TFormWizard
   end
   object CheckFourHoles: TCheckBox
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -285,7 +277,7 @@ object FormWizard: TFormWizard
   end
   object CheckGnd: TCheckBox
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -299,7 +291,7 @@ object FormWizard: TFormWizard
   end
   object CheckMask: TCheckBox
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -313,7 +305,7 @@ object FormWizard: TFormWizard
   end
   object CheckNewDoc: TCheckBox
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -328,9 +320,8 @@ object FormWizard: TFormWizard
     TabOrder = 11
   end
   object ButtonOK: TButton
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -345,9 +336,8 @@ object FormWizard: TFormWizard
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []

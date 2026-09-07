@@ -18,15 +18,38 @@ procedure TFormBom.ButtonOKClick(BomSender: TObject); forward;
 procedure TFormBom.ButtonCancelClick(BomSender: TObject); forward;
 procedure TFormBom.FormBomShow(BomSender: TObject); forward;
 
+{ Без set-литерала rfReplaceAll: в DelphiScript скобки дают Array Variant. }
+function BomReplaceStr(const BomS, FindStr, Repl : String) : String;
+var
+    Bomi : Integer;
+    Rest : String;
+begin
+    Result := '';
+    Rest := BomS;
+    if FindStr = '' then
+    begin
+        Result := BomS;
+        Exit;
+    end;
+    Bomi := Pos(FindStr, Rest);
+    while Bomi > 0 do
+    begin
+        Result := Result + Copy(Rest, 1, Bomi - 1) + Repl;
+        Rest := Copy(Rest, Bomi + Length(FindStr), Length(Rest));
+        Bomi := Pos(FindStr, Rest);
+    end;
+    Result := Result + Rest;
+end;
+
 function XmlEsc(const BomS : String) : String;
 var
     BomT : String;
 begin
     BomT := BomS;
-    BomT := StringReplace(BomT, '&', '&amp;', [rfReplaceAll]);
-    BomT := StringReplace(BomT, '<', '&lt;', [rfReplaceAll]);
-    BomT := StringReplace(BomT, '>', '&gt;', [rfReplaceAll]);
-    BomT := StringReplace(BomT, '"', '&quot;', [rfReplaceAll]);
+    BomT := BomReplaceStr(BomT, '&', '&amp;');
+    BomT := BomReplaceStr(BomT, '<', '&lt;');
+    BomT := BomReplaceStr(BomT, '>', '&gt;');
+    BomT := BomReplaceStr(BomT, '"', '&quot;');
     Result := BomT;
 end;
 

@@ -5,9 +5,9 @@ object FormFillet: TFormFillet
   Caption = #1057#1082#1088#1091#1075#1083#1077#1085#1080#1077' '#1091#1075#1083#1086#1074' '#1090#1088#1077#1082#1072
   ClientHeight = 280
   ClientWidth = 720
-  Color = $001E1A1A
+  Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
-  Font.Color = $00F0F0F0
+  Font.Color = clWindowText
   Font.Height = -12
   Font.Name = 'Segoe UI'
   Font.Style = []
@@ -24,7 +24,7 @@ object FormFillet: TFormFillet
   end
   object LabelImageHint: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -39,7 +39,7 @@ object FormFillet: TFormFillet
   end
   object LabelInfo: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -54,7 +54,7 @@ object FormFillet: TFormFillet
   end
   object LabelRadius: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -66,9 +66,8 @@ object FormFillet: TFormFillet
     Caption = #1056#1072#1076#1080#1091#1089' '#1089#1082#1088#1091#1075#1083#1077#1085#1080#1103', '#1084#1084':'
   end
   object EditRadius: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -81,9 +80,8 @@ object FormFillet: TFormFillet
     Text = '0.5'
   end
   object ButtonOK: TButton
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -98,9 +96,8 @@ object FormFillet: TFormFillet
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []

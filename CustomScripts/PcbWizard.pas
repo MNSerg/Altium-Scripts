@@ -25,6 +25,23 @@ begin
     end;
 end;
 
+{ DelphiScript: rfReplaceAll in square brackets is an Array Variant, not a set. }
+function WizReplaceChar(const WizS : String; WizA, WizB : Char) : String;
+var
+    Wizi : Integer;
+    WizCh : Char;
+begin
+    Result := '';
+    for Wizi := 1 to Length(WizS) do
+    begin
+        WizCh := WizS[Wizi];
+        if WizCh = WizA then
+            Result := Result + WizB
+        else
+            Result := Result + WizCh;
+    end;
+end;
+
 function WizParseFloat(const WizS : String; var WizV : Double) : Boolean;
 var
     WizT : String;
@@ -32,13 +49,13 @@ begin
     Result := False;
     WizT := WizS;
     try
-        WizV := StrToFloat(StringReplace(WizT, ',', '.', [rfReplaceAll]));
+        WizV := StrToFloat(WizReplaceChar(WizT, ',', '.'));
         Result := True;
         Exit;
     except
     end;
     try
-        WizV := StrToFloat(StringReplace(WizT, '.', ',', [rfReplaceAll]));
+        WizV := StrToFloat(WizReplaceChar(WizT, '.', ','));
         Result := True;
     except
         Result := False;

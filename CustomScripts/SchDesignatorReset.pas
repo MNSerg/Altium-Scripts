@@ -37,6 +37,13 @@ begin
     end;
 end;
 
+function SchPadNum(SchN, SchWidth : Integer) : String;
+begin
+    Result := IntToStr(SchN);
+    while Length(Result) < SchWidth do
+        Result := '0' + Result;
+end;
+
 function DesignatorPrefix(const SchDes : String) : String;
 var
     Schi : Integer;
@@ -140,7 +147,7 @@ begin
                 SchY := SchComp.Location.Y;
                 { Down then Across: колонка = корзина X, внутри колонки Y сверху вниз.
                   Без корзины компоненты одной колонки с разным X шли бы как отдельные столбцы. }
-                SortKey := Format('%.8d|%.10d', [SchX div 100, 2000000000 - SchY]);
+                SortKey := SchPadNum(SchX div 100, 8) + '|' + SchPadNum(2000000000 - SchY, 10);
                 SchList.AddObject(SortKey, SchComp);
             end;
             SchComp := SchIter.NextSchObject;

@@ -5,9 +5,9 @@ object FormPanel: TFormPanel
   Caption = #1055#1072#1085#1077#1083#1080#1079#1072#1094#1080#1103' PCB'
   ClientHeight = 500
   ClientWidth = 760
-  Color = $001E1A1A
+  Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
-  Font.Color = $00F0F0F0
+  Font.Color = clWindowText
   Font.Height = -12
   Font.Name = 'Segoe UI'
   Font.Style = []
@@ -24,7 +24,7 @@ object FormPanel: TFormPanel
   end
   object LabelImageHint: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -39,7 +39,7 @@ object FormPanel: TFormPanel
   end
   object LabelFile: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -51,9 +51,8 @@ object FormPanel: TFormPanel
     Caption = #1048#1089#1093#1086#1076#1085#1099#1081' PcbDoc:'
   end
   object EditFile: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -65,9 +64,8 @@ object FormPanel: TFormPanel
     TabOrder = 0
   end
   object ButtonBrowse: TButton
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -82,7 +80,7 @@ object FormPanel: TFormPanel
   end
   object LabelCols: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -94,9 +92,8 @@ object FormPanel: TFormPanel
     Caption = #1057#1090#1086#1083#1073#1094#1099' (X), '#1084#1072#1089#1089#1080#1074' 4x2:'
   end
   object EditCols: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -110,7 +107,7 @@ object FormPanel: TFormPanel
   end
   object LabelRows: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -122,9 +119,8 @@ object FormPanel: TFormPanel
     Caption = #1056#1103#1076#1099' (Y):'
   end
   object EditRows: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -138,7 +134,7 @@ object FormPanel: TFormPanel
   end
   object LabelGapX: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -150,9 +146,8 @@ object FormPanel: TFormPanel
     Caption = #1047#1072#1079#1086#1088' '#1087#1083#1072#1090#1072'-'#1087#1083#1072#1090#1072' X, '#1084#1084':'
   end
   object EditGapX: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -166,7 +161,7 @@ object FormPanel: TFormPanel
   end
   object LabelGapY: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -178,9 +173,8 @@ object FormPanel: TFormPanel
     Caption = #1047#1072#1079#1086#1088' '#1087#1083#1072#1090#1072'-'#1087#1083#1072#1090#1072' Y, '#1084#1084':'
   end
   object EditGapY: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -194,7 +188,7 @@ object FormPanel: TFormPanel
   end
   object LabelMargin: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -206,9 +200,8 @@ object FormPanel: TFormPanel
     Caption = #1055#1086#1083#1077' '#1076#1086' '#1082#1088#1072#1103' '#1087#1072#1085#1077#1083#1080', '#1084#1084':'
   end
   object EditMargin: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -222,7 +215,7 @@ object FormPanel: TFormPanel
   end
   object LabelTab: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -234,9 +227,8 @@ object FormPanel: TFormPanel
     Caption = #1064#1080#1088#1080#1085#1072' '#1087#1077#1088#1077#1084#1099#1095#1082#1080' (web), '#1084#1084':'
   end
   object EditTab: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -250,7 +242,7 @@ object FormPanel: TFormPanel
   end
   object LabelFillet: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -262,9 +254,8 @@ object FormPanel: TFormPanel
     Caption = #1056#1072#1076#1080#1091#1089' '#1092#1088#1077#1079#1099', '#1084#1084':'
   end
   object EditFillet: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -278,7 +269,7 @@ object FormPanel: TFormPanel
   end
   object LabelMech: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -290,9 +281,8 @@ object FormPanel: TFormPanel
     Caption = #1052#1077#1093#1072#1085#1080#1095#1077#1089#1082#1080#1081' '#1089#1083#1086#1081' '#1082#1086#1085#1090#1091#1088#1072' (1..32):'
   end
   object EditMech: TEdit
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -306,7 +296,7 @@ object FormPanel: TFormPanel
   end
   object LabelHint: TLabel
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -320,9 +310,8 @@ object FormPanel: TFormPanel
     WordWrap = True
   end
   object ButtonOK: TButton
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
@@ -337,9 +326,8 @@ object FormPanel: TFormPanel
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
-    Color = $00383333
     Font.Charset = DEFAULT_CHARSET
-    Font.Color = $00F0F0F0
+    Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []

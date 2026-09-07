@@ -30,6 +30,23 @@ begin
     end;
 end;
 
+{ DelphiScript: rfReplaceAll in square brackets is an Array Variant, not a set. }
+function SilReplaceChar(const SilS : String; SilA, SilB : Char) : String;
+var
+    Sili : Integer;
+    SilCh : Char;
+begin
+    Result := '';
+    for Sili := 1 to Length(SilS) do
+    begin
+        SilCh := SilS[Sili];
+        if SilCh = SilA then
+            Result := Result + SilB
+        else
+            Result := Result + SilCh;
+    end;
+end;
+
 function SilParseFloat(const SilS : String; var SilV : Double) : Boolean;
 var
     SilT : String;
@@ -37,13 +54,13 @@ begin
     Result := False;
     SilT := SilS;
     try
-        SilV := StrToFloat(StringReplace(SilT, ',', '.', [rfReplaceAll]));
+        SilV := StrToFloat(SilReplaceChar(SilT, ',', '.'));
         Result := True;
         Exit;
     except
     end;
     try
-        SilV := StrToFloat(StringReplace(SilT, '.', ',', [rfReplaceAll]));
+        SilV := StrToFloat(SilReplaceChar(SilT, '.', ','));
         Result := True;
     except
         Result := False;
