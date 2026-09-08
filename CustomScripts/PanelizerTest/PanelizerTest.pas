@@ -13,6 +13,7 @@ var
     PTstPanelBoard  : IPCB_Board;
     PTstSourcePath  : String;
     PTstRows, PTstCols  : Integer;
+    PTstTabCountH, PTstTabCountV : Integer;
     PTstGapX, PTstGapY, PTstMargin, PTstTabW, PTstFilletR, PTstOffMM : Double;
     PTstMechIndex   : Integer;
     PTstBoardW, PTstBoardH : Double;
@@ -110,6 +111,29 @@ begin
         Result := PTstV > 0;
     except
         Result := False;
+    end;
+end;
+
+procedure PTstTrySetMetricGrid(ABoard : IPCB_Board; GridMM : Double);
+var
+    Grid : TCoord;
+begin
+    try
+        ABoard.DisplayUnit := eMetric;
+    except
+    end;
+    try
+        ABoard.SnapGridUnit := eMetric;
+    except
+    end;
+    Grid := MMsToCoord(GridMM);
+    try
+        ABoard.SnapGridSize := Grid;
+    except
+        try
+            ABoard.SetState_SnapGridSize(Grid);
+        except
+        end;
     end;
 end;
 
@@ -905,7 +929,7 @@ begin
             L := PTstBoardOriginX(c) + MMsToCoord(PTstBoardW);
             B := PTstBoardOriginY(r) + CR;
             Tp := PTstBoardOriginY(r) + MMsToCoord(PTstBoardH) - CR;
-            PTstDrawSlotV(ABoard, L, L + Gx, B, Tp, 2, PTstALayer);
+            PTstDrawSlotV(ABoard, L, L + Gx, B, Tp, PTstTabCountV, PTstALayer);
         end;
     for r := 0 to PTstRows - 2 do
         for c := 0 to PTstCols - 1 do
@@ -913,7 +937,7 @@ begin
             L := PTstBoardOriginX(c) + CR;
             Rgt := PTstBoardOriginX(c) + MMsToCoord(PTstBoardW) - CR;
             B := PTstBoardOriginY(r) + MMsToCoord(PTstBoardH);
-            PTstDrawSlotH(ABoard, B, B + Gy, L, Rgt, 1, PTstALayer);
+            PTstDrawSlotH(ABoard, B, B + Gy, L, Rgt, PTstTabCountH, PTstALayer);
         end;
     for r := 0 to PTstRows - 1 do
     begin
@@ -921,8 +945,8 @@ begin
         Rgt := PTstBoardOriginX(PTstCols - 1) + MMsToCoord(PTstBoardW);
         B := PTstBoardOriginY(r) + CR;
         Tp := PTstBoardOriginY(r) + MMsToCoord(PTstBoardH) - CR;
-        PTstDrawSlotV(ABoard, L - Gx, L, B, Tp, 2, PTstALayer);
-        PTstDrawSlotV(ABoard, Rgt, Rgt + Gx, B, Tp, 2, PTstALayer);
+        PTstDrawSlotV(ABoard, L - Gx, L, B, Tp, PTstTabCountV, PTstALayer);
+        PTstDrawSlotV(ABoard, Rgt, Rgt + Gx, B, Tp, PTstTabCountV, PTstALayer);
     end;
     for c := 0 to PTstCols - 1 do
     begin
@@ -930,8 +954,8 @@ begin
         Rgt := PTstBoardOriginX(c) + MMsToCoord(PTstBoardW) - CR;
         B := PTstBoardOriginY(0);
         Tp := PTstBoardOriginY(PTstRows - 1) + MMsToCoord(PTstBoardH);
-        PTstDrawSlotH(ABoard, B - Gy, B, L, Rgt, 1, PTstALayer);
-        PTstDrawSlotH(ABoard, Tp, Tp + Gy, L, Rgt, 1, PTstALayer);
+        PTstDrawSlotH(ABoard, B - Gy, B, L, Rgt, PTstTabCountH, PTstALayer);
+        PTstDrawSlotH(ABoard, Tp, Tp + Gy, L, Rgt, PTstTabCountH, PTstALayer);
     end;
 
     { Standalone T-pockets: outer mill of two edge boards meets across the alley.
@@ -972,15 +996,16 @@ end;
 procedure PTstDrawCommonOuterContour(ABoard : IPCB_Board; PTstALayer : TLayer);
 var
     X0, Y0, X1, Y1 : TCoord;
+    T : IPCB_Track;
 begin
     X0 := PTstBoardOriginX(0) - MMsToCoord(PTstMargin);
     Y0 := PTstBoardOriginY(0) - MMsToCoord(PTstMargin);
     X1 := PTstBoardOriginX(PTstCols - 1) + MMsToCoord(PTstBoardW) + MMsToCoord(PTstMargin);
     Y1 := PTstBoardOriginY(PTstRows - 1) + MMsToCoord(PTstBoardH) + MMsToCoord(PTstMargin);
-    PTstAddTrack(ABoard, X0, Y0, X1, Y0, PTstALayer);
-    PTstAddTrack(ABoard, X1, Y0, X1, Y1, PTstALayer);
-    PTstAddTrack(ABoard, X1, Y1, X0, Y1, PTstALayer);
-    PTstAddTrack(ABoard, X0, Y1, X0, Y0, PTstALayer);
+    T := PTstAddTrack(ABoard, X0, Y0, X1, Y0, PTstALayer); T.Selected := True;
+    T := PTstAddTrack(ABoard, X1, Y0, X1, Y1, PTstALayer); T.Selected := True;
+    T := PTstAddTrack(ABoard, X1, Y1, X0, Y1, PTstALayer); T.Selected := True;
+    T := PTstAddTrack(ABoard, X0, Y1, X0, Y0, PTstALayer); T.Selected := True;
 end;
 
 function PTstBoardOriginX(Col : Integer) : TCoord;
@@ -1017,23 +1042,10 @@ begin
 end;
 
 procedure ApplyPTstPanelBoardOutline(ABoard : IPCB_Board);
-var
-    PTstIter : IPCB_BoardIterator;
-    PTstPrim : IPCB_Primitive;
 begin
-    { Выделить рамку панели и сделать из неё board outline. }
-    PTstIter := ABoard.BoardIterator_Create;
-    PTstIter.AddFilter_ObjectSet(MkSet(eTrackObject, eArcObject));
-    PTstIter.AddFilter_LayerSet(MkSet(PTstMechLayer));
-    PTstIter.AddFilter_Method(eProcessAll);
-    PTstPrim := PTstIter.FirstPCBObject;
-    while PTstPrim <> nil do
-    begin
-        PTstPrim.Selected := False;
-        PTstPrim := PTstIter.NextPCBObject;
-    end;
-    ABoard.BoardIterator_Destroy(PTstIter);
-
+    ResetParameters;
+    AddStringParameter('MODE', 'BOARDOUTLINE_FROM_SEL_PRIMS');
+    RunProcess('PCB:PlaceBoardOutline');
     ResetParameters;
     AddStringParameter('Scope', 'All');
     RunProcess('PCB:DeSelect');
@@ -1072,17 +1084,16 @@ begin
     try
         PTstPlaceEmbeddedArray(PTstPanelBoard);
         PTstDrawAllMillPaths(PTstPanelBoard, PTstMechLayer);
-        PTstDrawCommonOuterContour(PTstPanelBoard, PTstMechLayer);
 
-        PTstPanelBoard.LayerIsDisplayed[PTstMechLayer] := True;
-
-        { Board outline панели из внешнего контура. }
         ResetParameters;
         AddStringParameter('Scope', 'All');
         RunProcess('PCB:DeSelect');
 
-        { Выделить только внешнюю рамку сложно; задаём outline из примитивов на mech, если пользователь подтвердит.
-          Делаем outline из четырёх сторон панели через PlaceBoardOutline. }
+        PTstDrawCommonOuterContour(PTstPanelBoard, PTstMechLayer);
+        ApplyPTstPanelBoardOutline(PTstPanelBoard);
+
+        PTstPanelBoard.LayerIsDisplayed[PTstMechLayer] := True;
+        PTstTrySetMetricGrid(PTstPanelBoard, 0.1);
     finally
         PCBServer.PostProcess;
     end;
@@ -1142,6 +1153,8 @@ begin
     if not PTstParsePositive(EditGapY.Text, PTstGapY) then begin PTstShowBox(LabelErrGapY.Caption, 16); Exit; end;
     if not PTstParsePositive(EditMargin.Text, PTstMargin) then begin PTstShowBox(LabelErrMargin.Caption, 16); Exit; end;
     if not PTstParsePositive(EditTab.Text, PTstTabW) then begin PTstShowBox(LabelErrTab.Caption, 16); Exit; end;
+    if not PTstParsePositiveInt(EditTabH.Text, PTstTabCountH) then begin PTstShowBox(LabelErrTabH.Caption, 16); Exit; end;
+    if not PTstParsePositiveInt(EditTabV.Text, PTstTabCountV) then begin PTstShowBox(LabelErrTabV.Caption, 16); Exit; end;
     if not PTstParseNonNeg(EditFillet.Text, PTstFilletR) then begin PTstShowBox(LabelErrMill.Caption, 16); Exit; end;
     if not PTstParsePositive(EditOff.Text, PTstOffMM) then begin PTstShowBox(LabelErrOff.Caption, 16); Exit; end;
     if not PTstParsePositiveInt(EditMech.Text, PTstMechIndex) then
@@ -1271,7 +1284,10 @@ begin
     EditGapY.Text := '2';
     EditMargin.Text := '10';
     EditTab.Text := '4';
-    EditFillet.Text := '1';
+    EditTabH.Text := '1';
+    EditTabV.Text := '2';
+    EditFillet.Text := '2';
+    EditMech.Text := '3';
     EditOff.Text := '2';
     try
         if PCBServer <> nil then

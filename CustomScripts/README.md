@@ -16,7 +16,7 @@
 | DXF контуров | `CustomScripts/DxfOutlineExport/DxfOutlineExport.PrjScr` | `StartDxfOutlineExport` |
 | Панелизация | `CustomScripts/Panelizer/Panelizer.PrjScr` | `StartPanelizer` |
 | Десигнаторы схемы | `CustomScripts/SchDesignatorReset/SchDesignatorReset.PrjScr` | `StartSchDesignatorReset` |
-| BOM CSV | `CustomScripts/BomExport/BomExport.PrjScr` | `StartBomExport` |
+| BOM Excel | `CustomScripts/BomExport/BomExport.PrjScr` | `StartBomExport` |
 | Полигоны GND | `CustomScripts/GroundPolygons/GroundPolygons.PrjScr` | `StartGroundPolygons` |
 | Мастер PCB | `CustomScripts/PcbWizard/PcbWizard.PrjScr` | `StartPcbWizard` |
 | Десигнаторы на PCB | `CustomScripts/PlaceDesignators/PlaceDesignators.PrjScr` | `StartPlaceDesignators` |
@@ -83,17 +83,19 @@ PNG/BMP **320×214** лежат в папке скрипта (рядом с `.Pr
 | Зазор плата–плата | **2 мм** |
 | Поле до края панели | **10 мм** |
 | Ширина перемычки (web) | **4 мм** |
-| Радиус фрезы (смещение пути) | **1 мм** |
+| Перемычки гориз. (верх/низ) | **1** на плату |
+| Перемычки верт. (лево/право) | **2** на плату (¼ и ¾ при N=2) |
+| Радиус фрезы (смещение пути) | **2 мм** |
 | Перемычки | Разрывы в пути фрезы шириной web, **без сверловки** |
-| Механический слой контура | Mechanical 1 |
+| Механический слой контура | Mechanical 3 |
 
-Массив: `IPCB_EmbeddedBoard`. Общие пазы между платами — **один** канал ширины Gap (обе стенки + dogbone). Внутренняя стенка на **углу платы** копирует дугу `BoardOutline` (Rboard). Внешняя на углах массива — концентрическая Rboard+Gap. **Отдельные T-вырезы** на стыке двух плат у края массива: ножка = общая аллея, перекладина = **внешние** кромки фрезы этих двух плат, продлённые навстречу через аллею. T **не** сливается с контуром заготовки (зазор = поле). Перемычки не трогались (2 на вертикали ¼/¾, 1 по центру горизонтали). Рамка панели — bbox+поле.
+Массив: `IPCB_EmbeddedBoard`. Общие пазы между платами — **один** канал ширины Gap (обе стенки + dogbone). Внутренняя стенка на **углу платы** копирует дугу `BoardOutline` (Rboard). Внешняя на углах массива — концентрическая Rboard+Gap. **Отдельные T-вырезы** на стыке двух плат у края массива: ножка = общая аллея, перекладина = **внешние** кромки фрезы этих двух плат, продлённые навстречу через аллею. T **не** сливается с контуром заготовки (зазор = поле). Число перемычек — из диалога (N равномерно по ребру, шея = TabW, inward dogbones). Рамка панели — bbox+поле; `BoardOutline` панели берётся из этой рамки (`BOARDOUTLINE_FROM_SEL_PRIMS`). Реперные знаки: 2 SMD-пада Ø1.5 мм (Top, hole 0, маска открыта) на диагонали рамки (SW и NE), отступ Margin/2, сетка 1 мм. После работы: единицы мм, сетка 0.1 мм.
 
 **Ограничения.** Embedded Board Array в скриптах AD не всегда копирует шелкографию панели. Сложный непрямоугольный контур исходной платы копируется ограничено.
 
 ### 4. Сброс и обновление десигнаторов схемы — `SchDesignatorReset.pas`
 
-**Назначение.** Перенумерация **всего проекта** (все листы). Порядок Altium **Down then Across**. Скрипт **не присваивает** `DM_LogicalDesignator` / `DM_PhysicalDesignator`. Открывает каждый SCH-лист и вызывает `ResetParameters; AddStringParameter('Action','ReAnnotate'); RunProcess('Sch:Annotate')` (сброс: `RunProcess('Sch:ResetDesignators')`). Если диалог Annotation открылся — best-effort `CreateOleObject('WScript.Shell').SendKeys('{ENTER}')` (OK). Если COM недоступен или диалог остался на экране: подтвердите **Tools → Annotation** вручную (positional Down then Across, OK). ConfirmNoYes перед всем проектом.
+**Назначение.** Перенумерация **всего проекта** (все листы). Порядок Altium **Down then Across**. Скрипт **не присваивает** `DM_LogicalDesignator` / `DM_PhysicalDesignator`. Открывает каждый SCH-лист и вызывает `ResetParameters; AddStringParameter('Action','ReAnnotate'); RunProcess('Sch:Annotate')` (сброс: `RunProcess('Sch:ResetDesignators')`). Без OLE / `CreateOleObject` / SendKeys. Если диалог Annotation остался на экране: подтвердите **Tools → Annotation** вручную (positional Down then Across, OK). ConfirmNoYes перед всем проектом.
 
 **Параметры.** По умолчанию: перенумеровать + все листы. Опция сброса в `?` выключена, но доступна.
 
@@ -101,9 +103,9 @@ PNG/BMP **320×214** лежат в папке скрипта (рядом с `.Pr
 
 ### 5. Выгрузка BOM — `BomExport.pas`
 
-**Назначение.** BOM в **CSV UTF-16 LE** (`Write` целой уже закодированной строки: BOM `#$FF#$FE`, символы по 2 байта, CRLF `0D 00 0A 00`). Разделитель **`;`**. Каждое поле в `"..."`. **Без `BlockWrite`**. `TSaveDialog` (Отмена = выход).
+**Назначение.** BOM как **HTML-таблица `*.xls`** (`WriteLn`, charset `windows-1251`). Сырые строки `DM_` без UTF-8/UTF-16 перекодировки. Ячейки широкие (`width:220pt`) с переносом. **Без `BlockWrite`**. `TSaveDialog` (Отмена = выход).
 
-**Столбцы:** `Comment;Designator;Description;Value;Quantity`. **Value = `DM_Comment`.** Кириллица (`Резистор`) — код U+0420… в UTF-16 LE, Excel не показывает `????`.
+**Столбцы:** `Comment`, `Designator`, `Description`, `Value`, `Quantity`. **Value = `DM_Comment`.** Кириллица остаётся байтами CP1251.
 
 **Состав.** **Все** компоненты со **всех листов**. Чтение: `DM_ComponentCount` / `DM_Components` / `DM_Comment` / `DM_FootPrint` / `DM_LogicalDesignator` / `DM_PhysicalDesignator` (только чтение).
 
@@ -137,11 +139,11 @@ PNG/BMP **320×214** лежат в папке скрипта (рядом с `.Pr
 
 ### 3.1 Offset треков — `Offset.pas`
 
-**Назначение.** CAD OFFSET. Каждая сущность цепи смещается (короткие сегменты не отбрасываются). **Острый угол:** extend/trim обоих offset-рёбер до **пересечения**. Дуга радиуса `|d|` на острых углах **не** вставляется (скругление только если исходная вершина уже была дугой). Дуги/окружности: тот же центр, R±d, **те же** StartAngle/EndAngle (не менять местами — выворот). Если внутрь R−d≤0 — пропуск + ShowMessage. Замкнутый: сторона от signed area. Открытый: наружу = слева. Префикс `Off*`.
+**Назначение.** CAD OFFSET с нуля: выбранные треки/дуги → цепи по snap ~0.01 мм; окружность 360° — своя замкнутая цепь. Замкнутый: signed area, CCW → интерьер слева. Трек: параллель на d по нормали +90°. Дуга: **тот же центр**, R±d по стороне выпуклости, **те же** StartAngle/EndAngle/направление (не разворачивать). Стык — пересечение ближе к исходной вершине; острый угол без новой галтели. Нулевая длина отбрасывается, стороны прямоугольника не пропускаются. Скруглённый прямоугольник остаётся скруглённым, радиус угла ± d. Префикс `Off*`.
 
 ### 3.2 Панелизация (тест фрезы) — `PanelizerTest.pas`
 
-**Назначение.** Те же перемычки, что у Panelizer (копия `DrawSlotV`/`DrawSlotH`, без подстройки). Копия `BoardOutline` (треки+дуги). Отдельные T-вырезы на краевых стыках, как в §3 (перекладина = стык внешних кромок, не в рамку). После отрисовки — удаление совпадений и сегментов внутри паза. Префикс `PTst*`.
+**Назначение.** Те же перемычки, что у Panelizer (копия `DrawSlotV`/`DrawSlotH`, счётчики H/V из диалога, без подстройки геометрии). Копия `BoardOutline` (треки+дуги). Отдельные T-вырезы на краевых стыках, как в §3 (перекладина = стык внешних кромок, не в рамку). Mill R по умолчанию 2 мм, mech 3, сетка 0.1 мм. После отрисовки — удаление совпадений и сегментов внутри паза. Префикс `PTst*`.
 
 ## Общие замечания по API
 

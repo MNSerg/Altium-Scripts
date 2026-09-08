@@ -1,7 +1,8 @@
 ﻿{..............................................................................}
 { BomExport.pas                                                                 }
-{ BOM в CSV UTF-16 LE, разделитель ; , поля в кавычках. Без BlockWrite.        }
-{ Value = DM_Comment. Все листы проекта.                                       }
+{ BOM as HTML spreadsheet *.xls, charset windows-1251. Raw DM_ strings.         }
+{ No UTF-16/UTF-8 recode. Table cells, wide wrapping columns.                   }
+{ Value = DM_Comment. All sheets of the project.                                }
 {..............................................................................}
 
 var
@@ -53,45 +54,6 @@ begin
     BomT := BomReplaceStr(BomT, '>', '&gt;');
     BomT := BomReplaceStr(BomT, '"', '&quot;');
     Result := BomT;
-end;
-
-function BomUtf8Char(BomCp : Integer) : String;
-begin
-    if BomCp < 0 then BomCp := 0;
-    if BomCp < 128 then
-        Result := Chr(BomCp)
-    else if BomCp < 2048 then
-        Result := Chr(192 + (BomCp div 64)) + Chr(128 + (BomCp mod 64))
-    else
-        Result := Chr(224 + (BomCp div 4096)) +
-                  Chr(128 + ((BomCp div 64) mod 64)) +
-                  Chr(128 + (BomCp mod 64));
-end;
-
-function BomWin1251Cp(B : Integer) : Integer;
-begin
-    Result := B;
-    if (B >= 192) and (B <= 255) then
-        Result := 1040 + (B - 192);
-    if B = 168 then Result := 1025;
-    if B = 184 then Result := 1105;
-end;
-
-function BomToUtf8(const BomS : String) : String;
-var
-    Bomi, Cp, MaxCp : Integer;
-begin
-    MaxCp := 0;
-    for Bomi := 1 to Length(BomS) do
-        if Ord(BomS[Bomi]) > MaxCp then MaxCp := Ord(BomS[Bomi]);
-    Result := '';
-    for Bomi := 1 to Length(BomS) do
-    begin
-        Cp := Ord(BomS[Bomi]);
-        if MaxCp <= 255 then
-            Cp := BomWin1251Cp(Cp);
-        Result := Result + BomUtf8Char(Cp);
-    end;
 end;
 
 function ParamVal(BomComp : IComponent; const BomNames : String) : String;
@@ -242,22 +204,22 @@ begin
     ShowMessage(Msg);
 end;
 
-procedure WriteSettingsXml(const CsvPath : String);
+procedure WriteSettingsXml(const XlsPath : String);
 var
     Xml : TStringList;
     XmlPath : String;
 begin
-    XmlPath := ChangeFileExt(CsvPath, '.bom.settings.xml');
+    XmlPath := ChangeFileExt(XlsPath, '.bom.settings.xml');
     Xml := TStringList.Create;
     try
         Xml.Add('<?xml version="1.0" encoding="UTF-8"?>');
-        Xml.Add('<BomSettings generator="CustomScripts.BomExport" version="1.3">');
-        Xml.Add('  <Output>' + XmlEsc(CsvPath) + '</Output>');
-        Xml.Add('  <Format>CSV UTF-16 LE semicolon quoted</Format>');
+        Xml.Add('<BomSettings generator="CustomScripts.BomExport" version="1.4">');
+        Xml.Add('  <Output>' + XmlEsc(XlsPath) + '</Output>');
+        Xml.Add('  <Format>HTML spreadsheet .xls windows-1251</Format>');
         Xml.Add('  <GroupBy>Value,Comment,Description,Footprint(internal)</GroupBy>');
         Xml.Add('  <ExcludeParts>None</ExcludeParts>');
         Xml.Add('  <Columns>Comment;Designator;Description;Value;Quantity</Columns>');
-        Xml.Add('  <Notes>Value = DM_Comment. All schematic sheets. No exclusions.</Notes>');
+        Xml.Add('  <Notes>Value = DM_Comment. Raw CP1251 strings. No Unicode recode.</Notes>');
         Xml.Add('</BomSettings>');
         Xml.SaveToFile(XmlPath);
     finally
@@ -265,82 +227,35 @@ begin
     end;
 end;
 
-function BomNextCp(const S : String; var Bomi : Integer) : Integer;
+function BomTd(const BomS : String; BomHeader : Boolean) : String;
 var
-    B, B2, B3 : Integer;
+    BomSt : String;
 begin
-    B := Ord(S[Bomi]);
-    if (Bomi + 2 <= Length(S)) and (B >= 224) and (B <= 239) then
-    begin
-        B2 := Ord(S[Bomi + 1]);
-        B3 := Ord(S[Bomi + 2]);
-        if ((B2 and 192) = 128) and ((B3 and 192) = 128) then
-        begin
-            Result := ((B and 15) * 4096) + ((B2 and 63) * 64) + (B3 and 63);
-            Bomi := Bomi + 3;
-            Exit;
-        end;
-    end;
-    if (Bomi + 1 <= Length(S)) and (B >= 192) and (B <= 223) then
-    begin
-        B2 := Ord(S[Bomi + 1]);
-        if (B2 and 192) = 128 then
-        begin
-            Result := ((B and 31) * 64) + (B2 and 63);
-            Bomi := Bomi + 2;
-            Exit;
-        end;
-    end;
-    Result := BomWin1251Cp(B);
-    Bomi := Bomi + 1;
+    BomSt := 'width:220pt; white-space:normal; mso-style-parent:yes; mso-data-placement:same-cell';
+    if BomHeader then
+        Result := '<th style="' + BomSt + '; font-weight:bold">' + XmlEsc(BomS) + '</th>'
+    else
+        Result := '<td style="' + BomSt + '">' + XmlEsc(BomS) + '</td>';
 end;
 
-function BomU16(Cp : Integer) : String;
-begin
-    if Cp < 0 then Cp := 0;
-    if Cp > 65535 then Cp := 65535;
-    Result := Chr(Cp and 255) + Chr((Cp shr 8) and 255);
-end;
-
-function BomToUtf16(const S : String) : String;
-var
-    Bomi, Cp : Integer;
-begin
-    Result := '';
-    Bomi := 1;
-    while Bomi <= Length(S) do
-    begin
-        Cp := BomNextCp(S, Bomi);
-        Result := Result + BomU16(Cp);
-    end;
-end;
-
-function BomCsvEsc(const BomS : String) : String;
-begin
-    Result := '"' + BomReplaceStr(BomS, '"', '""') + '"';
-end;
-
-procedure WriteCsvUtf16Le(const CsvPath : String);
+procedure WriteHtmlXls(const XlsPath : String);
 var
     BomF : TextFile;
     Bomi : Integer;
     Parts : TStringList;
-    Line, LineU, CellC, CellE, CellD, CellV : String;
+    CellC, CellE, CellD, CellV : String;
 begin
-    { UTF-16 LE: BOM FF FE, then 2-byte chars, CRLF as 0D 00 0A 00.
-      Write of the already-encoded line (Length includes #0). }
     Parts := TStringList.Create;
     Parts.Delimiter := '|';
     Parts.StrictDelimiter := True;
-    AssignFile(BomF, CsvPath);
+    AssignFile(BomF, XlsPath);
     Rewrite(BomF);
     try
-        Write(BomF, Chr(255) + Chr(254));
-        Line := BomCsvEsc('Comment') + ';' + BomCsvEsc('Designator') + ';' +
-                BomCsvEsc('Description') + ';' + BomCsvEsc('Value') + ';' +
-                BomCsvEsc('Quantity');
-        LineU := BomToUtf16(Line) + BomU16(13) + BomU16(10);
-        Write(BomF, LineU);
+        WriteLn(BomF, '<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1251"></head>');
+        WriteLn(BomF, '<table border="1">');
+        WriteLn(BomF, '<tr>' + BomTd('Comment', True) + BomTd('Designator', True) +
+                      BomTd('Description', True) + BomTd('Value', True) +
+                      BomTd('Quantity', True) + '</tr>');
         for Bomi := 0 to Groups.Count - 1 do
         begin
             Parts.DelimitedText := ExtraFields[Bomi];
@@ -349,12 +264,11 @@ begin
             CellE := Parts[1];
             CellV := Parts[2];
             CellD := DesLists[Bomi];
-            Line := BomCsvEsc(CellC) + ';' + BomCsvEsc(CellD) + ';' +
-                    BomCsvEsc(CellE) + ';' + BomCsvEsc(CellV) + ';' +
-                    BomCsvEsc(QtyList[Bomi]);
-            LineU := BomToUtf16(Line) + BomU16(13) + BomU16(10);
-            Write(BomF, LineU);
+            WriteLn(BomF, '<tr>' + BomTd(CellC, False) + BomTd(CellD, False) +
+                          BomTd(CellE, False) + BomTd(CellV, False) +
+                          BomTd(QtyList[Bomi], False) + '</tr>');
         end;
+        WriteLn(BomF, '</table></html>');
     finally
         CloseFile(BomF);
         Parts.Free;
@@ -363,9 +277,9 @@ end;
 
 procedure WriteBomFiles;
 begin
-    if LowerCase(ExtractFileExt(OutPath)) <> '.csv' then
-        OutPath := ChangeFileExt(OutPath, '.csv');
-    WriteCsvUtf16Le(OutPath);
+    if LowerCase(ExtractFileExt(OutPath)) <> '.xls' then
+        OutPath := ChangeFileExt(OutPath, '.xls');
+    WriteHtmlXls(OutPath);
     WriteSettingsXml(OutPath);
     BomShowBox(LabelInfoDone.Caption + OutPath + sLineBreak +
                LabelInfoCount.Caption + IntToStr(Groups.Count), 64);
@@ -517,9 +431,9 @@ begin
     end;
     BomDir := BomInitDir;
     if BomDir = '' then
-        EditPath.Text := 'BOM.csv'
+        EditPath.Text := 'BOM.xls'
     else
-        EditPath.Text := BomDir + 'BOM.csv';
+        EditPath.Text := BomDir + 'BOM.xls';
 end;
 
 procedure TFormBom.ButtonBrowseClick(BomSender: TObject);
@@ -529,9 +443,9 @@ begin
     BomDlg := TSaveDialog.Create(nil);
     try
         BomDlg.Title := LabelDlgSave.Caption;
-        BomDlg.Filter := 'CSV (*.csv)|*.csv|Все файлы (*.*)|*.*';
-        BomDlg.DefaultExt := 'csv';
-        BomDlg.FileName := 'BOM.csv';
+        BomDlg.Filter := 'Excel (*.xls)|*.xls|Все файлы (*.*)|*.*';
+        BomDlg.DefaultExt := 'xls';
+        BomDlg.FileName := 'BOM.xls';
         BomDlg.InitialDir := BomInitDir;
         if BomDlg.Execute then
             EditPath.Text := BomDlg.FileName;
@@ -547,12 +461,12 @@ begin
     BomDlg := TSaveDialog.Create(nil);
     try
         BomDlg.Title := LabelDlgSave.Caption;
-        BomDlg.Filter := 'CSV (*.csv)|*.csv|Все файлы (*.*)|*.*';
-        BomDlg.DefaultExt := 'csv';
+        BomDlg.Filter := 'Excel (*.xls)|*.xls|Все файлы (*.*)|*.*';
+        BomDlg.DefaultExt := 'xls';
         if EditPath.Text <> '' then
             BomDlg.FileName := ExtractFileName(EditPath.Text)
         else
-            BomDlg.FileName := 'BOM.csv';
+            BomDlg.FileName := 'BOM.xls';
         BomDlg.InitialDir := BomInitDir;
         if ExtractFilePath(EditPath.Text) <> '' then
             BomDlg.InitialDir := ExtractFilePath(EditPath.Text);
@@ -567,10 +481,8 @@ begin
         BomShowBox(LabelErrPath.Caption, 16);
         Exit;
     end;
-    if LowerCase(ExtractFileExt(OutPath)) <> '.csv' then
-        OutPath := ChangeFileExt(OutPath, '.csv');
-    if LowerCase(ExtractFileExt(OutPath)) = '' then
-        OutPath := OutPath + '.csv';
+    if LowerCase(ExtractFileExt(OutPath)) <> '.xls' then
+        OutPath := ChangeFileExt(OutPath, '.xls');
     FormBom.Close;
 
     Groups := TStringList.Create;

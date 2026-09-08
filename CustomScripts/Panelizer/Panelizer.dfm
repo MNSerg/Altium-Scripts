@@ -3,7 +3,7 @@ object FormPanel: TFormPanel
   Top = 0
   BorderStyle = bsDialog
   Caption = #1055#1072#1085#1077#1083#1080#1079#1072#1094#1080#1103' PCB'
-  ClientHeight = 500
+  ClientHeight = 556
   ClientWidth = 760
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
@@ -240,7 +240,7 @@ object FormPanel: TFormPanel
     TabOrder = 7
     Text = '4'
   end
-  object LabelFillet: TLabel
+  object LabelTabH: TLabel
     Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
     Font.Height = -12
@@ -251,9 +251,9 @@ object FormPanel: TFormPanel
     Top = 228
     Width = 210
     Height = 13
-    Caption = #1056#1072#1076#1080#1091#1089' '#1092#1088#1077#1079#1099', '#1084#1084':'
+    Caption = #1055#1077#1088#1077#1084#1099#1095#1082#1080#32#1075#1086#1088#1080#1079#46#32#40#1074#1077#1088#1093#47#1085#1080#1079#41#58
   end
-  object EditFillet: TEdit
+  object EditTabH: TEdit
     Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
     Font.Height = -12
@@ -267,7 +267,7 @@ object FormPanel: TFormPanel
     TabOrder = 8
     Text = '1'
   end
-  object LabelMech: TLabel
+  object LabelTabV: TLabel
     Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
     Font.Height = -12
@@ -276,6 +276,60 @@ object FormPanel: TFormPanel
     ParentFont = False
     Left = 340
     Top = 256
+    Width = 210
+    Height = 13
+    Caption = #1055#1077#1088#1077#1084#1099#1095#1082#1080#32#1074#1077#1088#1090#46#32#40#1083#1077#1074#1086#47#1087#1088#1072#1074#1086#41#58
+  end
+  object EditTabV: TEdit
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
+    Left = 560
+    Top = 252
+    Width = 80
+    Height = 21
+    TabOrder = 9
+    Text = '2'
+  end
+  object LabelFillet: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
+    Left = 340
+    Top = 284
+    Width = 210
+    Height = 13
+    Caption = #1056#1072#1076#1080#1091#1089' '#1092#1088#1077#1079#1099', '#1084#1084':'
+  end
+  object EditFillet: TEdit
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
+    Left = 560
+    Top = 280
+    Width = 80
+    Height = 21
+    TabOrder = 10
+    Text = '2'
+  end
+  object LabelMech: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
+    Left = 340
+    Top = 312
     Width = 210
     Height = 13
     Caption = #1052#1077#1093#1072#1085#1080#1095#1077#1089#1082#1080#1081' '#1089#1083#1086#1081' '#1082#1086#1085#1090#1091#1088#1072' (1..32):'
@@ -288,11 +342,11 @@ object FormPanel: TFormPanel
     Font.Style = []
     ParentFont = False
     Left = 560
-    Top = 252
+    Top = 308
     Width = 80
     Height = 21
-    TabOrder = 9
-    Text = '1'
+    TabOrder = 11
+    Text = '3'
   end
   object LabelHint: TLabel
     Font.Charset = DEFAULT_CHARSET
@@ -302,7 +356,7 @@ object FormPanel: TFormPanel
     Font.Style = []
     ParentFont = False
     Left = 340
-    Top = 288
+    Top = 344
     Width = 400
     Height = 80
     AutoSize = False
@@ -317,12 +371,12 @@ object FormPanel: TFormPanel
     Font.Style = []
     ParentFont = False
     Left = 420
-    Top = 456
+    Top = 512
     Width = 90
     Height = 25
     Caption = 'OK'
     Default = True
-    TabOrder = 10
+    TabOrder = 12
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
@@ -333,12 +387,12 @@ object FormPanel: TFormPanel
     Font.Style = []
     ParentFont = False
     Left = 530
-    Top = 456
+    Top = 512
     Width = 90
     Height = 25
     Cancel = True
     Caption = #1054#1090#1084#1077#1085#1072
-    TabOrder = 11
+    TabOrder = 13
     OnClick = ButtonCancelClick
   end
   object LabelErrSize: TLabel
@@ -412,6 +466,22 @@ object FormPanel: TFormPanel
     Height = 1
     Visible = False
     Caption = #1053#1077#1082#1086#1088#1088#1077#1082#1090#1085#1072#1103' '#1096#1080#1088#1080#1085#1072' '#1087#1077#1088#1077#1084#1099#1095#1082#1080'.'
+  end
+  object LabelErrTabH: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1063#1080#1089#1083#1086#32#1075#1086#1088#1080#1079#1086#1085#1090#1072#1083#1100#1085#1099#1093#32#1087#1077#1088#1077#1084#1099#1095#1077#1082#32#1076#1086#1083#1078#1085#1086#32#1073#1099#1090#1100#32#1094#1077#1083#1099#1084#32#62#32#48#46
+  end
+  object LabelErrTabV: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1063#1080#1089#1083#1086#32#1074#1077#1088#1090#1080#1082#1072#1083#1100#1085#1099#1093#32#1087#1077#1088#1077#1084#1099#1095#1077#1082#32#1076#1086#1083#1078#1085#1086#32#1073#1099#1090#1100#32#1094#1077#1083#1099#1084#32#62#32#48#46
   end
   object LabelErrMill: TLabel
     Left = 0

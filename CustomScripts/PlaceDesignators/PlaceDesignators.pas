@@ -446,6 +446,23 @@ begin
     except
     end;
 
+    try
+        SilBoard.DisplayUnit := eMetric;
+    except
+    end;
+    try
+        SilBoard.SnapGridUnit := eMetric;
+    except
+    end;
+    try
+        SilBoard.SnapGridSize := MMsToCoord(0.1);
+    except
+        try
+            SilBoard.SetState_SnapGridSize(MMsToCoord(0.1));
+        except
+        end;
+    end;
+
     Client.SendMessage('PCB:Zoom', 'Action=Redraw', 255, Client.CurrentView);
     SilShowBox(LabelInfoMoved.Caption + IntToStr(MovedCnt) + sLineBreak +
                LabelInfoWarn.Caption + IntToStr(FailCnt) + sLineBreak +

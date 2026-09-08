@@ -13,6 +13,7 @@ var
     PanelBoard  : IPCB_Board;
     SourcePath  : String;
     Rows, Cols  : Integer;
+    TabCountH, TabCountV : Integer;
     GapX, GapY, PanMargin, TabW, FilletR : Double;
     MechIndex   : Integer;
     BoardW, BoardH : Double;
@@ -107,6 +108,34 @@ begin
     except
         Result := False;
     end;
+end;
+
+procedure PanTrySetMetricGrid(ABoard : IPCB_Board; GridMM : Double);
+var
+    Grid : TCoord;
+begin
+    try
+        ABoard.DisplayUnit := eMetric;
+    except
+    end;
+    try
+        ABoard.SnapGridUnit := eMetric;
+    except
+    end;
+    Grid := MMsToCoord(GridMM);
+    try
+        ABoard.SnapGridSize := Grid;
+    except
+        try
+            ABoard.SetState_SnapGridSize(Grid);
+        except
+        end;
+    end;
+end;
+
+function PanSnap1mm(PanC : TCoord) : TCoord;
+begin
+    Result := MMsToCoord(Round(CoordToMMs(PanC)));
 end;
 
 function AddTrack(ABoard : IPCB_Board; PanX1, PanY1, PanX2, PanY2 : TCoord; PanALayer : TLayer) : IPCB_Track;
@@ -317,7 +346,7 @@ begin
             L := BoardOriginX(c) + MMsToCoord(BoardW);
             B := BoardOriginY(r) + CR;
             Tp := BoardOriginY(r) + MMsToCoord(BoardH) - CR;
-            DrawSlotV(ABoard, L, L + Gx, B, Tp, 2, PanALayer);
+            DrawSlotV(ABoard, L, L + Gx, B, Tp, TabCountV, PanALayer);
         end;
     { Shared horizontal alleys (stacked). }
     for r := 0 to Rows - 2 do
@@ -326,7 +355,7 @@ begin
             L := BoardOriginX(c) + CR;
             Rgt := BoardOriginX(c) + MMsToCoord(BoardW) - CR;
             B := BoardOriginY(r) + MMsToCoord(BoardH);
-            DrawSlotH(ABoard, B, B + Gy, L, Rgt, 1, PanALayer);
+            DrawSlotH(ABoard, B, B + Gy, L, Rgt, TabCountH, PanALayer);
         end;
     { Frame west/east per row, inset CR. }
     for r := 0 to Rows - 1 do
@@ -335,8 +364,8 @@ begin
         Rgt := BoardOriginX(Cols - 1) + MMsToCoord(BoardW);
         B := BoardOriginY(r) + CR;
         Tp := BoardOriginY(r) + MMsToCoord(BoardH) - CR;
-        DrawSlotV(ABoard, L - Gx, L, B, Tp, 2, PanALayer);
-        DrawSlotV(ABoard, Rgt, Rgt + Gx, B, Tp, 2, PanALayer);
+        DrawSlotV(ABoard, L - Gx, L, B, Tp, TabCountV, PanALayer);
+        DrawSlotV(ABoard, Rgt, Rgt + Gx, B, Tp, TabCountV, PanALayer);
     end;
     { Frame south/north per col, inset CR. }
     for c := 0 to Cols - 1 do
@@ -345,8 +374,8 @@ begin
         Rgt := BoardOriginX(c) + MMsToCoord(BoardW) - CR;
         B := BoardOriginY(0);
         Tp := BoardOriginY(Rows - 1) + MMsToCoord(BoardH);
-        DrawSlotH(ABoard, B - Gy, B, L, Rgt, 1, PanALayer);
-        DrawSlotH(ABoard, Tp, Tp + Gy, L, Rgt, 1, PanALayer);
+        DrawSlotH(ABoard, B - Gy, B, L, Rgt, TabCountH, PanALayer);
+        DrawSlotH(ABoard, Tp, Tp + Gy, L, Rgt, TabCountH, PanALayer);
     end;
 
     { Standalone T-pockets at panel-edge board-board joints (Example_Panelizer):
@@ -384,19 +413,67 @@ begin
     end;
 end;
 
-{ Рамка: bbox массива плат + поле (PanMargin) с каждой стороны. }
-procedure DrawCommonOuterContour(ABoard : IPCB_Board; PanALayer : TLayer);
-var
-    X0, Y0, X1, Y1 : TCoord;
+procedure FrameRect(var X0, Y0, X1, Y1 : TCoord);
 begin
     X0 := BoardOriginX(0) - MMsToCoord(PanMargin);
     Y0 := BoardOriginY(0) - MMsToCoord(PanMargin);
     X1 := BoardOriginX(Cols - 1) + MMsToCoord(BoardW) + MMsToCoord(PanMargin);
     Y1 := BoardOriginY(Rows - 1) + MMsToCoord(BoardH) + MMsToCoord(PanMargin);
-    AddTrack(ABoard, X0, Y0, X1, Y0, PanALayer);
-    AddTrack(ABoard, X1, Y0, X1, Y1, PanALayer);
-    AddTrack(ABoard, X1, Y1, X0, Y1, PanALayer);
-    AddTrack(ABoard, X0, Y1, X0, Y0, PanALayer);
+end;
+
+{ Рамка: bbox массива плат + поле (PanMargin) с каждой стороны. }
+procedure DrawCommonOuterContour(ABoard : IPCB_Board; PanALayer : TLayer);
+var
+    X0, Y0, X1, Y1 : TCoord;
+    T : IPCB_Track;
+begin
+    FrameRect(X0, Y0, X1, Y1);
+    T := AddTrack(ABoard, X0, Y0, X1, Y0, PanALayer); T.Selected := True;
+    T := AddTrack(ABoard, X1, Y0, X1, Y1, PanALayer); T.Selected := True;
+    T := AddTrack(ABoard, X1, Y1, X0, Y1, PanALayer); T.Selected := True;
+    T := AddTrack(ABoard, X0, Y1, X0, Y0, PanALayer); T.Selected := True;
+end;
+
+procedure PlacePanelFiducials(ABoard : IPCB_Board);
+var
+    X0, Y0, X1, Y1, Inset, PX, PY, Sz : TCoord;
+    Pad : IPCB_Pad;
+begin
+    FrameRect(X0, Y0, X1, Y1);
+    Inset := MMsToCoord(PanMargin / 2);
+    Sz := MMsToCoord(1.5);
+
+    PX := PanSnap1mm(X0 + Inset);
+    PY := PanSnap1mm(Y0 + Inset);
+    Pad := PCBServer.PCBObjectFactory(ePadObject, eNoDimension, eCreate_Default);
+    Pad.Layer := eTopLayer;
+    Pad.X := PX;
+    Pad.Y := PY;
+    Pad.TopXSize := Sz;
+    Pad.TopYSize := Sz;
+    Pad.HoleSize := 0;
+    try Pad.SetState_HoleSize(0); except end;
+    try Pad.Mode := ePadMode_Simple; except end;
+    try Pad.TopShape := eRounded; except end;
+    try Pad.SetState_SolderMaskExpansion(0); except end;
+    try Pad.Cache.SolderMaskExpansion := 0; except end;
+    ABoard.AddPCBObject(Pad);
+
+    PX := PanSnap1mm(X1 - Inset);
+    PY := PanSnap1mm(Y1 - Inset);
+    Pad := PCBServer.PCBObjectFactory(ePadObject, eNoDimension, eCreate_Default);
+    Pad.Layer := eTopLayer;
+    Pad.X := PX;
+    Pad.Y := PY;
+    Pad.TopXSize := Sz;
+    Pad.TopYSize := Sz;
+    Pad.HoleSize := 0;
+    try Pad.SetState_HoleSize(0); except end;
+    try Pad.Mode := ePadMode_Simple; except end;
+    try Pad.TopShape := eRounded; except end;
+    try Pad.SetState_SolderMaskExpansion(0); except end;
+    try Pad.Cache.SolderMaskExpansion := 0; except end;
+    ABoard.AddPCBObject(Pad);
 end;
 
 function BoardOriginX(Col : Integer) : TCoord;
@@ -433,23 +510,11 @@ begin
 end;
 
 procedure ApplyPanelBoardOutline(ABoard : IPCB_Board);
-var
-    PanIter : IPCB_BoardIterator;
-    PanPrim : IPCB_Primitive;
 begin
-    { Выделить рамку панели и сделать из неё board outline. }
-    PanIter := ABoard.BoardIterator_Create;
-    PanIter.AddFilter_ObjectSet(MkSet(eTrackObject, eArcObject));
-    PanIter.AddFilter_LayerSet(MkSet(MechLayer));
-    PanIter.AddFilter_Method(eProcessAll);
-    PanPrim := PanIter.FirstPCBObject;
-    while PanPrim <> nil do
-    begin
-        PanPrim.Selected := False;
-        PanPrim := PanIter.NextPCBObject;
-    end;
-    ABoard.BoardIterator_Destroy(PanIter);
-
+    { Рамка уже выделена в DrawCommonOuterContour. }
+    ResetParameters;
+    AddStringParameter('MODE', 'BOARDOUTLINE_FROM_SEL_PRIMS');
+    RunProcess('PCB:PlaceBoardOutline');
     ResetParameters;
     AddStringParameter('Scope', 'All');
     RunProcess('PCB:DeSelect');
@@ -488,17 +553,17 @@ begin
     try
         PlaceEmbeddedArray(PanelBoard);
         DrawAllMillPaths(PanelBoard, MechLayer);
-        DrawCommonOuterContour(PanelBoard, MechLayer);
 
-        PanelBoard.LayerIsDisplayed[MechLayer] := True;
-
-        { Board outline панели из внешнего контура. }
         ResetParameters;
         AddStringParameter('Scope', 'All');
         RunProcess('PCB:DeSelect');
 
-        { Выделить только внешнюю рамку сложно; задаём outline из примитивов на mech, если пользователь подтвердит.
-          Делаем outline из четырёх сторон панели через PlaceBoardOutline. }
+        DrawCommonOuterContour(PanelBoard, MechLayer);
+        ApplyPanelBoardOutline(PanelBoard);
+        PlacePanelFiducials(PanelBoard);
+
+        PanelBoard.LayerIsDisplayed[MechLayer] := True;
+        PanTrySetMetricGrid(PanelBoard, 0.1);
     finally
         PCBServer.PostProcess;
     end;
@@ -558,6 +623,8 @@ begin
     if not ParsePositive(EditGapY.Text, GapY) then begin PanShowBox(LabelErrGapY.Caption, 16); Exit; end;
     if not ParsePositive(EditMargin.Text, PanMargin) then begin PanShowBox(LabelErrMargin.Caption, 16); Exit; end;
     if not ParsePositive(EditTab.Text, TabW) then begin PanShowBox(LabelErrTab.Caption, 16); Exit; end;
+    if not ParsePositiveInt(EditTabH.Text, TabCountH) then begin PanShowBox(LabelErrTabH.Caption, 16); Exit; end;
+    if not ParsePositiveInt(EditTabV.Text, TabCountV) then begin PanShowBox(LabelErrTabV.Caption, 16); Exit; end;
     if not ParseNonNeg(EditFillet.Text, FilletR) then begin PanShowBox(LabelErrMill.Caption, 16); Exit; end;
     if not ParsePositiveInt(EditMech.Text, MechIndex) then
     begin
@@ -686,7 +753,10 @@ begin
     EditGapY.Text := '2';
     EditMargin.Text := '10';
     EditTab.Text := '4';
-    EditFillet.Text := '1';
+    EditTabH.Text := '1';
+    EditTabV.Text := '2';
+    EditFillet.Text := '2';
+    EditMech.Text := '3';
     try
         if PCBServer <> nil then
             SourceBoard := PCBServer.GetCurrentPCBBoard

@@ -1,13 +1,17 @@
 ﻿{..............................................................................}
 { Offset.pas                                                                    }
-{ CAD OFFSET: цепи треков/дуг/окружностей, параллель/концентр, стык            }
-{ extend/trim в пересечении. Замкнутый: наружу от внутренней области.           }
-{ Открытый: наружу = слева по ходу, внутрь = справа.                            }
+{ CAD OFFSET (NanoCAD / VCarve / AutoCAD):                                      }
+{ 1) selected tracks/arcs -> chains by endpoint snap (~0.01 mm)                 }
+{ 2) circle (360) = its own closed chain                                        }
+{ 3) closed: signed area; CCW interior is left                                  }
+{ 4) track: parallel by d along rotated normal (left = +90 of direction)        }
+{    arc: SAME center, R+d or R-d from bulge vs offset side; SAME SA/EA/dir     }
+{ 5) join at intersection closest to original vertex; sharp = intersection only }
+{ 6) drop inverted (length~0); do not skip whole rectangle sides                }
 {..............................................................................}
 
 const
     OffPiValue = 3.141592653589793;
-    OffJoinTol = 80;
 
 var
     OffBoard     : IPCB_Board;
@@ -17,12 +21,14 @@ var
     OffCreated   : Integer;
     OffRemoved   : Integer;
     OffSkipR     : Boolean;
+    OffJoinTol   : TCoord;
 
 procedure StartOffset; forward;
 procedure _StartOffset; forward;
 procedure TFormOff.ButtonOKClick(OffSender: TObject); forward;
 procedure TFormOff.ButtonCancelClick(OffSender: TObject); forward;
 procedure TFormOff.FormOffShow(OffSender: TObject); forward;
+procedure DoOffsetWork; forward;
 
 procedure OffShowBox(const Msg : String; Flags : Integer);
 begin
@@ -312,25 +318,24 @@ end;
 
 function OffNewRadius(OffOld : TCoord; OffAwayFromCenter : Boolean) : TCoord;
 var
-    OffRmm, OffD : Double;
+    OffRmm : Double;
 begin
     OffRmm := CoordToMMs(OffOld);
-    OffD := OffDistMM;
     if OffAwayFromCenter then
-        OffRmm := OffRmm + OffD
+        OffRmm := OffRmm + OffDistMM
     else
-        OffRmm := OffRmm - OffD;
+        OffRmm := OffRmm - OffDistMM;
     if OffRmm <= 0 then
         Result := 0
     else
         Result := MMsToCoord(OffRmm);
 end;
 
-{ Сторона: +1 = слева по ходу (нормаль (-dy, dx) в мм). }
+{ New track is always chain-ordered: X1 = chain start, X2 = chain end. }
 procedure OffOffsetTrackDir(OffT : IPCB_Track; OffRev : Boolean; OffLeft : Boolean; var OffNew : IPCB_Track);
 var
     X1, Y1, X2, Y2 : TCoord;
-    Dxfdx, Dxfdy, Len, Nx, Ny, OffD : Double;
+    Dxfdx, Dxfdy, Len, Nx, Ny : Double;
     OffW : TCoord;
 begin
     OffNew := nil;
@@ -338,7 +343,7 @@ begin
     Dxfdx := CoordToMMs(X2 - X1);
     Dxfdy := CoordToMMs(Y2 - Y1);
     Len := Sqrt(Dxfdx * Dxfdx + Dxfdy * Dxfdy);
-    if Len < 1e-12 then Len := 1e-12;
+    if Len < 1e-12 then Exit;
     Nx := -Dxfdy / Len;
     Ny := Dxfdx / Len;
     if not OffLeft then
@@ -346,19 +351,21 @@ begin
         Nx := -Nx;
         Ny := -Ny;
     end;
-    OffD := OffDistMM;
     OffW := OffT.Width;
     if OffW < 1 then OffW := MMsToCoord(0.2);
     OffNew := OffAddTrack(
-        X1 + MMsToCoord(Nx * OffD),
-        Y1 + MMsToCoord(Ny * OffD),
-        X2 + MMsToCoord(Nx * OffD),
-        Y2 + MMsToCoord(Ny * OffD),
+        X1 + MMsToCoord(Nx * OffDistMM),
+        Y1 + MMsToCoord(Ny * OffDistMM),
+        X2 + MMsToCoord(Nx * OffDistMM),
+        Y2 + MMsToCoord(Ny * OffDistMM),
         OffT.Layer, OffW);
     if OffT.InNet then OffNew.Net := OffT.Net;
 end;
 
-procedure OffOffsetArcDir(OffA : IPCB_Arc; OffLeft : Boolean; var OffNew : IPCB_Arc);
+{ Arc: same center, same StartAngle/EndAngle/direction. Never reverse to flip.
+  Radius R+d or R-d from whether the bulge (center vs chord) is toward the offset side.
+  Chain-ordered chord: Cross>0 => center is LEFT of chord (CCW bulge) => left offset shrinks R. }
+procedure OffOffsetArcDir(OffA : IPCB_Arc; OffRev : Boolean; OffLeft : Boolean; var OffNew : IPCB_Arc);
 var
     SX, SY, EX, EY : TCoord;
     Mx, My, Cx, Cy, Cross : Double;
@@ -366,19 +373,16 @@ var
     OffNR, OffW : TCoord;
 begin
     OffNew := nil;
-    OffArcXY(OffA, OffA.StartAngle, SX, SY);
-    OffArcXY(OffA, OffA.EndAngle, EX, EY);
+    OffArcEnds(OffA, OffRev, SX, SY, EX, EY);
     Mx := CoordToMMs(EX - SX);
     My := CoordToMMs(EY - SY);
     Cx := CoordToMMs(OffA.XCenter - SX);
     Cy := CoordToMMs(OffA.YCenter - SY);
-    { CCW-дуга: центр слева от хорды, если Cross > 0. }
     Cross := Mx * Cy - My * Cx;
-    Away := OffLeft;
     if Cross > 0 then
-        Away := OffLeft
+        Away := not OffLeft
     else
-        Away := not OffLeft;
+        Away := OffLeft;
     OffNR := OffNewRadius(OffA.Radius, Away);
     if OffNR < 1 then
     begin
@@ -425,7 +429,7 @@ begin
     OffT.GraphicallyInvalidate;
 end;
 
-{ OffChainStart: join at the chain-start of this offset arc (else chain-end). }
+{ Offset arc keeps original SA/EA. Chain-start is StartAngle unless the original was reversed. }
 procedure OffSetArcChain(OffA : IPCB_Arc; OffChainStart : Boolean; OffRev : Boolean; OffX, OffY : TCoord);
 var
     Ang : Double;
@@ -445,9 +449,9 @@ begin
     OffA.GraphicallyInvalidate;
 end;
 
+{ Sharp original corner -> intersection only, no new |d| fillet. Original arc stays an arc. }
 procedure OffJoinTwo(OffP0, OffN0 : IPCB_Primitive; OffRev0 : Boolean;
-                     OffP1, OffN1 : IPCB_Primitive; OffRev1 : Boolean;
-                     OffLeft : Boolean);
+                     OffP1, OffN1 : IPCB_Primitive; OffRev1 : Boolean);
 var
     Xi, Yi : Double;
     TX1, TY1 : TCoord;
@@ -458,7 +462,6 @@ var
     Ok : Boolean;
     HX, HY : Double;
 begin
-    { Sharp vertex: extend/trim to intersection. No radius-|d| fillet. }
     if (OffN0 = nil) or (OffN1 = nil) then Exit;
     OffPrimStart(OffP0, OffRev0, SX, SY);
     OffPrimEnd(OffP0, OffRev0, VX, VY);
@@ -571,6 +574,45 @@ begin
     end;
 end;
 
+procedure OffPrepend(OffList : TStringList; const OffS : String; OffObj : IPCB_Primitive);
+var
+    OffTmp : TStringList;
+    Offi : Integer;
+begin
+    OffTmp := TStringList.Create;
+    try
+        OffTmp.AddObject(OffS, OffObj);
+        for Offi := 0 to OffList.Count - 1 do
+            OffTmp.AddObject(OffList[Offi], OffList.Objects[Offi]);
+        OffList.Clear;
+        for Offi := 0 to OffTmp.Count - 1 do
+            OffList.AddObject(OffTmp[Offi], OffTmp.Objects[Offi]);
+    finally
+        OffTmp.Free;
+    end;
+end;
+
+procedure OffDropTiny(OffNews : TStringList);
+var
+    Offi : Integer;
+    OffT : IPCB_Track;
+    OffP : IPCB_Primitive;
+begin
+    for Offi := 0 to OffNews.Count - 1 do
+    begin
+        OffP := OffNews.Objects[Offi];
+        if OffP = nil then Continue;
+        if OffP.ObjectId <> eTrackObject then Continue;
+        OffT := OffP;
+        if OffDist(OffT.X1, OffT.Y1, OffT.X2, OffT.Y2) >= MMsToCoord(0.001) then Continue;
+        OffBoard.BeginModify;
+        OffBoard.RemovePCBObject(OffT);
+        OffBoard.EndModify;
+        OffNews.Objects[Offi] := nil;
+        Dec(OffCreated);
+    end;
+end;
+
 procedure OffOffsetChain(OffPrims, OffRevs : TStringList; OffClosed : Boolean);
 var
     Offi : Integer;
@@ -586,7 +628,7 @@ begin
     if OffClosed then
     begin
         Area := OffChainArea(OffPrims, OffRevs);
-        { CCW (Area>0): интерьер слева; наружу = справа = not left. }
+        { CCW (Area>0): interior is left; outward = right = not left. }
         if Area > 0 then
             OffLeft := not OffOutward
         else
@@ -604,17 +646,18 @@ begin
             end
             else
             begin
-                OffOffsetArcDir(OffP, OffLeft, OffAN);
+                OffOffsetArcDir(OffP, OffRevs[Offi] = '1', OffLeft, OffAN);
                 News.AddObject('A', OffAN);
             end;
         end;
         for Offi := 0 to OffPrims.Count - 2 do
             OffJoinTwo(OffPrims.Objects[Offi], News.Objects[Offi], OffRevs[Offi] = '1',
-                       OffPrims.Objects[Offi + 1], News.Objects[Offi + 1], OffRevs[Offi + 1] = '1', OffLeft);
+                       OffPrims.Objects[Offi + 1], News.Objects[Offi + 1], OffRevs[Offi + 1] = '1');
         if OffClosed and (OffPrims.Count > 1) then
             OffJoinTwo(OffPrims.Objects[OffPrims.Count - 1], News.Objects[News.Count - 1],
                        OffRevs[OffRevs.Count - 1] = '1',
-                       OffPrims.Objects[0], News.Objects[0], OffRevs[0] = '1', OffLeft);
+                       OffPrims.Objects[0], News.Objects[0], OffRevs[0] = '1');
+        OffDropTiny(News);
     finally
         News.Free;
     end;
@@ -626,8 +669,9 @@ var
     Offi, OffIdx, OffGuard : Integer;
     OffPrim : IPCB_Primitive;
     OffAN : IPCB_Arc;
-    OffRev, OffClosed : Boolean;
+    OffRev, OffClosed, OffBackRev : Boolean;
     SX, SY, EX, EY, HeadX, HeadY : TCoord;
+    OffRevStr : String;
 begin
     OffAll := TStringList.Create;
     OffUsed := TStringList.Create;
@@ -642,7 +686,7 @@ begin
                 OffUsed.Add('0');
             end;
         end;
-        { Окружности — отдельно, концентрически. }
+        { Full circles: concentric, same angles. Inward shrinks. }
         for Offi := 0 to OffAll.Count - 1 do
         begin
             OffPrim := OffAll.Objects[Offi];
@@ -670,6 +714,20 @@ begin
                     OffChain.AddObject('P', OffAll.Objects[OffIdx]);
                     if OffRev then OffRevs.Add('1') else OffRevs.Add('0');
                     OffPrimEnd(OffAll.Objects[OffIdx], OffRev, HeadX, HeadY);
+                end;
+                { Grow backward from the chain start so open polylines stay whole. }
+                OffGuard := 0;
+                while OffGuard < OffAll.Count + 2 do
+                begin
+                    Inc(OffGuard);
+                    OffPrimStart(OffChain.Objects[0], OffRevs[0] = '1', SX, SY);
+                    if not OffFindMate(OffUsed, OffAll, SX, SY, OffIdx, OffRev) then Break;
+                    OffUsed[OffIdx] := '1';
+                    { Mate start matches SX => traverse mate reversed so it ENDs at SX. }
+                    OffBackRev := not OffRev;
+                    if OffBackRev then OffRevStr := '1' else OffRevStr := '0';
+                    OffPrepend(OffRevs, OffRevStr, nil);
+                    OffPrepend(OffChain, 'P', OffAll.Objects[OffIdx]);
                 end;
                 OffPrimStart(OffChain.Objects[0], OffRevs[0] = '1', SX, SY);
                 OffPrimEnd(OffChain.Objects[OffChain.Count - 1], OffRevs[OffRevs.Count - 1] = '1', EX, EY);
@@ -732,6 +790,7 @@ begin
         OffShowBox(LabelWarnNone.Caption, 48);
         Exit;
     end;
+    OffJoinTol := MMsToCoord(0.01);
     OffCreated := 0;
     OffRemoved := 0;
     PCBServer.PreProcess;

@@ -308,6 +308,14 @@ begin
         RunProcess('PCB:DeSelect');
 
         PlaceMountingHoles(WizX0, WizY0, WizX1, WizY1, MMsToCoord(MarginMM), MMsToCoord(HoleMM), MMsToCoord(PadMM));
+        try
+            WizBoard.DisplayUnit := eMetric;
+        except
+        end;
+        try
+            WizBoard.SnapGridUnit := eMetric;
+        except
+        end;
         TrySetGrid(MMsToCoord(GridMM));
 
         if MakeGnd then

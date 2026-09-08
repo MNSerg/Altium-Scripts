@@ -27,17 +27,6 @@ begin
     Result := ConfirmNoYes(Msg);
 end;
 
-procedure SchTrySendKeysOk;
-var
-    Wsh : Variant;
-begin
-    try
-        Wsh := CreateOleObject('WScript.Shell');
-        Wsh.SendKeys('{ENTER}');
-    except
-    end;
-end;
-
 procedure SchTryRunProcesses(const SchPath : String);
 begin
     try
@@ -60,7 +49,6 @@ begin
             RunProcess('Sch:Annotate');
         except
         end;
-        SchTrySendKeysOk;
     end;
     Inc(RanCnt);
 end;
