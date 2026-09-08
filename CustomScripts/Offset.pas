@@ -1,12 +1,13 @@
 ﻿{..............................................................................}
 { Offset.pas                                                                    }
-{ Параллельный offset выделенных треков (открытая цепь или замкнутый контур). }
-{ Наружу = справа по ходу для CCW-контура; внутрь — наоборот.                 }
+{ CAD OFFSET: цепи треков/дуг/окружностей, параллель/концентр, стык            }
+{ extend/trim в пересечении. Замкнутый: наружу от внутренней области.           }
+{ Открытый: наружу = слева по ходу, внутрь = справа.                            }
 {..............................................................................}
 
 const
     OffPiValue = 3.141592653589793;
-    OffJoinTol = 50;
+    OffJoinTol = 80;
 
 var
     OffBoard     : IPCB_Board;
@@ -15,6 +16,7 @@ var
     OffReplace   : Boolean;
     OffCreated   : Integer;
     OffRemoved   : Integer;
+    OffSkipR     : Boolean;
 
 procedure StartOffset; forward;
 procedure _StartOffset; forward;
@@ -104,6 +106,36 @@ begin
         Result := Result - 360;
 end;
 
+function OffAtan2Deg(OffY, OffX : Double) : Double;
+begin
+    if Abs(OffX) < 1e-18 then
+    begin
+        if OffY >= 0 then Result := 90 else Result := 270;
+        Exit;
+    end;
+    Result := ArcTan(OffY / OffX) * 180.0 / OffPiValue;
+    if OffX < 0 then Result := Result + 180;
+    Result := OffNormDeg(Result);
+end;
+
+procedure OffArcXY(OffA : IPCB_Arc; OffDeg : Double; var OffX, OffY : TCoord);
+var
+    OffRmm, OffRad : Double;
+begin
+    OffRmm := CoordToMMs(OffA.Radius);
+    OffRad := OffDeg * OffPiValue / 180.0;
+    OffX := OffA.XCenter + MMsToCoord(OffRmm * Cos(OffRad));
+    OffY := OffA.YCenter + MMsToCoord(OffRmm * Sin(OffRad));
+end;
+
+function OffIsCircle(OffA : IPCB_Arc) : Boolean;
+var
+    OffD : Double;
+begin
+    OffD := OffNormDeg(OffA.EndAngle - OffA.StartAngle);
+    Result := (OffD < 0.5) or (OffD > 359.5);
+end;
+
 function OffAddTrack(OffX1, OffY1, OffX2, OffY2 : TCoord; OffALayer : TLayer; OffW : TCoord) : IPCB_Track;
 begin
     Result := PCBServer.PCBObjectFactory(eTrackObject, eNoDimension, eCreate_Default);
@@ -131,7 +163,7 @@ begin
     Inc(OffCreated);
 end;
 
-function OffIntersect(X1, Y1, X2, Y2, X3, Y3, X4, Y4 : Double; var Xi, Yi : Double) : Boolean;
+function OffIntersectLL(X1, Y1, X2, Y2, X3, Y3, X4, Y4 : Double; var Xi, Yi : Double) : Boolean;
 var
     OffDen, OffT : Double;
 begin
@@ -144,9 +176,80 @@ begin
     Result := True;
 end;
 
-procedure OffGetEnds(OffT : IPCB_Track; Rev : Boolean; var OffX1, OffY1, OffX2, OffY2 : TCoord);
+function OffIntersectLC(X1, Y1, X2, Y2, Cx, Cy, R : Double; HintX, HintY : Double; var Xi, Yi : Double) : Boolean;
+var
+    Dx, Dy, Fx, Fy, A, B, C, Disc, T1, T2, Px1, Py1, Px2, Py2, D1, D2 : Double;
 begin
-    if Rev then
+    Result := False;
+    Dx := X2 - X1;
+    Dy := Y2 - Y1;
+    Fx := X1 - Cx;
+    Fy := Y1 - Cy;
+    A := Dx * Dx + Dy * Dy;
+    if A < 1e-18 then Exit;
+    B := 2 * (Fx * Dx + Fy * Dy);
+    C := Fx * Fx + Fy * Fy - R * R;
+    Disc := B * B - 4 * A * C;
+    if Disc < 0 then Exit;
+    Disc := Sqrt(Disc);
+    T1 := (-B - Disc) / (2 * A);
+    T2 := (-B + Disc) / (2 * A);
+    Px1 := X1 + T1 * Dx;
+    Py1 := Y1 + T1 * Dy;
+    Px2 := X1 + T2 * Dx;
+    Py2 := Y1 + T2 * Dy;
+    D1 := Sqr(Px1 - HintX) + Sqr(Py1 - HintY);
+    D2 := Sqr(Px2 - HintX) + Sqr(Py2 - HintY);
+    if D1 <= D2 then
+    begin
+        Xi := Px1; Yi := Py1;
+    end
+    else
+    begin
+        Xi := Px2; Yi := Py2;
+    end;
+    Result := True;
+end;
+
+function OffIntersectCC(C1x, C1y, R1, C2x, C2y, R2, HintX, HintY : Double; var Xi, Yi : Double) : Boolean;
+var
+    Dx, Dy, Dist, A, Hx, Hy, Rx, Ry, Px1, Py1, Px2, Py2, D1, D2 : Double;
+begin
+    Result := False;
+    Dx := C2x - C1x;
+    Dy := C2y - C1y;
+    Dist := Sqrt(Dx * Dx + Dy * Dy);
+    if Dist < 1e-12 then Exit;
+    if Dist > R1 + R2 + 1e-9 then Exit;
+    if Dist < Abs(R1 - R2) - 1e-9 then Exit;
+    A := (R1 * R1 - R2 * R2 + Dist * Dist) / (2 * Dist);
+    Hx := C1x + Dx * A / Dist;
+    Hy := C1y + Dy * A / Dist;
+    Rx := -Dy / Dist;
+    Ry := Dx / Dist;
+    D1 := R1 * R1 - A * A;
+    if D1 < 0 then D1 := 0;
+    D1 := Sqrt(D1);
+    Px1 := Hx + Rx * D1;
+    Py1 := Hy + Ry * D1;
+    Px2 := Hx - Rx * D1;
+    Py2 := Hy - Ry * D1;
+    D1 := Sqr(Px1 - HintX) + Sqr(Py1 - HintY);
+    D2 := Sqr(Px2 - HintX) + Sqr(Py2 - HintY);
+    if D1 <= D2 then
+    begin
+        Xi := Px1; Yi := Py1;
+    end
+    else
+    begin
+        Xi := Px2; Yi := Py2;
+    end;
+    Result := True;
+end;
+
+procedure OffTrackEnds(OffT : IPCB_Track; OffRev : Boolean; var OffX1, OffY1, OffX2, OffY2 : TCoord);
+begin
+    if OffRev then
     begin
         OffX1 := OffT.X2; OffY1 := OffT.Y2;
         OffX2 := OffT.X1; OffY2 := OffT.Y1;
@@ -158,22 +261,61 @@ begin
     end;
 end;
 
-procedure OffArcXY(OffA : IPCB_Arc; OffDeg : Double; var OffX, OffY : TCoord);
-var
-    OffRmm : Double;
+procedure OffArcEnds(OffA : IPCB_Arc; OffRev : Boolean; var OffX1, OffY1, OffX2, OffY2 : TCoord);
 begin
-    OffRmm := CoordToMMs(OffA.Radius);
-    OffX := OffA.XCenter + MMsToCoord(OffRmm * Cos(OffDeg * OffPiValue / 180.0));
-    OffY := OffA.YCenter + MMsToCoord(OffRmm * Sin(OffDeg * OffPiValue / 180.0));
+    if OffRev then
+    begin
+        OffArcXY(OffA, OffA.EndAngle, OffX1, OffY1);
+        OffArcXY(OffA, OffA.StartAngle, OffX2, OffY2);
+    end
+    else
+    begin
+        OffArcXY(OffA, OffA.StartAngle, OffX1, OffY1);
+        OffArcXY(OffA, OffA.EndAngle, OffX2, OffY2);
+    end;
 end;
 
-function OffNewRadius(OffOld : TCoord) : TCoord;
+function OffPrimStart(OffP : IPCB_Primitive; OffRev : Boolean; var OffX, OffY : TCoord) : Boolean;
+var
+    OffX2, OffY2 : TCoord;
+begin
+    Result := False;
+    if OffP.ObjectId = eTrackObject then
+    begin
+        OffTrackEnds(OffP, OffRev, OffX, OffY, OffX2, OffY2);
+        Result := True;
+    end
+    else if OffP.ObjectId = eArcObject then
+    begin
+        OffArcEnds(OffP, OffRev, OffX, OffY, OffX2, OffY2);
+        Result := True;
+    end;
+end;
+
+function OffPrimEnd(OffP : IPCB_Primitive; OffRev : Boolean; var OffX, OffY : TCoord) : Boolean;
+var
+    OffX1, OffY1 : TCoord;
+begin
+    Result := False;
+    if OffP.ObjectId = eTrackObject then
+    begin
+        OffTrackEnds(OffP, OffRev, OffX1, OffY1, OffX, OffY);
+        Result := True;
+    end
+    else if OffP.ObjectId = eArcObject then
+    begin
+        OffArcEnds(OffP, OffRev, OffX1, OffY1, OffX, OffY);
+        Result := True;
+    end;
+end;
+
+function OffNewRadius(OffOld : TCoord; OffAwayFromCenter : Boolean) : TCoord;
 var
     OffRmm, OffD : Double;
 begin
     OffRmm := CoordToMMs(OffOld);
     OffD := OffDistMM;
-    if OffOutward then
+    if OffAwayFromCenter then
         OffRmm := OffRmm + OffD
     else
         OffRmm := OffRmm - OffD;
@@ -183,15 +325,63 @@ begin
         Result := MMsToCoord(OffRmm);
 end;
 
-procedure OffOffsetArc(OffA : IPCB_Arc; var OffNew : IPCB_Arc);
+{ Сторона: +1 = слева по ходу (нормаль (-dy, dx) в мм). }
+procedure OffOffsetTrackDir(OffT : IPCB_Track; OffRev : Boolean; OffLeft : Boolean; var OffNew : IPCB_Track);
 var
+    X1, Y1, X2, Y2 : TCoord;
+    Dxfdx, Dxfdy, Len, Nx, Ny, OffD : Double;
+    OffW : TCoord;
+begin
+    OffNew := nil;
+    OffTrackEnds(OffT, OffRev, X1, Y1, X2, Y2);
+    Dxfdx := CoordToMMs(X2 - X1);
+    Dxfdy := CoordToMMs(Y2 - Y1);
+    Len := Sqrt(Dxfdx * Dxfdx + Dxfdy * Dxfdy);
+    if Len < 0.0001 then Exit;
+    Nx := -Dxfdy / Len;
+    Ny := Dxfdx / Len;
+    if not OffLeft then
+    begin
+        Nx := -Nx;
+        Ny := -Ny;
+    end;
+    OffD := OffDistMM;
+    OffW := OffT.Width;
+    if OffW < 1 then OffW := MMsToCoord(0.2);
+    OffNew := OffAddTrack(
+        X1 + MMsToCoord(Nx * OffD),
+        Y1 + MMsToCoord(Ny * OffD),
+        X2 + MMsToCoord(Nx * OffD),
+        Y2 + MMsToCoord(Ny * OffD),
+        OffT.Layer, OffW);
+    if OffT.InNet then OffNew.Net := OffT.Net;
+end;
+
+procedure OffOffsetArcDir(OffA : IPCB_Arc; OffLeft : Boolean; var OffNew : IPCB_Arc);
+var
+    SX, SY, EX, EY : TCoord;
+    Mx, My, Cx, Cy, Cross : Double;
+    Away : Boolean;
     OffNR, OffW : TCoord;
 begin
     OffNew := nil;
-    OffNR := OffNewRadius(OffA.Radius);
+    OffArcXY(OffA, OffA.StartAngle, SX, SY);
+    OffArcXY(OffA, OffA.EndAngle, EX, EY);
+    Mx := CoordToMMs(EX - SX);
+    My := CoordToMMs(EY - SY);
+    Cx := CoordToMMs(OffA.XCenter - SX);
+    Cy := CoordToMMs(OffA.YCenter - SY);
+    { CCW-дуга: центр слева от хорды, если Cross > 0. }
+    Cross := Mx * Cy - My * Cx;
+    Away := OffLeft;
+    if Cross > 0 then
+        Away := OffLeft
+    else
+        Away := not OffLeft;
+    OffNR := OffNewRadius(OffA.Radius, Away);
     if OffNR < 1 then
     begin
-        OffShowBox(LabelWarnR.Caption, 48);
+        OffSkipR := True;
         Exit;
     end;
     OffW := OffA.LineWidth;
@@ -201,115 +391,285 @@ begin
     if OffA.InNet then OffNew.Net := OffA.Net;
 end;
 
-procedure OffOffsetTrack(OffT : IPCB_Track; var OffNew : IPCB_Track);
+procedure OffOffsetCircle(OffA : IPCB_Arc; OffGrow : Boolean; var OffNew : IPCB_Arc);
 var
-    Dxfdx, Dxfdy, Len, Nx, Ny, OffD : Double;
-    OffW : TCoord;
+    OffNR, OffW : TCoord;
 begin
     OffNew := nil;
-    Dxfdx := CoordToMMs(OffT.X2 - OffT.X1);
-    Dxfdy := CoordToMMs(OffT.Y2 - OffT.Y1);
-    Len := Sqrt(Dxfdx * Dxfdx + Dxfdy * Dxfdy);
-    if Len < 0.0001 then Exit;
-    { Справа по ходу; внутрь — слева. }
-    Nx := Dxfdy / Len;
-    Ny := -Dxfdx / Len;
-    OffD := OffDistMM;
-    if not OffOutward then
+    OffNR := OffNewRadius(OffA.Radius, OffGrow);
+    if OffNR < 1 then
     begin
-        Nx := -Nx;
-        Ny := -Ny;
+        OffSkipR := True;
+        Exit;
     end;
-    OffW := OffT.Width;
+    OffW := OffA.LineWidth;
     if OffW < 1 then OffW := MMsToCoord(0.2);
-    OffNew := OffAddTrack(
-        OffT.X1 + MMsToCoord(Nx * OffD),
-        OffT.Y1 + MMsToCoord(Ny * OffD),
-        OffT.X2 + MMsToCoord(Nx * OffD),
-        OffT.Y2 + MMsToCoord(Ny * OffD),
-        OffT.Layer, OffW);
-    if OffT.InNet then OffNew.Net := OffT.Net;
+    OffNew := OffAddArc(OffA.XCenter, OffA.YCenter, OffNR,
+                        OffA.StartAngle, OffA.EndAngle, OffA.Layer, OffW);
+    if OffA.InNet then OffNew.Net := OffA.Net;
 end;
 
-procedure OffSnapTrackToArc(OffT0 : IPCB_Track; OffTn : IPCB_Track; OffA0 : IPCB_Arc; OffAn : IPCB_Arc);
-var
-    SX, SY, EX, EY, NSX, NSY, NEX, NEY : TCoord;
+procedure OffSetTrackPt(OffT : IPCB_Track; OffAtStart : Boolean; OffX, OffY : TCoord);
 begin
-    if (OffT0 = nil) or (OffTn = nil) or (OffA0 = nil) or (OffAn = nil) then Exit;
-    OffArcXY(OffA0, OffA0.StartAngle, SX, SY);
-    OffArcXY(OffA0, OffA0.EndAngle, EX, EY);
-    OffArcXY(OffAn, OffAn.StartAngle, NSX, NSY);
-    OffArcXY(OffAn, OffAn.EndAngle, NEX, NEY);
-    OffTn.BeginModify;
-    if OffSamePt(OffT0.X1, OffT0.Y1, SX, SY) then
+    OffT.BeginModify;
+    if OffAtStart then
     begin
-        OffTn.X1 := NSX; OffTn.Y1 := NSY;
+        OffT.X1 := OffX; OffT.Y1 := OffY;
     end
-    else if OffSamePt(OffT0.X1, OffT0.Y1, EX, EY) then
+    else
     begin
-        OffTn.X1 := NEX; OffTn.Y1 := NEY;
+        OffT.X2 := OffX; OffT.Y2 := OffY;
     end;
-    if OffSamePt(OffT0.X2, OffT0.Y2, SX, SY) then
+    OffT.EndModify;
+    OffT.GraphicallyInvalidate;
+end;
+
+procedure OffJoinTwo(OffP0, OffN0 : IPCB_Primitive; OffRev0 : Boolean;
+                     OffP1, OffN1 : IPCB_Primitive; OffRev1 : Boolean);
+var
+    HX, HY, Xi, Yi : Double;
+    TX1, TY1, TX2, TY2, UX1, UY1, UX2, UY2 : TCoord;
+    A0, A1 : IPCB_Arc;
+    T0, T1 : IPCB_Track;
+    R0, R1, C0x, C0y, C1x, C1y : Double;
+    EX, EY : TCoord;
+    Ok : Boolean;
+begin
+    if (OffN0 = nil) or (OffN1 = nil) then Exit;
+    OffPrimEnd(OffP0, OffRev0, EX, EY);
+    HX := CoordToMMs(EX);
+    HY := CoordToMMs(EY);
+    Ok := False;
+    Xi := 0; Yi := 0;
+    if (OffN0.ObjectId = eTrackObject) and (OffN1.ObjectId = eTrackObject) then
     begin
-        OffTn.X2 := NSX; OffTn.Y2 := NSY;
+        T0 := OffN0; T1 := OffN1;
+        TX1 := T0.X1; TY1 := T0.Y1; TX2 := T0.X2; TY2 := T0.Y2;
+        UX1 := T1.X1; UY1 := T1.Y1; UX2 := T1.X2; UY2 := T1.Y2;
+        Ok := OffIntersectLL(CoordToMMs(TX1), CoordToMMs(TY1), CoordToMMs(TX2), CoordToMMs(TY2),
+                             CoordToMMs(UX1), CoordToMMs(UY1), CoordToMMs(UX2), CoordToMMs(UY2),
+                             Xi, Yi);
+        if Ok then
+        begin
+            OffSetTrackPt(T0, False, MMsToCoord(Xi), MMsToCoord(Yi));
+            OffSetTrackPt(T1, True, MMsToCoord(Xi), MMsToCoord(Yi));
+        end;
     end
-    else if OffSamePt(OffT0.X2, OffT0.Y2, EX, EY) then
+    else if (OffN0.ObjectId = eTrackObject) and (OffN1.ObjectId = eArcObject) then
     begin
-        OffTn.X2 := NEX; OffTn.Y2 := NEY;
+        T0 := OffN0; A1 := OffN1;
+        OffArcXY(A1, A1.StartAngle, UX1, UY1);
+        Ok := OffIntersectLC(CoordToMMs(T0.X1), CoordToMMs(T0.Y1), CoordToMMs(T0.X2), CoordToMMs(T0.Y2),
+                             CoordToMMs(A1.XCenter), CoordToMMs(A1.YCenter), CoordToMMs(A1.Radius),
+                             CoordToMMs(UX1), CoordToMMs(UY1), Xi, Yi);
+        if Ok then
+            OffSetTrackPt(T0, False, MMsToCoord(Xi), MMsToCoord(Yi));
+    end
+    else if (OffN0.ObjectId = eArcObject) and (OffN1.ObjectId = eTrackObject) then
+    begin
+        A0 := OffN0; T1 := OffN1;
+        OffArcXY(A0, A0.EndAngle, TX2, TY2);
+        Ok := OffIntersectLC(CoordToMMs(T1.X1), CoordToMMs(T1.Y1), CoordToMMs(T1.X2), CoordToMMs(T1.Y2),
+                             CoordToMMs(A0.XCenter), CoordToMMs(A0.YCenter), CoordToMMs(A0.Radius),
+                             CoordToMMs(TX2), CoordToMMs(TY2), Xi, Yi);
+        if Ok then
+            OffSetTrackPt(T1, True, MMsToCoord(Xi), MMsToCoord(Yi));
+    end
+    else if (OffN0.ObjectId = eArcObject) and (OffN1.ObjectId = eArcObject) then
+    begin
+        A0 := OffN0; A1 := OffN1;
+        if OffSamePt(A0.XCenter, A0.YCenter, A1.XCenter, A1.YCenter) then
+            Exit;
+        OffArcXY(A0, A0.EndAngle, TX2, TY2);
+        Ok := OffIntersectCC(CoordToMMs(A0.XCenter), CoordToMMs(A0.YCenter), CoordToMMs(A0.Radius),
+                             CoordToMMs(A1.XCenter), CoordToMMs(A1.YCenter), CoordToMMs(A1.Radius),
+                             CoordToMMs(TX2), CoordToMMs(TY2), Xi, Yi);
     end;
-    OffTn.EndModify;
-    OffTn.GraphicallyInvalidate;
+    if not Ok then
+    begin
+        { Нет пересечения: дуга радиуса |d| в исходной вершине. }
+        OffPrimEnd(OffN0, False, TX2, TY2);
+        OffPrimStart(OffN1, False, UX1, UY1);
+        OffAddArc(EX, EY, MMsToCoord(OffDistMM),
+                  OffAtan2Deg(CoordToMMs(TY2 - EY), CoordToMMs(TX2 - EX)),
+                  OffAtan2Deg(CoordToMMs(UY1 - EY), CoordToMMs(UX1 - EX)),
+                  OffN0.Layer, MMsToCoord(0.2));
+    end;
+end;
+
+function OffChainArea(OffPrims, OffRevs : TStringList) : Double;
+var
+    Offi : Integer;
+    X1, Y1, X2, Y2 : TCoord;
+    OffP : IPCB_Primitive;
+begin
+    Result := 0;
+    for Offi := 0 to OffPrims.Count - 1 do
+    begin
+        OffP := OffPrims.Objects[Offi];
+        if not OffPrimStart(OffP, OffRevs[Offi] = '1', X1, Y1) then Continue;
+        if not OffPrimEnd(OffP, OffRevs[Offi] = '1', X2, Y2) then Continue;
+        Result := Result + CoordToMMs(X1) * CoordToMMs(Y2) - CoordToMMs(X2) * CoordToMMs(Y1);
+    end;
+end;
+
+function OffFindMate(OffUsed : TStringList; OffAll : TStringList; OffX, OffY : TCoord;
+                     var OffIdx : Integer; var OffRev : Boolean) : Boolean;
+var
+    Offi : Integer;
+    OffP : IPCB_Primitive;
+    SX, SY, EX, EY : TCoord;
+begin
+    Result := False;
+    OffIdx := -1;
+    for Offi := 0 to OffAll.Count - 1 do
+    begin
+        if OffUsed[Offi] = '1' then Continue;
+        OffP := OffAll.Objects[Offi];
+        if OffP.ObjectId = eArcObject then
+            if OffIsCircle(OffP) then Continue;
+        if OffP.ObjectId = eTrackObject then
+        begin
+            SX := OffP.X1; SY := OffP.Y1; EX := OffP.X2; EY := OffP.Y2;
+            if OffSamePt(OffX, OffY, SX, SY) then
+            begin
+                OffIdx := Offi; OffRev := False; Result := True; Exit;
+            end;
+            if OffSamePt(OffX, OffY, EX, EY) then
+            begin
+                OffIdx := Offi; OffRev := True; Result := True; Exit;
+            end;
+        end
+        else if OffP.ObjectId = eArcObject then
+        begin
+            OffArcEnds(OffP, False, SX, SY, EX, EY);
+            if OffSamePt(OffX, OffY, SX, SY) then
+            begin
+                OffIdx := Offi; OffRev := False; Result := True; Exit;
+            end;
+            if OffSamePt(OffX, OffY, EX, EY) then
+            begin
+                OffIdx := Offi; OffRev := True; Result := True; Exit;
+            end;
+        end;
+    end;
+end;
+
+procedure OffOffsetChain(OffPrims, OffRevs : TStringList; OffClosed : Boolean);
+var
+    Offi : Integer;
+    OffLeft : Boolean;
+    Area : Double;
+    OffP : IPCB_Primitive;
+    OffTN : IPCB_Track;
+    OffAN : IPCB_Arc;
+    News : TStringList;
+begin
+    if OffPrims.Count = 0 then Exit;
+    OffLeft := OffOutward;
+    if OffClosed then
+    begin
+        Area := OffChainArea(OffPrims, OffRevs);
+        { CCW (Area>0): интерьер слева; наружу = справа = not left. }
+        if Area > 0 then
+            OffLeft := not OffOutward
+        else
+            OffLeft := OffOutward;
+    end;
+    News := TStringList.Create;
+    try
+        for Offi := 0 to OffPrims.Count - 1 do
+        begin
+            OffP := OffPrims.Objects[Offi];
+            if OffP.ObjectId = eTrackObject then
+            begin
+                OffOffsetTrackDir(OffP, OffRevs[Offi] = '1', OffLeft, OffTN);
+                News.AddObject('T', OffTN);
+            end
+            else
+            begin
+                OffOffsetArcDir(OffP, OffLeft, OffAN);
+                News.AddObject('A', OffAN);
+            end;
+        end;
+        for Offi := 0 to OffPrims.Count - 2 do
+            OffJoinTwo(OffPrims.Objects[Offi], News.Objects[Offi], OffRevs[Offi] = '1',
+                       OffPrims.Objects[Offi + 1], News.Objects[Offi + 1], OffRevs[Offi + 1] = '1');
+        if OffClosed and (OffPrims.Count > 1) then
+            OffJoinTwo(OffPrims.Objects[OffPrims.Count - 1], News.Objects[News.Count - 1],
+                       OffRevs[OffRevs.Count - 1] = '1',
+                       OffPrims.Objects[0], News.Objects[0], OffRevs[0] = '1');
+    finally
+        News.Free;
+    end;
 end;
 
 procedure OffBuildAndOffset;
 var
-    OffTracks0, OffTracksN, OffArcs0, OffArcsN : TStringList;
-    Offi, Offj : Integer;
+    OffAll, OffUsed, OffChain, OffRevs : TStringList;
+    Offi, OffIdx, OffGuard : Integer;
     OffPrim : IPCB_Primitive;
-    OffT, OffTn : IPCB_Track;
-    OffA, OffAn : IPCB_Arc;
+    OffAN : IPCB_Arc;
+    OffRev, OffClosed : Boolean;
+    SX, SY, EX, EY, HeadX, HeadY : TCoord;
 begin
-    OffTracks0 := TStringList.Create;
-    OffTracksN := TStringList.Create;
-    OffArcs0 := TStringList.Create;
-    OffArcsN := TStringList.Create;
+    OffAll := TStringList.Create;
+    OffUsed := TStringList.Create;
+    OffSkipR := False;
     try
         for Offi := 0 to OffBoard.SelectecObjectCount - 1 do
         begin
             OffPrim := OffBoard.SelectecObject(Offi);
-            if OffPrim.ObjectId = eTrackObject then
-                OffTracks0.AddObject('T', OffPrim)
-            else if OffPrim.ObjectId = eArcObject then
-                OffArcs0.AddObject('A', OffPrim);
-        end;
-        for Offi := 0 to OffArcs0.Count - 1 do
-        begin
-            OffOffsetArc(OffArcs0.Objects[Offi], OffAn);
-            OffArcsN.AddObject('A', OffAn);
-        end;
-        for Offi := 0 to OffTracks0.Count - 1 do
-        begin
-            OffOffsetTrack(OffTracks0.Objects[Offi], OffTn);
-            OffTracksN.AddObject('T', OffTn);
-        end;
-        for Offi := 0 to OffTracks0.Count - 1 do
-        begin
-            OffT := OffTracks0.Objects[Offi];
-            OffTn := OffTracksN.Objects[Offi];
-            if OffTn = nil then Continue;
-            for Offj := 0 to OffArcs0.Count - 1 do
+            if (OffPrim.ObjectId = eTrackObject) or (OffPrim.ObjectId = eArcObject) then
             begin
-                OffA := OffArcs0.Objects[Offj];
-                OffAn := OffArcsN.Objects[Offj];
-                OffSnapTrackToArc(OffT, OffTn, OffA, OffAn);
+                OffAll.AddObject('P', OffPrim);
+                OffUsed.Add('0');
+            end;
+        end;
+        { Окружности — отдельно, концентрически. }
+        for Offi := 0 to OffAll.Count - 1 do
+        begin
+            OffPrim := OffAll.Objects[Offi];
+            if OffPrim.ObjectId <> eArcObject then Continue;
+            if not OffIsCircle(OffPrim) then Continue;
+            OffUsed[Offi] := '1';
+            OffOffsetCircle(OffPrim, OffOutward, OffAN);
+        end;
+        for Offi := 0 to OffAll.Count - 1 do
+        begin
+            if OffUsed[Offi] = '1' then Continue;
+            OffChain := TStringList.Create;
+            OffRevs := TStringList.Create;
+            try
+                OffUsed[Offi] := '1';
+                OffChain.AddObject('P', OffAll.Objects[Offi]);
+                OffRevs.Add('0');
+                OffPrimEnd(OffAll.Objects[Offi], False, HeadX, HeadY);
+                OffGuard := 0;
+                while OffGuard < OffAll.Count + 2 do
+                begin
+                    Inc(OffGuard);
+                    if not OffFindMate(OffUsed, OffAll, HeadX, HeadY, OffIdx, OffRev) then Break;
+                    OffUsed[OffIdx] := '1';
+                    OffChain.AddObject('P', OffAll.Objects[OffIdx]);
+                    if OffRev then OffRevs.Add('1') else OffRevs.Add('0');
+                    OffPrimEnd(OffAll.Objects[OffIdx], OffRev, HeadX, HeadY);
+                end;
+                OffPrimStart(OffChain.Objects[0], OffRevs[0] = '1', SX, SY);
+                OffPrimEnd(OffChain.Objects[OffChain.Count - 1], OffRevs[OffRevs.Count - 1] = '1', EX, EY);
+                OffClosed := OffSamePt(SX, SY, EX, EY) and (OffChain.Count > 1);
+                OffOffsetChain(OffChain, OffRevs, OffClosed);
+            finally
+                OffChain.Free;
+                OffRevs.Free;
             end;
         end;
     finally
-        OffTracks0.Free;
-        OffTracksN.Free;
-        OffArcs0.Free;
-        OffArcsN.Free;
+        OffUsed.Free;
+        OffAll.Free;
     end;
+    if OffSkipR then
+        OffShowBox(LabelWarnR.Caption, 48);
 end;
 
 procedure OffDeleteSelected;

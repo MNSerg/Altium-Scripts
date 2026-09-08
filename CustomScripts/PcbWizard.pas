@@ -6,8 +6,8 @@
 var
     WizBoard : IPCB_Board;
     Wmm, Hmm, FilletMM, HoleMM, PadMM, MarginMM, GridMM : Double;
-    FourHoles, MakeGnd, MakeMask, NewDoc : Boolean;
-    CopperCount : Integer;
+    FourHoles, MakeGnd, MakeMask, NewDoc, WizEdgePlate : Boolean;
+    CopperCount, WizMechN : Integer;
 
 { Run Script: choose procedure StartPcbWizard (project compiles only this .pas). }
 procedure StartPcbWizard; forward;
@@ -102,11 +102,8 @@ begin
     Result.Selected := True;
 end;
 
-procedure DrawRoundedKeepout(WizX0, WizY0, WizX1, WizY1, WizR, Width : TCoord);
-var
-    WizL : TLayer;
+procedure DrawRoundedContour(WizX0, WizY0, WizX1, WizY1, WizR, Width : TCoord; WizL : TLayer);
 begin
-    WizL := eKeepOutLayer;
     if WizR <= 0 then
     begin
         AddTrackL(WizX0, WizY0, WizX1, WizY0, WizL, Width);
@@ -297,7 +294,10 @@ begin
         AddStringParameter('Scope', 'All');
         RunProcess('PCB:DeSelect');
 
-        DrawRoundedKeepout(WizX0, WizY0, WizX1, WizY1, WizR, Width);
+        if WizEdgePlate then
+            DrawRoundedContour(WizX0, WizY0, WizX1, WizY1, WizR, Width, LayerUtils.MechanicalLayer(WizMechN))
+        else
+            DrawRoundedContour(WizX0, WizY0, WizX1, WizY1, WizR, Width, eKeepOutLayer);
 
         ResetParameters;
         AddStringParameter('MODE', 'BOARDOUTLINE_FROM_SEL_PRIMS');
@@ -367,6 +367,13 @@ begin
     MakeGnd := CheckGnd.Checked;
     MakeMask := CheckMask.Checked;
     NewDoc := CheckNewDoc.Checked;
+    WizEdgePlate := CheckEdgePlate.Checked;
+    try
+        WizMechN := StrToInt(ComboMech.Text);
+    except
+        WizMechN := 1;
+    end;
+    if (WizMechN < 1) or (WizMechN > 32) then WizMechN := 1;
     try
         CopperCount := StrToInt(ComboLayers.Text);
     except
@@ -480,6 +487,9 @@ begin
     ComboLayers.ItemIndex := 1; { 4 медных слоя }
     ComboLayers.Text := '4';
     CheckFourHoles.Checked := True;
+    CheckEdgePlate.Checked := False;
+    ComboMech.ItemIndex := 0;
+    ComboMech.Text := '1';
 end;
 
 procedure StartPcbWizard;

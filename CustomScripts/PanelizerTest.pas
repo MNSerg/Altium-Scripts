@@ -19,6 +19,9 @@ var
     PTstPanelW, PTstPanelH : Double;
     PTstMechLayer   : TLayer;
     PTstLineW       : TCoord;
+    PTstVX          : array[0..255] of TCoord;
+    PTstVY          : array[0..255] of TCoord;
+    PTstVN          : Integer;
 
 { Run Script: choose procedure StartPanelizerTest (project compiles only this .pas). }
 procedure StartPanelizerTest; forward;
@@ -154,91 +157,352 @@ begin
     PTstAddArc(ABoard, PTstX0 + PTstR, PTstY1 - PTstR, PTstR, 90, 180, PTstALayer);
 end;
 
-{ Вырез как Panelizer 50c84c3; общий вертикальный канал — один раз (SkipWest). }
-
-procedure PTstDrawBoardCell(ABoard : IPCB_Board; Col, Row : Integer; PTstALayer : TLayer);
+function PTstIntersectLL(X1, Y1, X2, Y2, X3, Y3, X4, Y4 : Double; var Xi, Yi : Double) : Boolean;
 var
-    L, B, Rgt, Tp : TCoord;
+    PTstDen, PTstT : Double;
 begin
-    L := PTstBoardOriginX(Col);
-    B := PTstBoardOriginY(Row);
-    Rgt := L + MMsToCoord(PTstBoardW);
-    Tp := B + MMsToCoord(PTstBoardH);
-    PTstDrawRoundedRect(ABoard, L, B, Rgt, Tp, 0, PTstALayer);
+    Result := False;
+    PTstDen := (X1 - X2) * (Y3 - Y4) - (Y1 - Y2) * (X3 - X4);
+    if Abs(PTstDen) < 1e-18 then Exit;
+    PTstT := ((X1 - X3) * (Y3 - Y4) - (Y1 - Y3) * (X3 - X4)) / PTstDen;
+    Xi := X1 + PTstT * (X2 - X1);
+    Yi := Y1 + PTstT * (Y2 - Y1);
+    Result := True;
 end;
 
-procedure PTstDrawMillAroundBoard(ABoard : IPCB_Board; Col, Row : Integer; PTstALayer : TLayer);
+procedure PTstLoadOutlineVerts(Dx, Dy : TCoord);
 var
-    L, B, Rgt, Tp, D, RR, HalfNeck, MidX, MidY : TCoord;
-    Mx0, Mx1, My0, My1 : TCoord;
-    SkipWest : Boolean;
+    PTsti, PTstn : Integer;
+    PTstSeg : TPolySegment;
+    SrcR : TCoordRect;
 begin
-    { Mill как Panelizer 50c84c3: верх/право те же углы. Col>0 — не дублировать запад. }
-    L := PTstBoardOriginX(Col);
-    B := PTstBoardOriginY(Row);
-    Rgt := L + MMsToCoord(PTstBoardW);
-    Tp := B + MMsToCoord(PTstBoardH);
+    PTstVN := 0;
+    SrcR := PTstSourceBoard.BoardOutline.BoundingRectangle;
+    try
+        PTstn := PTstSourceBoard.BoardOutline.PointCount;
+    except
+        PTstn := 0;
+    end;
+    if PTstn > 256 then PTstn := 256;
+    if PTstn >= 2 then
+    begin
+        for PTsti := 0 to PTstn - 1 do
+        begin
+            PTstSeg := PTstSourceBoard.BoardOutline.Segments[PTsti];
+            PTstVX[PTstVN] := PTstSeg.vx + Dx;
+            PTstVY[PTstVN] := PTstSeg.vy + Dy;
+            PTstVN := PTstVN + 1;
+        end;
+    end;
+    if PTstVN < 3 then
+    begin
+        PTstVX[0] := Dx + SrcR.Left;     PTstVY[0] := Dy + SrcR.Bottom;
+        PTstVX[1] := Dx + SrcR.Right;    PTstVY[1] := Dy + SrcR.Bottom;
+        PTstVX[2] := Dx + SrcR.Right;    PTstVY[2] := Dy + SrcR.Top;
+        PTstVX[3] := Dx + SrcR.Left;     PTstVY[3] := Dy + SrcR.Top;
+        PTstVN := 4;
+    end;
+end;
+
+procedure PTstDrawLoadedPoly(ABoard : IPCB_Board; PTstALayer : TLayer);
+var
+    PTsti, PTstj : Integer;
+begin
+    if PTstVN < 2 then Exit;
+    for PTsti := 0 to PTstVN - 1 do
+    begin
+        PTstj := PTsti + 1;
+        if PTstj >= PTstVN then PTstj := 0;
+        PTstAddTrack(ABoard, PTstVX[PTsti], PTstVY[PTsti], PTstVX[PTstj], PTstVY[PTstj], PTstALayer);
+    end;
+end;
+
+procedure PTstOffsetAndDraw(ABoard : IPCB_Board; PTstALayer : TLayer; PTstOutMM : Double);
+var
+    PTsti, PTstj, PTstk : Integer;
+    Ox : array[0..255] of TCoord;
+    Oy : array[0..255] of TCoord;
+    Area, Dx, Dy, Len, Nx, Ny, X1, Y1, X2, Y2, X3, Y3, X4, Y4, Xi, Yi, Sign : Double;
+    Left : Boolean;
+begin
+    if PTstVN < 3 then Exit;
+    Area := 0;
+    for PTsti := 0 to PTstVN - 1 do
+    begin
+        PTstj := PTsti + 1;
+        if PTstj >= PTstVN then PTstj := 0;
+        Area := Area + CoordToMMs(PTstVX[PTsti]) * CoordToMMs(PTstVY[PTstj]) -
+                CoordToMMs(PTstVX[PTstj]) * CoordToMMs(PTstVY[PTsti]);
+    end;
+    Left := Area < 0;
+    Sign := 1;
+    if not Left then Sign := -1;
+    for PTsti := 0 to PTstVN - 1 do
+    begin
+        PTstj := PTsti + 1;
+        if PTstj >= PTstVN then PTstj := 0;
+        PTstk := PTstj + 1;
+        if PTstk >= PTstVN then PTstk := 0;
+        Dx := CoordToMMs(PTstVX[PTstj] - PTstVX[PTsti]);
+        Dy := CoordToMMs(PTstVY[PTstj] - PTstVY[PTsti]);
+        Len := Sqrt(Dx * Dx + Dy * Dy);
+        if Len < 0.0001 then
+        begin
+            Ox[PTstj] := PTstVX[PTstj];
+            Oy[PTstj] := PTstVY[PTstj];
+            Continue;
+        end;
+        Nx := -Dy / Len * Sign;
+        Ny := Dx / Len * Sign;
+        X1 := CoordToMMs(PTstVX[PTsti]) + Nx * PTstOutMM;
+        Y1 := CoordToMMs(PTstVY[PTsti]) + Ny * PTstOutMM;
+        X2 := CoordToMMs(PTstVX[PTstj]) + Nx * PTstOutMM;
+        Y2 := CoordToMMs(PTstVY[PTstj]) + Ny * PTstOutMM;
+        Dx := CoordToMMs(PTstVX[PTstk] - PTstVX[PTstj]);
+        Dy := CoordToMMs(PTstVY[PTstk] - PTstVY[PTstj]);
+        Len := Sqrt(Dx * Dx + Dy * Dy);
+        if Len < 0.0001 then
+        begin
+            Ox[PTstj] := MMsToCoord(X2);
+            Oy[PTstj] := MMsToCoord(Y2);
+            Continue;
+        end;
+        Nx := -Dy / Len * Sign;
+        Ny := Dx / Len * Sign;
+        X3 := CoordToMMs(PTstVX[PTstj]) + Nx * PTstOutMM;
+        Y3 := CoordToMMs(PTstVY[PTstj]) + Ny * PTstOutMM;
+        X4 := CoordToMMs(PTstVX[PTstk]) + Nx * PTstOutMM;
+        Y4 := CoordToMMs(PTstVY[PTstk]) + Ny * PTstOutMM;
+        if PTstIntersectLL(X1, Y1, X2, Y2, X3, Y3, X4, Y4, Xi, Yi) then
+        begin
+            Ox[PTstj] := MMsToCoord(Xi);
+            Oy[PTstj] := MMsToCoord(Yi);
+        end
+        else
+        begin
+            Ox[PTstj] := MMsToCoord(X2);
+            Oy[PTstj] := MMsToCoord(Y2);
+        end;
+    end;
+    for PTsti := 0 to PTstVN - 1 do
+    begin
+        PTstj := PTsti + 1;
+        if PTstj >= PTstVN then PTstj := 0;
+        PTstAddTrack(ABoard, Ox[PTsti], Oy[PTsti], Ox[PTstj], Oy[PTstj], PTstALayer);
+    end;
+end;
+
+procedure PTstDrawCellOutline(ABoard : IPCB_Board; Col, Row : Integer; PTstALayer : TLayer);
+var
+    SrcR : TCoordRect;
+    Dx, Dy : TCoord;
+begin
+    SrcR := PTstSourceBoard.BoardOutline.BoundingRectangle;
+    Dx := PTstBoardOriginX(Col) - SrcR.Left;
+    Dy := PTstBoardOriginY(Row) - SrcR.Bottom;
+    PTstLoadOutlineVerts(Dx, Dy);
+    PTstDrawLoadedPoly(ABoard, PTstALayer);
+    PTstOffsetAndDraw(ABoard, PTstALayer, PTstOffMM);
+end;
+
+procedure PTstDrawSlotV(ABoard : IPCB_Board; X0, X1, Y0, Y1 : TCoord; NTabs : Integer; PTstALayer : TLayer);
+var
+    RR, Neck, Half, MidX, Span, Yc, Ya, Yb, Yprev : TCoord;
+    Ti : Integer;
+begin
+    if (X1 <= X0) or (Y1 <= Y0) then Exit;
     RR := MMsToCoord(PTstFilletR);
-    D := MMsToCoord(PTstOffMM);
-    if D < 1 then D := RR + RR;
-    if D < 1 then Exit;
-    HalfNeck := MMsToCoord(PTstTabW) div 2;
-    if HalfNeck < 1 then HalfNeck := 1;
-    MidX := (L + Rgt) div 2;
-    MidY := (B + Tp) div 2;
-    Mx0 := MidX - HalfNeck - RR;
-    Mx1 := MidX + HalfNeck + RR;
-    My0 := MidY - HalfNeck - RR;
-    My1 := MidY + HalfNeck + RR;
-    if (Mx0 <= L) or (Mx1 >= Rgt) or (My0 <= B) or (My1 >= Tp) then Exit;
-    if (Mx0 >= Mx1) or (My0 >= My1) then Exit;
-    SkipWest := Col > 0;
-
-    if not SkipWest then
+    if RR > ((X1 - X0) div 2) then RR := (X1 - X0) div 2;
+    if RR < 1 then RR := 1;
+    Neck := MMsToCoord(PTstTabW);
+    if Neck < 1 then Neck := 1;
+    Half := (Neck div 2) + RR;
+    MidX := (X0 + X1) div 2;
+    Span := Y1 - Y0;
+    if NTabs < 1 then NTabs := 1;
+    if Span < (Half + Half) * NTabs then
     begin
-        PTstAddTrack(ABoard, L, B, L, My0, PTstALayer);
-        PTstAddArc(ABoard, L - RR, My0, RR, 0, 180, PTstALayer);
-        PTstAddTrack(ABoard, L - D, My0, L - D, B - D, PTstALayer);
+        PTstAddTrack(ABoard, X0, Y0, X0, Y1, PTstALayer);
+        PTstAddTrack(ABoard, X1, Y0, X1, Y1, PTstALayer);
+        Exit;
     end;
-    PTstAddTrack(ABoard, L - D, B - D, Mx0, B - D, PTstALayer);
-    PTstAddArc(ABoard, Mx0, B - RR, RR, 270, 90, PTstALayer);
-    PTstAddTrack(ABoard, Mx0, B, L, B, PTstALayer);
-
-    PTstAddTrack(ABoard, Rgt, B, Mx1, B, PTstALayer);
-    PTstAddArc(ABoard, Mx1, B - RR, RR, 90, 270, PTstALayer);
-    PTstAddTrack(ABoard, Mx1, B - D, Rgt + D, B - D, PTstALayer);
-    PTstAddTrack(ABoard, Rgt + D, B - D, Rgt + D, My0, PTstALayer);
-    PTstAddArc(ABoard, Rgt + RR, My0, RR, 0, 180, PTstALayer);
-    PTstAddTrack(ABoard, Rgt, My0, Rgt, B, PTstALayer);
-
-    PTstAddTrack(ABoard, Rgt, Tp, Rgt, My1, PTstALayer);
-    PTstAddArc(ABoard, Rgt + RR, My1, RR, 180, 0, PTstALayer);
-    PTstAddTrack(ABoard, Rgt + D, My1, Rgt + D, Tp + D, PTstALayer);
-    PTstAddTrack(ABoard, Rgt + D, Tp + D, Mx1, Tp + D, PTstALayer);
-    PTstAddArc(ABoard, Mx1, Tp + RR, RR, 270, 90, PTstALayer);
-    PTstAddTrack(ABoard, Mx1, Tp, Rgt, Tp, PTstALayer);
-
-    PTstAddTrack(ABoard, L, Tp, Mx0, Tp, PTstALayer);
-    PTstAddArc(ABoard, Mx0, Tp + RR, RR, 90, 270, PTstALayer);
-    PTstAddTrack(ABoard, Mx0, Tp + D, L - D, Tp + D, PTstALayer);
-    if not SkipWest then
+    Yprev := Y0;
+    for Ti := 1 to NTabs do
     begin
-        PTstAddTrack(ABoard, L - D, Tp + D, L - D, My1, PTstALayer);
-        PTstAddArc(ABoard, L - RR, My1, RR, 180, 0, PTstALayer);
-        PTstAddTrack(ABoard, L, My1, L, Tp, PTstALayer);
+        if NTabs = 1 then
+            Yc := (Y0 + Y1) div 2
+        else
+            Yc := Y0 + (Span * (2 * Ti - 1)) div (2 * NTabs);
+        Ya := Yc - Half;
+        Yb := Yc + Half;
+        if Ya < Y0 then Ya := Y0;
+        if Yb > Y1 then Yb := Y1;
+        if Ya > Yprev then
+        begin
+            PTstAddTrack(ABoard, X0, Yprev, X0, Ya, PTstALayer);
+            PTstAddTrack(ABoard, X1, Yprev, X1, Ya, PTstALayer);
+        end;
+        PTstAddArc(ABoard, MidX, Ya, RR, 0, 180, PTstALayer);
+        PTstAddArc(ABoard, MidX, Yb, RR, 180, 0, PTstALayer);
+        Yprev := Yb;
     end;
+    if Yprev < Y1 then
+    begin
+        PTstAddTrack(ABoard, X0, Yprev, X0, Y1, PTstALayer);
+        PTstAddTrack(ABoard, X1, Yprev, X1, Y1, PTstALayer);
+    end;
+end;
+
+procedure PTstDrawSlotH(ABoard : IPCB_Board; Y0, Y1, X0, X1 : TCoord; NTabs : Integer; PTstALayer : TLayer);
+var
+    RR, Neck, Half, MidY, Span, Xc, Xa, Xb, Xprev : TCoord;
+    Ti : Integer;
+begin
+    if (Y1 <= Y0) or (X1 <= X0) then Exit;
+    RR := MMsToCoord(PTstFilletR);
+    if RR > ((Y1 - Y0) div 2) then RR := (Y1 - Y0) div 2;
+    if RR < 1 then RR := 1;
+    Neck := MMsToCoord(PTstTabW);
+    if Neck < 1 then Neck := 1;
+    Half := (Neck div 2) + RR;
+    MidY := (Y0 + Y1) div 2;
+    Span := X1 - X0;
+    if NTabs < 1 then NTabs := 1;
+    if Span < (Half + Half) * NTabs then
+    begin
+        PTstAddTrack(ABoard, X0, Y0, X1, Y0, PTstALayer);
+        PTstAddTrack(ABoard, X0, Y1, X1, Y1, PTstALayer);
+        Exit;
+    end;
+    Xprev := X0;
+    for Ti := 1 to NTabs do
+    begin
+        if NTabs = 1 then
+            Xc := (X0 + X1) div 2
+        else
+            Xc := X0 + (Span * (2 * Ti - 1)) div (2 * NTabs);
+        Xa := Xc - Half;
+        Xb := Xc + Half;
+        if Xa < X0 then Xa := X0;
+        if Xb > X1 then Xb := X1;
+        if Xa > Xprev then
+        begin
+            PTstAddTrack(ABoard, Xprev, Y0, Xa, Y0, PTstALayer);
+            PTstAddTrack(ABoard, Xprev, Y1, Xa, Y1, PTstALayer);
+        end;
+        PTstAddArc(ABoard, Xa, MidY, RR, 270, 90, PTstALayer);
+        PTstAddArc(ABoard, Xb, MidY, RR, 90, 270, PTstALayer);
+        Xprev := Xb;
+    end;
+    if Xprev < X1 then
+    begin
+        PTstAddTrack(ABoard, Xprev, Y0, X1, Y0, PTstALayer);
+        PTstAddTrack(ABoard, Xprev, Y1, X1, Y1, PTstALayer);
+    end;
+end;
+
+procedure PTstDeleteCoincident(ABoard : IPCB_Board; PTstALayer : TLayer);
+var
+    PTstIter : IPCB_BoardIterator;
+    PTstPrim : IPCB_Primitive;
+    Tracks : TStringList;
+    PTsti, PTstj : Integer;
+    T0, T1 : IPCB_Track;
+    Kill : TStringList;
+begin
+    Tracks := TStringList.Create;
+    Kill := TStringList.Create;
+    PTstIter := ABoard.BoardIterator_Create;
+    PTstIter.AddFilter_ObjectSet(MkSet(eTrackObject));
+    PTstIter.AddFilter_LayerSet(MkSet(PTstALayer));
+    PTstIter.AddFilter_Method(eProcessAll);
+    PTstPrim := PTstIter.FirstPCBObject;
+    while PTstPrim <> nil do
+    begin
+        Tracks.AddObject('T', PTstPrim);
+        PTstPrim := PTstIter.NextPCBObject;
+    end;
+    ABoard.BoardIterator_Destroy(PTstIter);
+    for PTsti := 0 to Tracks.Count - 1 do
+    begin
+        if Kill.IndexOf(IntToStr(PTsti)) >= 0 then Continue;
+        T0 := Tracks.Objects[PTsti];
+        for PTstj := PTsti + 1 to Tracks.Count - 1 do
+        begin
+            if Kill.IndexOf(IntToStr(PTstj)) >= 0 then Continue;
+            T1 := Tracks.Objects[PTstj];
+            if ((Abs(T0.X1 - T1.X1) < 80) and (Abs(T0.Y1 - T1.Y1) < 80) and
+                (Abs(T0.X2 - T1.X2) < 80) and (Abs(T0.Y2 - T1.Y2) < 80)) or
+               ((Abs(T0.X1 - T1.X2) < 80) and (Abs(T0.Y1 - T1.Y2) < 80) and
+                (Abs(T0.X2 - T1.X1) < 80) and (Abs(T0.Y2 - T1.Y1) < 80)) then
+                Kill.Add(IntToStr(PTstj));
+        end;
+    end;
+    for PTsti := 0 to Kill.Count - 1 do
+    begin
+        T1 := Tracks.Objects[StrToInt(Kill[PTsti])];
+        ABoard.BeginModify;
+        ABoard.RemovePCBObject(T1);
+        ABoard.EndModify;
+    end;
+    Tracks.Free;
+    Kill.Free;
 end;
 
 procedure PTstDrawAllMillPaths(ABoard : IPCB_Board; PTstALayer : TLayer);
 var
     r, c : Integer;
+    L, B, Rgt, Tp, Gx, Gy : TCoord;
+    L0, B0, R1, T1 : TCoord;
 begin
     for r := 0 to PTstRows - 1 do
         for c := 0 to PTstCols - 1 do
+            PTstDrawCellOutline(ABoard, c, r, PTstALayer);
+    Gx := MMsToCoord(PTstGapX);
+    Gy := MMsToCoord(PTstGapY);
+    for r := 0 to PTstRows - 1 do
+        for c := 0 to PTstCols - 2 do
         begin
-            PTstDrawBoardCell(ABoard, c, r, PTstALayer);
-            PTstDrawMillAroundBoard(ABoard, c, r, PTstALayer);
+            L := PTstBoardOriginX(c) + MMsToCoord(PTstBoardW);
+            B := PTstBoardOriginY(r);
+            Tp := B + MMsToCoord(PTstBoardH);
+            PTstDrawSlotV(ABoard, L, L + Gx, B, Tp, 2, PTstALayer);
         end;
+    for r := 0 to PTstRows - 2 do
+        for c := 0 to PTstCols - 1 do
+        begin
+            L := PTstBoardOriginX(c);
+            Rgt := L + MMsToCoord(PTstBoardW);
+            B := PTstBoardOriginY(r) + MMsToCoord(PTstBoardH);
+            PTstDrawSlotH(ABoard, B, B + Gy, L, Rgt, 1, PTstALayer);
+        end;
+    for r := 0 to PTstRows - 1 do
+    begin
+        L := PTstBoardOriginX(0);
+        Rgt := PTstBoardOriginX(PTstCols - 1) + MMsToCoord(PTstBoardW);
+        B := PTstBoardOriginY(r);
+        Tp := B + MMsToCoord(PTstBoardH);
+        PTstDrawSlotV(ABoard, L - Gx, L, B, Tp, 2, PTstALayer);
+        PTstDrawSlotV(ABoard, Rgt, Rgt + Gx, B, Tp, 2, PTstALayer);
+    end;
+    for c := 0 to PTstCols - 1 do
+    begin
+        L := PTstBoardOriginX(c);
+        Rgt := L + MMsToCoord(PTstBoardW);
+        B := PTstBoardOriginY(0);
+        Tp := PTstBoardOriginY(PTstRows - 1) + MMsToCoord(PTstBoardH);
+        PTstDrawSlotH(ABoard, B - Gy, B, L, Rgt, 1, PTstALayer);
+        PTstDrawSlotH(ABoard, Tp, Tp + Gy, L, Rgt, 1, PTstALayer);
+    end;
+    L0 := PTstBoardOriginX(0);
+    B0 := PTstBoardOriginY(0);
+    R1 := PTstBoardOriginX(PTstCols - 1) + MMsToCoord(PTstBoardW);
+    T1 := PTstBoardOriginY(PTstRows - 1) + MMsToCoord(PTstBoardH);
+    PTstAddArc(ABoard, L0, B0, Gx, 180, 270, PTstALayer);
+    PTstAddArc(ABoard, R1, B0, Gx, 270, 0, PTstALayer);
+    PTstAddArc(ABoard, R1, T1, Gx, 0, 90, PTstALayer);
+    PTstAddArc(ABoard, L0, T1, Gx, 90, 180, PTstALayer);
+    PTstDeleteCoincident(ABoard, PTstALayer);
 end;
 
 procedure PTstDrawCommonOuterContour(ABoard : IPCB_Board; PTstALayer : TLayer);

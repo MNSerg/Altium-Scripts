@@ -154,82 +154,156 @@ begin
     AddArc(ABoard, PanX0 + PanR, PanY1 - PanR, PanR, 90, 180, PanALayer);
 end;
 
-{ Вырез: один простой контур на угол (снимаемый паз). Только inward dogbone R
-  внутрь перемычки; внешних «луковиц» в паз нет. Внешний offset D=2R — прямые,
-  острый внешний угол. Шея перемычки = TabW между ближайшими точками дуг. }
-procedure DrawMillAroundBoard(ABoard : IPCB_Board; Col, Row : Integer; PanALayer : TLayer);
+{ Example_Panelizer: один паз ширины Gap (обе стенки + dogbone).
+  Вертикальный проём (соседи слева-справа): 2 перемычки на 1/4 и 3/4.
+  Горизонтальный проём (соседи снизу-сверху) и юг/север рамки: 1 перемычка в центре.
+  Шея = TabW, R dogbone = FilletR (не больше Gap/2). Внешних луковиц нет. }
+procedure DrawSlotV(ABoard : IPCB_Board; X0, X1, Y0, Y1 : TCoord; NTabs : Integer; PanALayer : TLayer);
 var
-    L, B, Rgt, Tp, D, RR, HalfNeck, MidX, MidY : TCoord;
-    Mx0, Mx1, My0, My1 : TCoord;
-    SkipWest : Boolean;
+    RR, Neck, Half, MidX, Span, Yc, Ya, Yb, Yprev : TCoord;
+    Ti : Integer;
 begin
-    L := BoardOriginX(Col);
-    B := BoardOriginY(Row);
-    Rgt := L + MMsToCoord(BoardW);
-    Tp := B + MMsToCoord(BoardH);
+    if (X1 <= X0) or (Y1 <= Y0) then Exit;
     RR := MMsToCoord(FilletR);
-    D := RR + RR;
-    if D < 1 then Exit;
-    { Ближайшие точки двух inward-дуг = TabW: центры раздвигаем на R в каждую сторону. }
-    HalfNeck := MMsToCoord(TabW) div 2;
-    if HalfNeck < 1 then HalfNeck := 1;
-    MidX := (L + Rgt) div 2;
-    MidY := (B + Tp) div 2;
-    Mx0 := MidX - HalfNeck - RR;
-    Mx1 := MidX + HalfNeck + RR;
-    My0 := MidY - HalfNeck - RR;
-    My1 := MidY + HalfNeck + RR;
-    if (Mx0 <= L) or (Mx1 >= Rgt) or (My0 <= B) or (My1 >= Tp) then Exit;
-    if (Mx0 >= Mx1) or (My0 >= My1) then Exit;
-    { Col>0: западный паз не рисуем — это тот же канал, что восток левого соседа (50c84c3 east). }
-    SkipWest := Col > 0;
-
-    { ЮЗ. SkipWest: общий вертикальный канал рисует восток левого соседа (один паз). }
-    if not SkipWest then
+    if RR > ((X1 - X0) div 2) then RR := (X1 - X0) div 2;
+    if RR < 1 then RR := 1;
+    Neck := MMsToCoord(TabW);
+    if Neck < 1 then Neck := 1;
+    Half := (Neck div 2) + RR;
+    MidX := (X0 + X1) div 2;
+    Span := Y1 - Y0;
+    if NTabs < 1 then NTabs := 1;
+    if Span < (Half + Half) * NTabs then
     begin
-        AddTrack(ABoard, L, B, L, My0, PanALayer);
-        AddArc(ABoard, L - RR, My0, RR, 0, 180, PanALayer);
-        AddTrack(ABoard, L - D, My0, L - D, B - D, PanALayer);
+        AddTrack(ABoard, X0, Y0, X0, Y1, PanALayer);
+        AddTrack(ABoard, X1, Y0, X1, Y1, PanALayer);
+        Exit;
     end;
-    AddTrack(ABoard, L - D, B - D, Mx0, B - D, PanALayer);
-    AddArc(ABoard, Mx0, B - RR, RR, 270, 90, PanALayer);
-    AddTrack(ABoard, Mx0, B, L, B, PanALayer);
-
-    { ЮВ }
-    AddTrack(ABoard, Rgt, B, Mx1, B, PanALayer);
-    AddArc(ABoard, Mx1, B - RR, RR, 90, 270, PanALayer);
-    AddTrack(ABoard, Mx1, B - D, Rgt + D, B - D, PanALayer);
-    AddTrack(ABoard, Rgt + D, B - D, Rgt + D, My0, PanALayer);
-    AddArc(ABoard, Rgt + RR, My0, RR, 0, 180, PanALayer);
-    AddTrack(ABoard, Rgt, My0, Rgt, B, PanALayer);
-
-    { СВ — геометрия как 50c84c3 (восток/верх не трогать «complement»). }
-    AddTrack(ABoard, Rgt, Tp, Rgt, My1, PanALayer);
-    AddArc(ABoard, Rgt + RR, My1, RR, 180, 0, PanALayer);
-    AddTrack(ABoard, Rgt + D, My1, Rgt + D, Tp + D, PanALayer);
-    AddTrack(ABoard, Rgt + D, Tp + D, Mx1, Tp + D, PanALayer);
-    AddArc(ABoard, Mx1, Tp + RR, RR, 270, 90, PanALayer);
-    AddTrack(ABoard, Mx1, Tp, Rgt, Tp, PanALayer);
-
-    { СЗ }
-    AddTrack(ABoard, L, Tp, Mx0, Tp, PanALayer);
-    AddArc(ABoard, Mx0, Tp + RR, RR, 90, 270, PanALayer);
-    AddTrack(ABoard, Mx0, Tp + D, L - D, Tp + D, PanALayer);
-    if not SkipWest then
+    Yprev := Y0;
+    for Ti := 1 to NTabs do
     begin
-        AddTrack(ABoard, L - D, Tp + D, L - D, My1, PanALayer);
-        AddArc(ABoard, L - RR, My1, RR, 180, 0, PanALayer);
-        AddTrack(ABoard, L, My1, L, Tp, PanALayer);
+        if NTabs = 1 then
+            Yc := (Y0 + Y1) div 2
+        else
+            Yc := Y0 + (Span * (2 * Ti - 1)) div (2 * NTabs);
+        Ya := Yc - Half;
+        Yb := Yc + Half;
+        if Ya < Y0 then Ya := Y0;
+        if Yb > Y1 then Yb := Y1;
+        if Ya > Yprev then
+        begin
+            AddTrack(ABoard, X0, Yprev, X0, Ya, PanALayer);
+            AddTrack(ABoard, X1, Yprev, X1, Ya, PanALayer);
+        end;
+        AddArc(ABoard, MidX, Ya, RR, 0, 180, PanALayer);
+        AddArc(ABoard, MidX, Yb, RR, 180, 0, PanALayer);
+        Yprev := Yb;
+    end;
+    if Yprev < Y1 then
+    begin
+        AddTrack(ABoard, X0, Yprev, X0, Y1, PanALayer);
+        AddTrack(ABoard, X1, Yprev, X1, Y1, PanALayer);
+    end;
+end;
+
+procedure DrawSlotH(ABoard : IPCB_Board; Y0, Y1, X0, X1 : TCoord; NTabs : Integer; PanALayer : TLayer);
+var
+    RR, Neck, Half, MidY, Span, Xc, Xa, Xb, Xprev : TCoord;
+    Ti : Integer;
+begin
+    if (Y1 <= Y0) or (X1 <= X0) then Exit;
+    RR := MMsToCoord(FilletR);
+    if RR > ((Y1 - Y0) div 2) then RR := (Y1 - Y0) div 2;
+    if RR < 1 then RR := 1;
+    Neck := MMsToCoord(TabW);
+    if Neck < 1 then Neck := 1;
+    Half := (Neck div 2) + RR;
+    MidY := (Y0 + Y1) div 2;
+    Span := X1 - X0;
+    if NTabs < 1 then NTabs := 1;
+    if Span < (Half + Half) * NTabs then
+    begin
+        AddTrack(ABoard, X0, Y0, X1, Y0, PanALayer);
+        AddTrack(ABoard, X0, Y1, X1, Y1, PanALayer);
+        Exit;
+    end;
+    Xprev := X0;
+    for Ti := 1 to NTabs do
+    begin
+        if NTabs = 1 then
+            Xc := (X0 + X1) div 2
+        else
+            Xc := X0 + (Span * (2 * Ti - 1)) div (2 * NTabs);
+        Xa := Xc - Half;
+        Xb := Xc + Half;
+        if Xa < X0 then Xa := X0;
+        if Xb > X1 then Xb := X1;
+        if Xa > Xprev then
+        begin
+            AddTrack(ABoard, Xprev, Y0, Xa, Y0, PanALayer);
+            AddTrack(ABoard, Xprev, Y1, Xa, Y1, PanALayer);
+        end;
+        AddArc(ABoard, Xa, MidY, RR, 270, 90, PanALayer);
+        AddArc(ABoard, Xb, MidY, RR, 90, 270, PanALayer);
+        Xprev := Xb;
+    end;
+    if Xprev < X1 then
+    begin
+        AddTrack(ABoard, Xprev, Y0, X1, Y0, PanALayer);
+        AddTrack(ABoard, Xprev, Y1, X1, Y1, PanALayer);
     end;
 end;
 
 procedure DrawAllMillPaths(ABoard : IPCB_Board; PanALayer : TLayer);
 var
     r, c : Integer;
+    L, B, Rgt, Tp, Gx, Gy : TCoord;
+    L0, B0, R1, T1 : TCoord;
 begin
+    Gx := MMsToCoord(GapX);
+    Gy := MMsToCoord(GapY);
     for r := 0 to Rows - 1 do
+        for c := 0 to Cols - 2 do
+        begin
+            L := BoardOriginX(c) + MMsToCoord(BoardW);
+            B := BoardOriginY(r);
+            Tp := B + MMsToCoord(BoardH);
+            DrawSlotV(ABoard, L, L + Gx, B, Tp, 2, PanALayer);
+        end;
+    for r := 0 to Rows - 2 do
         for c := 0 to Cols - 1 do
-            DrawMillAroundBoard(ABoard, c, r, PanALayer);
+        begin
+            L := BoardOriginX(c);
+            Rgt := L + MMsToCoord(BoardW);
+            B := BoardOriginY(r) + MMsToCoord(BoardH);
+            DrawSlotH(ABoard, B, B + Gy, L, Rgt, 1, PanALayer);
+        end;
+    for r := 0 to Rows - 1 do
+    begin
+        L := BoardOriginX(0);
+        Rgt := BoardOriginX(Cols - 1) + MMsToCoord(BoardW);
+        B := BoardOriginY(r);
+        Tp := B + MMsToCoord(BoardH);
+        DrawSlotV(ABoard, L - Gx, L, B, Tp, 2, PanALayer);
+        DrawSlotV(ABoard, Rgt, Rgt + Gx, B, Tp, 2, PanALayer);
+    end;
+    for c := 0 to Cols - 1 do
+    begin
+        L := BoardOriginX(c);
+        Rgt := L + MMsToCoord(BoardW);
+        B := BoardOriginY(0);
+        Tp := BoardOriginY(Rows - 1) + MMsToCoord(BoardH);
+        DrawSlotH(ABoard, B - Gy, B, L, Rgt, 1, PanALayer);
+        DrawSlotH(ABoard, Tp, Tp + Gy, L, Rgt, 1, PanALayer);
+    end;
+    L0 := BoardOriginX(0);
+    B0 := BoardOriginY(0);
+    R1 := BoardOriginX(Cols - 1) + MMsToCoord(BoardW);
+    T1 := BoardOriginY(Rows - 1) + MMsToCoord(BoardH);
+    AddArc(ABoard, L0, B0, Gx, 180, 270, PanALayer);
+    AddArc(ABoard, R1, B0, Gx, 270, 0, PanALayer);
+    AddArc(ABoard, R1, T1, Gx, 0, 90, PanALayer);
+    AddArc(ABoard, L0, T1, Gx, 90, 180, PanALayer);
 end;
 
 { Рамка: bbox массива плат + поле (PanMargin) с каждой стороны. }

@@ -272,10 +272,23 @@ end;
 
 procedure BomWriteBytes(var BomF : File; const BomS : String);
 var
-    Bomi : Integer;
+    Bomi, BomN, BomChunk, Bomj : Integer;
+    BomB : Byte;
 begin
-    for Bomi := 1 to Length(BomS) do
-        BomWriteByte(BomF, Ord(BomS[Bomi]));
+    { Chunked byte writes — avoid a single huge Write(string) (I/O 1784). }
+    Bomi := 1;
+    BomN := Length(BomS);
+    while Bomi <= BomN do
+    begin
+        BomChunk := BomN - Bomi + 1;
+        if BomChunk > 4096 then BomChunk := 4096;
+        for Bomj := 0 to BomChunk - 1 do
+        begin
+            BomB := Ord(BomS[Bomi + Bomj]) and 255;
+            BlockWrite(BomF, BomB, 1);
+        end;
+        Bomi := Bomi + BomChunk;
+    end;
 end;
 
 procedure BomWriteU16(var BomF : File; BomV : Integer);
@@ -693,6 +706,7 @@ end;
 procedure WriteBomFiles;
 var
     Ext, CsvPath : String;
+    XlsxOk : Boolean;
 begin
     Ext := LowerCase(ExtractFileExt(OutPath));
     if Ext = '.csv' then
@@ -703,9 +717,21 @@ begin
     begin
         if Ext <> '.xlsx' then
             OutPath := ChangeFileExt(OutPath, '.xlsx');
-        WriteXlsx;
         CsvPath := ChangeFileExt(OutPath, '.csv');
         WriteCsvUtf8(CsvPath);
+        XlsxOk := False;
+        try
+            WriteXlsx;
+            XlsxOk := True;
+        except
+            XlsxOk := False;
+        end;
+        if not XlsxOk then
+        begin
+            BomShowBox(LabelWarnXlsx.Caption + CsvPath, 48);
+            OutPath := CsvPath;
+            Exit;
+        end;
     end;
     WriteSettingsXml(OutPath);
     BomShowBox(LabelInfoDone.Caption + OutPath + sLineBreak +
@@ -799,14 +825,68 @@ begin
 end;
 
 
+function BomInitDir : String;
+var
+    BomWS : IWorkspace;
+    BomPrj : IProject;
+    BomDoc : IDocument;
+    BomP : String;
+begin
+    Result := '';
+    BomWS := GetWorkspace;
+    if BomWS <> nil then
+    begin
+        BomPrj := BomWS.DM_FocusedProject;
+        if BomPrj <> nil then
+        begin
+            BomP := BomPrj.DM_ProjectFullPath;
+            if (BomP <> '') and (Pos('*', BomP) = 0) then
+                Result := ExtractFilePath(BomP);
+        end;
+        if Result = '' then
+        try
+            BomDoc := BomWS.DM_FocusedDocument;
+            if BomDoc <> nil then
+                Result := ExtractFilePath(BomDoc.DM_FullPath);
+        except
+        end;
+    end;
+    if Result = '' then
+    try
+        Result := GetEnvironmentVariable('USERPROFILE') + '\Documents';
+    except
+        Result := '';
+    end;
+end;
+
+function BomPathAllowed(const BomP : String) : Boolean;
+var
+    BomDir, BomName, BomU : String;
+begin
+    Result := False;
+    if BomP = '' then Exit;
+    BomName := ExtractFileName(BomP);
+    if BomName = '' then Exit;
+    BomDir := ExtractFilePath(BomP);
+    BomU := UpperCase(BomP);
+    if (BomU = 'C:\') or (BomU = 'C:') or (BomP = '/') or (BomP = '\') then Exit;
+    if (BomDir = 'C:\') or (BomDir = '/') or (BomDir = '\') then Exit;
+    Result := True;
+end;
+
 procedure TFormBom.FormBomShow(BomSender: TObject);
+var
+    BomDir : String;
 begin
     try
         BomCS_TryLoadHelpImage('BomExport.bmp', 'BomExport.png');
     except
     end;
-    if EditPath.Text = '' then
-        EditPath.Text := 'bom.xlsx';
+    BomDir := BomInitDir;
+    if BomDir = '' then
+        EditPath.Text := 'BOM.xlsx'
+    else
+        EditPath.Text := BomDir + 'BOM.xlsx';
 end;
 
 procedure TFormBom.ButtonBrowseClick(BomSender: TObject);
@@ -815,10 +895,11 @@ var
 begin
     BomDlg := TSaveDialog.Create(nil);
     try
-        BomDlg.Title := 'Сохранить BOM';
+        BomDlg.Title := LabelDlgSave.Caption;
         BomDlg.Filter := 'Excel (*.xlsx)|*.xlsx|CSV UTF-8 (*.csv)|*.csv|Excel XML (*.xml)|*.xml|Все файлы (*.*)|*.*';
         BomDlg.DefaultExt := 'xlsx';
-        BomDlg.FileName := 'bom.xlsx';
+        BomDlg.FileName := 'BOM.xlsx';
+        BomDlg.InitialDir := BomInitDir;
         if BomDlg.Execute then
             EditPath.Text := BomDlg.FileName;
     finally
@@ -827,9 +908,28 @@ begin
 end;
 
 procedure TFormBom.ButtonOKClick(BomSender: TObject);
+var
+    BomDlg : TSaveDialog;
 begin
-    OutPath := EditPath.Text;
-    if OutPath = '' then
+    BomDlg := TSaveDialog.Create(nil);
+    try
+        BomDlg.Title := LabelDlgSave.Caption;
+        BomDlg.Filter := 'Excel (*.xlsx)|*.xlsx|CSV UTF-8 (*.csv)|*.csv|Excel XML (*.xml)|*.xml|Все файлы (*.*)|*.*';
+        BomDlg.DefaultExt := 'xlsx';
+        if EditPath.Text <> '' then
+            BomDlg.FileName := ExtractFileName(EditPath.Text)
+        else
+            BomDlg.FileName := 'BOM.xlsx';
+        BomDlg.InitialDir := BomInitDir;
+        if ExtractFilePath(EditPath.Text) <> '' then
+            BomDlg.InitialDir := ExtractFilePath(EditPath.Text);
+        if not BomDlg.Execute then
+            Exit;
+        OutPath := BomDlg.FileName;
+    finally
+        BomDlg.Free;
+    end;
+    if not BomPathAllowed(OutPath) then
     begin
         BomShowBox(LabelErrPath.Caption, 16);
         Exit;

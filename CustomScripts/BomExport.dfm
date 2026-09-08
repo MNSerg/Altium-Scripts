@@ -157,4 +157,20 @@ object FormBom: TFormBom
     Visible = False
     Caption = #1043#1088#1091#1087#1087': '
   end
+  object LabelWarnXlsx: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #67#83#86#32#1089#1086#1093#1088#1072#1085#1105#1085#44#32#88#76#83#88#32#1085#1077#32#1079#1072#1087#1080#1089#1072#1085#58#32
+  end
+  object LabelDlgSave: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1057#1086#1093#1088#1072#1085#1080#1090#1100#32#66#79#77
+  end
 end

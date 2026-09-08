@@ -319,6 +319,54 @@ object FormWizard: TFormWizard
     State = cbChecked
     TabOrder = 11
   end
+  object CheckEdgePlate: TCheckBox
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
+    Left = 340
+    Top = 344
+    Width = 400
+    Height = 17
+    Caption = #1058#1086#1088#1094#1077#1074#1072#1103#32#1084#1077#1090#1072#1083#1083#1080#1079#1072#1094#1080#1103
+    TabOrder = 12
+  end
+  object LabelMech: TLabel
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
+    Left = 360
+    Top = 368
+    Width = 140
+    Height = 13
+    Caption = #1052#1077#1093#46#32#1089#1083#1086#1081#32#1082#1086#1085#1090#1091#1088#1072#58
+  end
+  object ComboMech: TComboBox
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
+    Left = 540
+    Top = 364
+    Width = 80
+    Height = 21
+    Style = csDropDownList
+    ItemIndex = 0
+    TabOrder = 13
+    Text = '1'
+    Items.Strings = (
+      '1'
+      '2'
+      '3'
+      '4')
+  end
   object ButtonOK: TButton
     Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
@@ -332,7 +380,7 @@ object FormWizard: TFormWizard
     Height = 25
     Caption = 'OK'
     Default = True
-    TabOrder = 12
+    TabOrder = 14
     OnClick = ButtonOKClick
   end
   object ButtonCancel: TButton
@@ -348,7 +396,7 @@ object FormWizard: TFormWizard
     Height = 25
     Cancel = True
     Caption = #1054#1090#1084#1077#1085#1072
-    TabOrder = 13
+    TabOrder = 15
     OnClick = ButtonCancelClick
   end
   object LabelErrW: TLabel
