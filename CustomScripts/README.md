@@ -14,14 +14,14 @@
 | --- | --- | --- |
 | Скругления трека | `CustomScripts/TrackCornerFillet/TrackCornerFillet.PrjScr` | `StartTrackCornerFillet` (`_StartTrackCornerFillet`) |
 | DXF контуров | `CustomScripts/DxfOutlineExport/DxfOutlineExport.PrjScr` | `StartDxfOutlineExport` |
-| Панелизация | `CustomScripts/Panelizer/Panelizer.PrjScr` | `StartPanelizer` |
+| Панелизация (прямоугольник) | `CustomScripts/Panelizer/Panelizer.PrjScr` | `StartPanelizer` |
+| Панелизация (произвольный контур) | `CustomScripts/Panelize_Hard_Form/Panelize_Hard_Form.PrjScr` | `StartPanelizeHardForm` |
 | Десигнаторы схемы | `CustomScripts/SchDesignatorReset/SchDesignatorReset.PrjScr` | `StartSchDesignatorReset` |
 | BOM Excel | `CustomScripts/BomExport/BomExport.PrjScr` | `StartBomExport` |
 | Полигоны GND | `CustomScripts/GroundPolygons/GroundPolygons.PrjScr` | `StartGroundPolygons` |
 | Мастер PCB | `CustomScripts/PcbWizard/PcbWizard.PrjScr` | `StartPcbWizard` |
 | Десигнаторы на PCB | `CustomScripts/PlaceDesignators/PlaceDesignators.PrjScr` | `StartPlaceDesignators` |
 | Offset треков | `CustomScripts/Offset/Offset.PrjScr` | `StartOffset` |
-| Панель (тест фрезы) | `CustomScripts/PanelizerTest/PanelizerTest.PrjScr` | `StartPanelizerTest` |
 
 1. **File → Open Project** и откройте нужный `CustomScripts/<Name>/<Name>.PrjScr` **или** добавьте каждый проект в **Preferences → Scripting System → Project Scripts**.
 2. Запускайте **уникальную** процедуру `Start…` из таблицы (не внутренние функции).
@@ -91,7 +91,7 @@ PNG/BMP **320×214** лежат в папке скрипта (рядом с `.Pr
 
 Массив: `IPCB_EmbeddedBoard`. Общие пазы между платами — **один** канал ширины Gap (обе стенки + dogbone). Внутренняя стенка на **углу платы** копирует дугу `BoardOutline` (Rboard). Внешняя на углах массива — концентрическая Rboard+Gap. **Отдельные T-вырезы** на стыке двух плат у края массива: ножка = общая аллея, перекладина = **внешние** кромки фрезы этих двух плат, продлённые навстречу через аллею. T **не** сливается с контуром заготовки (зазор = поле). Число перемычек — из диалога (N равномерно по ребру, шея = TabW, inward dogbones). Рамка панели — bbox+поле; `BoardOutline` панели берётся из этой рамки (`BOARDOUTLINE_FROM_SEL_PRIMS`). Реперные знаки: 2 SMD-пада Ø1.5 мм (Top, hole 0, маска открыта) на диагонали рамки (SW и NE), отступ Margin/2, сетка 1 мм. После работы: единицы мм, сетка 0.1 мм.
 
-**Ограничения.** Embedded Board Array в скриптах AD не всегда копирует шелкографию панели. Сложный непрямоугольный контур исходной платы копируется ограничено.
+**Ограничения.** Embedded Board Array в скриптах AD не всегда копирует шелкографию панели. Скрипт рассчитан на **прямоугольную** плату ( mill по bbox + дуги углов). Произвольный контур — `Panelize_Hard_Form`.
 
 ### 4. Сброс и обновление десигнаторов схемы — `SchDesignatorReset.pas`
 
@@ -103,13 +103,13 @@ PNG/BMP **320×214** лежат в папке скрипта (рядом с `.Pr
 
 ### 5. Выгрузка BOM — `BomExport.pas`
 
-**Назначение.** BOM как **HTML-таблица `*.xls`** (`WriteLn`, charset `windows-1251`). Сырые строки `DM_` без UTF-8/UTF-16 перекодировки. Ячейки широкие (`width:220pt`) с переносом. **Без `BlockWrite`**. `TSaveDialog` (Отмена = выход).
+**Назначение.** BOM как настоящий **OOXML `*.xlsx`** (zip STORE без сжатия: `[Content_Types].xml`, `xl/workbook.xml`, `xl/worksheets/sheet1.xml`, `xl/sharedStrings.xml`, `_rels/.rels`, `xl/_rels/workbook.xml.rels`). Запись: `AssignFile` / `Rewrite(F, 1)` / `BlockWrite(F, S[i], N)` кусками 4 КБ от первого символа. `TSaveDialog` `*.xlsx` (Отмена = выход). sharedStrings и sheet в **UTF-8**: байтовая карта CP1251 `0xC0–0xFF` → UTF-8 D0/D1 (чтобы Excel показал «Резистор» и Value `10k`). Колонки шириной 28, `wrapText`.
 
-**Столбцы:** `Comment`, `Designator`, `Description`, `Value`, `Quantity`. **Value = `DM_Comment`.** Кириллица остаётся байтами CP1251.
+**Столбцы** (как в `BOM_UniBrain.xlsx`): `Comment`, `Description`, `Designator`, `Value`, `Quantity`.
 
-**Состав.** **Все** компоненты со **всех листов**. Чтение: `DM_ComponentCount` / `DM_Components` / `DM_Comment` / `DM_FootPrint` / `DM_LogicalDesignator` / `DM_PhysicalDesignator` (только чтение).
+**Value.** Не `DM_Value` / `DM_PhysicalValue`. Цикл `DM_ParameterCount` / `DM_Parameters(i)`: `DM_Name`, затем `DM_Text`, `DM_CalculatedValue`, `DM_Data`, `GetState_Text`, `.Text`. Имена: `Value`, `Value2`, `PartValue`, `Nominal`. Если параметр Value есть, но пустой — **не** копировать Comment. Comment как номинал (`10k`, `100nF`) — только запасной разбор, если параметра нет.
 
-**Группировка.** По Value (+ Comment/Description/footprint). Designator — склейка. Рядом `*.bom.settings.xml` (`TStringList.SaveToFile`).
+**Группировка.** Value + Comment (плюс Description/footprint). Разные номиналы — разные строки. Рядом `*.bom.settings.xml`.
 
 ### 6. Земляные полигоны по контуру — `GroundPolygons.pas`
 
@@ -139,11 +139,13 @@ PNG/BMP **320×214** лежат в папке скрипта (рядом с `.Pr
 
 ### 3.1 Offset треков — `Offset.pas`
 
-**Назначение.** CAD OFFSET с нуля: выбранные треки/дуги → цепи по snap ~0.01 мм; окружность 360° — своя замкнутая цепь. Замкнутый: signed area, CCW → интерьер слева. Трек: параллель на d по нормали +90°. Дуга: **тот же центр**, R±d по стороне выпуклости, **те же** StartAngle/EndAngle/направление (не разворачивать). Стык — пересечение ближе к исходной вершине; острый угол без новой галтели. Нулевая длина отбрасывается, стороны прямоугольника не пропускаются. Скруглённый прямоугольник остаётся скруглённым, радиус угла ± d. Префикс `Off*`.
+**Назначение.** CAD OFFSET: выбранные треки/дуги → цепи. Snap **0.05 мм или 1 coord**. Концы дуг — `StartX`/`EndX` (не Cos/Sin углов: из-за округления одна сторона скруглённого квадрата не стыковалась и оставалась на месте). Цепь, которая не состыковалась, всё равно offset’ится (новая цепь / singleton). После join **не удаляется** offset полной стороны; если у выбранного объекта нет пары — singleton. Окружность 360° — своя цепь. Замкнутый: signed area, CCW → интерьер слева. Трек: параллель на d. Дуга: **тот же центр**, R±d, те же углы (не инвертировать). Стык в пересечении; острые углы без новых галтелей. Скруглённый прямоугольник (4 трека + 4 дуги) → 8 offset-примитивов. Префикс `Off*`.
 
-### 3.2 Панелизация (тест фрезы) — `PanelizerTest.pas`
+### 3.2 Панелизация произвольного контура — `Panelize_Hard_Form.pas`
 
-**Назначение.** Те же перемычки, что у Panelizer (копия `DrawSlotV`/`DrawSlotH`, счётчики H/V из диалога, без подстройки геометрии). Копия `BoardOutline` (треки+дуги). Отдельные T-вырезы на краевых стыках, как в §3 (перекладина = стык внешних кромок, не в рамку). Mill R по умолчанию 2 мм, mech 3, сетка 0.1 мм. После отрисовки — удаление совпадений и сегментов внутри паза. Префикс `PTst*`.
+**Назначение.** Как Hard_Form: массив **встроенных плат**, mill = CAD-offset **реального** `BoardOutline` (треки + дуги, не bbox) наружу на радиус фрезы (поле mill R, по умолчанию **2 мм**; диаметр фрезы 2R — ширина пропила). Где два offset-контура совпадают в зазоре — один паз. Перемычки (inward dogbones) на **каждом** достаточно длинном ребре offset-контура (счётчики H/V из диалога). T-карманы на стыках **между** контурами у края массива, не в рамку. Рамка = bbox всех offset-контуров + поле; реперы на диагонали рамки (Margin/2); `BoardOutline` панели из рамки; сетка 0.1 мм. Тот же диалог, что у Panelizer (ряды/столбцы, зазор, поле, tab W, H/V, mill R=2, mech 3). Префикс `PHF*`, старт `StartPanelizeHardForm`. Хелперы offset **скопированы** в этот unit (`uses` Offset нет).
+
+**Panelizer** — прямоугольные платы. **Panelize_Hard_Form** — произвольный контур (уши, вырезы, галтели).
 
 ## Общие замечания по API
 

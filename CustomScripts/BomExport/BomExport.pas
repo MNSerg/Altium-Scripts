@@ -1,8 +1,8 @@
 ﻿{..............................................................................}
 { BomExport.pas                                                                 }
-{ BOM as HTML spreadsheet *.xls, charset windows-1251. Raw DM_ strings.         }
-{ No UTF-16/UTF-8 recode. Table cells, wide wrapping columns.                   }
-{ Value = DM_Comment. All sheets of the project.                                }
+{ BOM as OOXML *.xlsx (STORE zip, no compression). Value from parameters.     }
+{ sharedStrings/sheet UTF-8 (CP1251 Altium strings mapped to UTF-8 bytes).    }
+{ Value = DM_Parameters (Value/Value2/PartValue/Nominal), not DM_Comment.     }
 {..............................................................................}
 
 var
@@ -56,18 +56,118 @@ begin
     Result := BomT;
 end;
 
-function ParamVal(BomComp : IComponent; const BomNames : String) : String;
+function BomParamText(BomP) : String;
 begin
-    { Нет безопасного getter значения параметра (DM_Value / DM_PhysicalValue undeclared). }
     Result := '';
+    try Result := BomP.DM_Text; except Result := ''; end;
+    if Result <> '' then Exit;
+    try Result := BomP.DM_CalculatedValue; except Result := ''; end;
+    if Result <> '' then Exit;
+    try Result := BomP.DM_Data; except Result := ''; end;
+    if Result <> '' then Exit;
+    try Result := BomP.GetState_Text; except Result := ''; end;
+    if Result <> '' then Exit;
+    try Result := BomP.Text; except Result := ''; end;
+end;
+
+function BomLooksNominal(const BomS : String) : Boolean;
+var
+    Bomi : Integer;
+    HasDigit : Boolean;
+begin
+    Result := False;
+    if (BomS = '') or (Length(BomS) > 16) then Exit;
+    HasDigit := False;
+    for Bomi := 1 to Length(BomS) do
+        if (BomS[Bomi] >= '0') and (BomS[Bomi] <= '9') then
+            HasDigit := True;
+    Result := HasDigit;
+end;
+
+function BomNamedParam(BomComp : IComponent; const BomWant : String) : String;
+var
+    Bomi, Bomn : Integer;
+    BomObj : TObject;
+    BomNm, BomTxt, BomW : String;
+begin
+    Result := '';
+    BomW := UpperCase(BomWant);
+    try
+        Bomn := BomComp.DM_ParameterCount;
+    except
+        Bomn := 0;
+    end;
+    for Bomi := 0 to Bomn - 1 do
+    begin
+        try
+            BomObj := BomComp.DM_Parameters(Bomi);
+        except
+            BomObj := nil;
+        end;
+        if BomObj = nil then Continue;
+        BomNm := '';
+        try BomNm := BomObj.DM_Name; except BomNm := ''; end;
+        if UpperCase(BomNm) <> BomW then Continue;
+        BomTxt := BomParamText(BomObj);
+        if BomTxt <> '' then
+        begin
+            Result := BomTxt;
+            Exit;
+        end;
+    end;
+end;
+
+function BomHasParamName(BomComp : IComponent; const BomWant : String) : Boolean;
+var
+    Bomi, Bomn : Integer;
+    BomObj : TObject;
+    BomNm : String;
+begin
+    Result := False;
+    try
+        Bomn := BomComp.DM_ParameterCount;
+    except
+        Bomn := 0;
+    end;
+    for Bomi := 0 to Bomn - 1 do
+    begin
+        try
+            BomObj := BomComp.DM_Parameters(Bomi);
+        except
+            BomObj := nil;
+        end;
+        if BomObj = nil then Continue;
+        BomNm := '';
+        try BomNm := BomObj.DM_Name; except BomNm := ''; end;
+        if UpperCase(BomNm) = UpperCase(BomWant) then
+        begin
+            Result := True;
+            Exit;
+        end;
+    end;
+end;
+
+function BomValueFromParams(BomComp : IComponent) : String;
+var
+    Comment : String;
+begin
+    Result := BomNamedParam(BomComp, 'Value');
+    if Result = '' then Result := BomNamedParam(BomComp, 'Value2');
+    if Result = '' then Result := BomNamedParam(BomComp, 'PartValue');
+    if Result = '' then Result := BomNamedParam(BomComp, 'Nominal');
+    if Result <> '' then Exit;
+    if BomHasParamName(BomComp, 'Value') or BomHasParamName(BomComp, 'Value2') then
+        Exit;
+    Comment := '';
+    try Comment := BomComp.DM_Comment; except Comment := ''; end;
+    if BomLooksNominal(Comment) then
+        Result := Comment;
 end;
 
 function FootprintOf(BomComp : IComponent) : String;
 begin
     Result := '';
     try Result := BomComp.DM_FootPrint; except Result := ''; end;
-    if Result = '' then
-        Result := ParamVal(BomComp, 'Footprint|PCBFootprint');
 end;
 
 procedure AddPart(const BomDes, Comment, Description, Footprint, Value : String);
@@ -126,10 +226,12 @@ begin
         if BomDes = '' then
         try BomDes := BomComp.DM_LogicalDesignator; except BomDes := ''; end;
         if BomDes = '' then
-            BomDes := ParamVal(BomComp, 'Designator');
+            BomDes := BomNamedParam(BomComp, 'Designator');
         try Comment := BomComp.DM_Comment; except Comment := ''; end;
-        BomVal := Comment;
-        Desc := '';
+        BomVal := BomValueFromParams(BomComp);
+        Desc := BomNamedParam(BomComp, 'Description');
+        if Desc = '' then
+            Desc := BomNamedParam(BomComp, 'LongDescription');
         Fp := FootprintOf(BomComp);
         AddPart(BomDes, Comment, Desc, Fp, BomVal);
     end;
@@ -144,7 +246,7 @@ var
     BomBoard : IPCB_Board;
     BomCmp : IPCB_Component;
     BomIter : IPCB_BoardIterator;
-    BomDes, Comment, Fp : String;
+    BomDes, Comment, Fp, BomVal : String;
 begin
     BomWS := GetWorkspace;
     if BomWS = nil then Exit;
@@ -193,7 +295,9 @@ begin
         if Comment = '' then
         try Comment := BomCmp.SourceLibReference; except Comment := ''; end;
         try Fp := BomCmp.Pattern; except Fp := ''; end;
-        AddPart(BomDes, Comment, '', Fp, Comment);
+        BomVal := '';
+        if BomLooksNominal(Comment) then BomVal := Comment;
+        AddPart(BomDes, Comment, '', Fp, BomVal);
         BomCmp := BomIter.NextPCBObject;
     end;
     BomBoard.BoardIterator_Destroy(BomIter);
@@ -213,13 +317,13 @@ begin
     Xml := TStringList.Create;
     try
         Xml.Add('<?xml version="1.0" encoding="UTF-8"?>');
-        Xml.Add('<BomSettings generator="CustomScripts.BomExport" version="1.4">');
+        Xml.Add('<BomSettings generator="CustomScripts.BomExport" version="1.5">');
         Xml.Add('  <Output>' + XmlEsc(XlsPath) + '</Output>');
-        Xml.Add('  <Format>HTML spreadsheet .xls windows-1251</Format>');
+        Xml.Add('  <Format>OOXML xlsx STORE zip, sharedStrings UTF-8</Format>');
         Xml.Add('  <GroupBy>Value,Comment,Description,Footprint(internal)</GroupBy>');
         Xml.Add('  <ExcludeParts>None</ExcludeParts>');
-        Xml.Add('  <Columns>Comment;Designator;Description;Value;Quantity</Columns>');
-        Xml.Add('  <Notes>Value = DM_Comment. Raw CP1251 strings. No Unicode recode.</Notes>');
+        Xml.Add('  <Columns>Comment;Description;Designator;Value;Quantity</Columns>');
+        Xml.Add('  <Notes>Value from DM_Parameters DM_Text/DM_CalculatedValue/DM_Data/Text. No DM_Value.</Notes>');
         Xml.Add('</BomSettings>');
         Xml.SaveToFile(XmlPath);
     finally
@@ -227,59 +331,252 @@ begin
     end;
 end;
 
-function BomTd(const BomS : String; BomHeader : Boolean) : String;
-var
-    BomSt : String;
+function BomUShr1(N : Integer) : Integer;
 begin
-    BomSt := 'width:220pt; white-space:normal; mso-style-parent:yes; mso-data-placement:same-cell';
-    if BomHeader then
-        Result := '<th style="' + BomSt + '; font-weight:bold">' + XmlEsc(BomS) + '</th>'
+    if N >= 0 then
+        Result := N shr 1
     else
-        Result := '<td style="' + BomSt + '">' + XmlEsc(BomS) + '</td>';
+        Result := ((N and $7FFFFFFF) shr 1) or $40000000;
 end;
 
-procedure WriteHtmlXls(const XlsPath : String);
+function BomCrc32(const S : String) : Integer;
 var
-    BomF : TextFile;
-    Bomi : Integer;
+    Bomi, Bomj, C, B : Integer;
+begin
+    C := -1;
+    for Bomi := 1 to Length(S) do
+    begin
+        B := Ord(S[Bomi]);
+        C := C xor B;
+        for Bomj := 1 to 8 do
+        begin
+            if (C and 1) <> 0 then
+                C := BomUShr1(C) xor Integer($EDB88320)
+            else
+                C := BomUShr1(C);
+        end;
+    end;
+    Result := C xor Integer($FFFFFFFF);
+end;
+
+function BomLE16(N : Integer) : String;
+begin
+    Result := Chr(N and 255) + Chr((N shr 8) and 255);
+end;
+
+function BomLE32(N : Integer) : String;
+begin
+    Result := Chr(N and 255) + Chr((N shr 8) and 255) +
+              Chr((N shr 16) and 255) + Chr((N shr 24) and 255);
+end;
+
+function BomCp1251ToUtf8(const S : String) : String;
+var
+    Bomi, B, Cp : Integer;
+begin
+    Result := '';
+    for Bomi := 1 to Length(S) do
+    begin
+        B := Ord(S[Bomi]);
+        if B < 128 then
+            Result := Result + Chr(B)
+        else if B = 168 then
+            Result := Result + Chr($D0) + Chr($81)
+        else if B = 184 then
+            Result := Result + Chr($D1) + Chr($91)
+        else if (B >= 192) and (B <= 239) then
+        begin
+            Cp := 1040 + (B - 192);
+            Result := Result + Chr($D0) + Chr($80 + (Cp - $400));
+        end
+        else if B >= 240 then
+        begin
+            Cp := 1072 + (B - 224);
+            Result := Result + Chr($D0 + ((Cp shr 6) - 16)) + Chr($80 + (Cp and 63));
+        end
+        else
+            Result := Result + Chr($C2) + Chr(B);
+    end;
+end;
+
+function BomXmlUtf(const S : String) : String;
+begin
+    Result := XmlEsc(BomCp1251ToUtf8(S));
+end;
+
+procedure BomZipAdd(var LocalBuf, CentralBuf : String; var Offs : Integer;
+                    const Name, Data : String);
+var
+    Crc, Sz, Nlen : Integer;
+    Lh, Ch : String;
+begin
+    Crc := BomCrc32(Data);
+    Sz := Length(Data);
+    Nlen := Length(Name);
+    Lh := 'PK' + Chr(3) + Chr(4) + BomLE16(20) + BomLE16(0) + BomLE16(0) +
+          BomLE16(0) + BomLE16(0) + BomLE32(Crc) + BomLE32(Sz) + BomLE32(Sz) +
+          BomLE16(Nlen) + BomLE16(0) + Name + Data;
+    Ch := 'PK' + Chr(1) + Chr(2) + BomLE16(20) + BomLE16(20) + BomLE16(0) +
+          BomLE16(0) + BomLE16(0) + BomLE16(0) + BomLE32(Crc) + BomLE32(Sz) +
+          BomLE32(Sz) + BomLE16(Nlen) + BomLE16(0) + BomLE16(0) + BomLE16(0) +
+          BomLE16(0) + BomLE32(0) + BomLE32(Offs) + Name;
+    LocalBuf := LocalBuf + Lh;
+    CentralBuf := CentralBuf + Ch;
+    Offs := Offs + Length(Lh);
+end;
+
+procedure BomWriteBytes(const Path, S : String);
+var
+    BomF : File;
+    Bomi, N : Integer;
+begin
+    AssignFile(BomF, Path);
+    Rewrite(BomF, 1);
+    try
+        Bomi := 1;
+        while Bomi <= Length(S) do
+        begin
+            N := Length(S) - Bomi + 1;
+            if N > 4096 then N := 4096;
+            BlockWrite(BomF, S[Bomi], N);
+            Bomi := Bomi + N;
+        end;
+    finally
+        CloseFile(BomF);
+    end;
+end;
+
+procedure BomUniqAdd(Uniq : TStringList; const U : String);
+begin
+    if Uniq.IndexOf(U) < 0 then
+        Uniq.Add(U);
+end;
+
+procedure WriteXlsx(const XlsPath : String);
+var
+    Shared, Sheet, LocalBuf, CentralBuf, Zip : String;
+    Offs, Bomi, Nfiles : Integer;
+    Uniq : TStringList;
     Parts : TStringList;
     CellC, CellE, CellD, CellV : String;
+    Ct, Rels, Wb, WbRels, Styles : String;
 begin
+    Uniq := TStringList.Create;
     Parts := TStringList.Create;
     Parts.Delimiter := '|';
     Parts.StrictDelimiter := True;
-    AssignFile(BomF, XlsPath);
-    Rewrite(BomF);
     try
-        WriteLn(BomF, '<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1251"></head>');
-        WriteLn(BomF, '<table border="1">');
-        WriteLn(BomF, '<tr>' + BomTd('Comment', True) + BomTd('Designator', True) +
-                      BomTd('Description', True) + BomTd('Value', True) +
-                      BomTd('Quantity', True) + '</tr>');
+        BomUniqAdd(Uniq, 'Comment');
+        BomUniqAdd(Uniq, 'Description');
+        BomUniqAdd(Uniq, 'Designator');
+        BomUniqAdd(Uniq, 'Value');
+        BomUniqAdd(Uniq, 'Quantity');
         for Bomi := 0 to Groups.Count - 1 do
         begin
             Parts.DelimitedText := ExtraFields[Bomi];
             while Parts.Count < 3 do Parts.Add('');
-            CellC := Parts[0];
-            CellE := Parts[1];
-            CellV := Parts[2];
-            CellD := DesLists[Bomi];
-            WriteLn(BomF, '<tr>' + BomTd(CellC, False) + BomTd(CellD, False) +
-                          BomTd(CellE, False) + BomTd(CellV, False) +
-                          BomTd(QtyList[Bomi], False) + '</tr>');
+            BomUniqAdd(Uniq, BomCp1251ToUtf8(Parts[0]));
+            BomUniqAdd(Uniq, BomCp1251ToUtf8(Parts[1]));
+            BomUniqAdd(Uniq, BomCp1251ToUtf8(DesLists[Bomi]));
+            BomUniqAdd(Uniq, BomCp1251ToUtf8(Parts[2]));
+            BomUniqAdd(Uniq, QtyList[Bomi]);
         end;
-        WriteLn(BomF, '</table></html>');
+        Shared := '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                  '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="' +
+                  IntToStr(Uniq.Count) + '" uniqueCount="' + IntToStr(Uniq.Count) + '">';
+        for Bomi := 0 to Uniq.Count - 1 do
+            Shared := Shared + '<si><t xml:space="preserve">' + XmlEsc(Uniq[Bomi]) + '</t></si>';
+        Shared := Shared + '</sst>';
+
+        Sheet := '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+                 '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+                 '<cols><col min="1" max="5" width="28" bestFit="1" customWidth="1"/></cols>' +
+                 '<sheetData>';
+        Sheet := Sheet + '<row r="1">';
+        Sheet := Sheet + '<c r="A1" t="s" s="2"><v>0</v></c>';
+        Sheet := Sheet + '<c r="B1" t="s" s="2"><v>1</v></c>';
+        Sheet := Sheet + '<c r="C1" t="s" s="2"><v>2</v></c>';
+        Sheet := Sheet + '<c r="D1" t="s" s="2"><v>3</v></c>';
+        Sheet := Sheet + '<c r="E1" t="s" s="2"><v>4</v></c></row>';
+        for Bomi := 0 to Groups.Count - 1 do
+        begin
+            Parts.DelimitedText := ExtraFields[Bomi];
+            while Parts.Count < 3 do Parts.Add('');
+            CellC := BomCp1251ToUtf8(Parts[0]);
+            CellE := BomCp1251ToUtf8(Parts[1]);
+            CellD := BomCp1251ToUtf8(DesLists[Bomi]);
+            CellV := BomCp1251ToUtf8(Parts[2]);
+            Sheet := Sheet + '<row r="' + IntToStr(Bomi + 2) + '">';
+            Sheet := Sheet + '<c r="A' + IntToStr(Bomi + 2) + '" t="s" s="1"><v>' + IntToStr(Uniq.IndexOf(CellC)) + '</v></c>';
+            Sheet := Sheet + '<c r="B' + IntToStr(Bomi + 2) + '" t="s" s="1"><v>' + IntToStr(Uniq.IndexOf(CellE)) + '</v></c>';
+            Sheet := Sheet + '<c r="C' + IntToStr(Bomi + 2) + '" t="s" s="1"><v>' + IntToStr(Uniq.IndexOf(CellD)) + '</v></c>';
+            Sheet := Sheet + '<c r="D' + IntToStr(Bomi + 2) + '" t="s" s="1"><v>' + IntToStr(Uniq.IndexOf(CellV)) + '</v></c>';
+            Sheet := Sheet + '<c r="E' + IntToStr(Bomi + 2) + '" t="s" s="1"><v>' + IntToStr(Uniq.IndexOf(QtyList[Bomi])) + '</v></c>';
+            Sheet := Sheet + '</row>';
+        end;
+        Sheet := Sheet + '</sheetData></worksheet>';
+
+        Ct := '<?xml version="1.0" encoding="UTF-8"?>' +
+              '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+              '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+              '<Default Extension="xml" ContentType="application/xml"/>' +
+              '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+              '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+              '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>' +
+              '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+              '</Types>';
+        Rels := '<?xml version="1.0" encoding="UTF-8"?>' +
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+                '</Relationships>';
+        Wb := '<?xml version="1.0" encoding="UTF-8"?>' +
+              '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+              '<sheets><sheet name="BOM" sheetId="1" r:id="rId1"/></sheets></workbook>';
+        WbRels := '<?xml version="1.0" encoding="UTF-8"?>' +
+                  '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+                  '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+                  '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>' +
+                  '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+                  '</Relationships>';
+        Styles := '<?xml version="1.0" encoding="UTF-8"?>' +
+                  '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+                  '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font>' +
+                  '<font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
+                  '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>' +
+                  '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+                  '<cellStyleXfs count="1"><xf/></cellStyleXfs>' +
+                  '<cellXfs count="3"><xf xfId="0"/>' +
+                  '<xf xfId="0" applyAlignment="1"><alignment wrapText="1"/></xf>' +
+                  '<xf xfId="0" fontId="1" applyFont="1" applyAlignment="1"><alignment wrapText="1"/></xf>' +
+                  '</cellXfs></styleSheet>';
+
+        LocalBuf := '';
+        CentralBuf := '';
+        Offs := 0;
+        BomZipAdd(LocalBuf, CentralBuf, Offs, '[Content_Types].xml', Ct);
+        BomZipAdd(LocalBuf, CentralBuf, Offs, '_rels/.rels', Rels);
+        BomZipAdd(LocalBuf, CentralBuf, Offs, 'xl/workbook.xml', Wb);
+        BomZipAdd(LocalBuf, CentralBuf, Offs, 'xl/_rels/workbook.xml.rels', WbRels);
+        BomZipAdd(LocalBuf, CentralBuf, Offs, 'xl/worksheets/sheet1.xml', Sheet);
+        BomZipAdd(LocalBuf, CentralBuf, Offs, 'xl/sharedStrings.xml', Shared);
+        BomZipAdd(LocalBuf, CentralBuf, Offs, 'xl/styles.xml', Styles);
+        Nfiles := 7;
+        Zip := LocalBuf + CentralBuf +
+               'PK' + Chr(5) + Chr(6) + BomLE16(0) + BomLE16(0) +
+               BomLE16(Nfiles) + BomLE16(Nfiles) +
+               BomLE32(Length(CentralBuf)) + BomLE32(Length(LocalBuf)) + BomLE16(0);
+        BomWriteBytes(XlsPath, Zip);
     finally
-        CloseFile(BomF);
+        Uniq.Free;
         Parts.Free;
     end;
 end;
 
 procedure WriteBomFiles;
 begin
-    if LowerCase(ExtractFileExt(OutPath)) <> '.xls' then
-        OutPath := ChangeFileExt(OutPath, '.xls');
-    WriteHtmlXls(OutPath);
+    if LowerCase(ExtractFileExt(OutPath)) <> '.xlsx' then
+        OutPath := ChangeFileExt(OutPath, '.xlsx');
+    WriteXlsx(OutPath);
     WriteSettingsXml(OutPath);
     BomShowBox(LabelInfoDone.Caption + OutPath + sLineBreak +
                LabelInfoCount.Caption + IntToStr(Groups.Count), 64);
@@ -431,9 +728,9 @@ begin
     end;
     BomDir := BomInitDir;
     if BomDir = '' then
-        EditPath.Text := 'BOM.xls'
+        EditPath.Text := 'BOM.xlsx'
     else
-        EditPath.Text := BomDir + 'BOM.xls';
+        EditPath.Text := BomDir + 'BOM.xlsx';
 end;
 
 procedure TFormBom.ButtonBrowseClick(BomSender: TObject);
@@ -443,9 +740,9 @@ begin
     BomDlg := TSaveDialog.Create(nil);
     try
         BomDlg.Title := LabelDlgSave.Caption;
-        BomDlg.Filter := 'Excel (*.xls)|*.xls|Все файлы (*.*)|*.*';
-        BomDlg.DefaultExt := 'xls';
-        BomDlg.FileName := 'BOM.xls';
+        BomDlg.Filter := 'Excel (*.xlsx)|*.xlsx|Все файлы (*.*)|*.*';
+        BomDlg.DefaultExt := 'xlsx';
+        BomDlg.FileName := 'BOM.xlsx';
         BomDlg.InitialDir := BomInitDir;
         if BomDlg.Execute then
             EditPath.Text := BomDlg.FileName;
@@ -461,12 +758,12 @@ begin
     BomDlg := TSaveDialog.Create(nil);
     try
         BomDlg.Title := LabelDlgSave.Caption;
-        BomDlg.Filter := 'Excel (*.xls)|*.xls|Все файлы (*.*)|*.*';
-        BomDlg.DefaultExt := 'xls';
+        BomDlg.Filter := 'Excel (*.xlsx)|*.xlsx|Все файлы (*.*)|*.*';
+        BomDlg.DefaultExt := 'xlsx';
         if EditPath.Text <> '' then
             BomDlg.FileName := ExtractFileName(EditPath.Text)
         else
-            BomDlg.FileName := 'BOM.xls';
+            BomDlg.FileName := 'BOM.xlsx';
         BomDlg.InitialDir := BomInitDir;
         if ExtractFilePath(EditPath.Text) <> '' then
             BomDlg.InitialDir := ExtractFilePath(EditPath.Text);
@@ -481,8 +778,8 @@ begin
         BomShowBox(LabelErrPath.Caption, 16);
         Exit;
     end;
-    if LowerCase(ExtractFileExt(OutPath)) <> '.xls' then
-        OutPath := ChangeFileExt(OutPath, '.xls');
+    if LowerCase(ExtractFileExt(OutPath)) <> '.xlsx' then
+        OutPath := ChangeFileExt(OutPath, '.xlsx');
     FormBom.Close;
 
     Groups := TStringList.Create;

@@ -1,13 +1,14 @@
 ﻿{..............................................................................}
 { Offset.pas                                                                    }
 { CAD OFFSET (NanoCAD / VCarve / AutoCAD):                                      }
-{ 1) selected tracks/arcs -> chains by endpoint snap (~0.01 mm)                 }
-{ 2) circle (360) = its own closed chain                                        }
+{ 1) selected tracks/arcs -> chains; snap 0.05 mm OR 1 coord (OffSamePt)        }
+{ 2) leftover selected prims that did not join start a new chain / singleton    }
 { 3) closed: signed area; CCW interior is left                                  }
 { 4) track: parallel by d along rotated normal (left = +90 of direction)        }
 {    arc: SAME center, R+d or R-d from bulge vs offset side; SAME SA/EA/dir     }
-{ 5) join at intersection closest to original vertex; sharp = intersection only }
-{ 6) drop inverted (length~0); do not skip whole rectangle sides                }
+{    Arc ends from StartX/EndX (not Cos/Sin of angles — that dropped a side)    }
+{ 5) join at intersection; never delete an offset copy of a full-length side    }
+{ 6) if News[i] is nil after join, OffOffsetSingleton that original             }
 {..............................................................................}
 
 const
@@ -99,8 +100,11 @@ begin
 end;
 
 function OffSamePt(OffX1, OffY1, OffX2, OffY2 : TCoord) : Boolean;
+var
+    OffD : Double;
 begin
-    Result := OffDist(OffX1, OffY1, OffX2, OffY2) <= OffJoinTol;
+    OffD := OffDist(OffX1, OffY1, OffX2, OffY2);
+    Result := (OffD <= OffJoinTol) or (OffD <= 1);
 end;
 
 function OffNormDeg(OffA : Double) : Double;
@@ -270,15 +274,17 @@ end;
 
 procedure OffArcEnds(OffA : IPCB_Arc; OffRev : Boolean; var OffX1, OffY1, OffX2, OffY2 : TCoord);
 begin
+    { Use StartX/EndX like TrackCornerFillet — Cos/Sin of angles drifts from the
+      track endpoints and dropped a side of a filleted square. }
     if OffRev then
     begin
-        OffArcXY(OffA, OffA.EndAngle, OffX1, OffY1);
-        OffArcXY(OffA, OffA.StartAngle, OffX2, OffY2);
+        OffX1 := OffA.EndX; OffY1 := OffA.EndY;
+        OffX2 := OffA.StartX; OffY2 := OffA.StartY;
     end
     else
     begin
-        OffArcXY(OffA, OffA.StartAngle, OffX1, OffY1);
-        OffArcXY(OffA, OffA.EndAngle, OffX2, OffY2);
+        OffX1 := OffA.StartX; OffY1 := OffA.StartY;
+        OffX2 := OffA.EndX; OffY2 := OffA.EndY;
     end;
 end;
 
@@ -592,24 +598,22 @@ begin
     end;
 end;
 
-procedure OffDropTiny(OffNews : TStringList);
+procedure OffOffsetSingleton(OffP : IPCB_Primitive);
 var
-    Offi : Integer;
-    OffT : IPCB_Track;
-    OffP : IPCB_Primitive;
+    OffTN : IPCB_Track;
+    OffAN : IPCB_Arc;
+    OffLeft : Boolean;
 begin
-    for Offi := 0 to OffNews.Count - 1 do
+    if OffP = nil then Exit;
+    OffLeft := OffOutward;
+    if OffP.ObjectId = eTrackObject then
+        OffOffsetTrackDir(OffP, False, OffLeft, OffTN)
+    else if OffP.ObjectId = eArcObject then
     begin
-        OffP := OffNews.Objects[Offi];
-        if OffP = nil then Continue;
-        if OffP.ObjectId <> eTrackObject then Continue;
-        OffT := OffP;
-        if OffDist(OffT.X1, OffT.Y1, OffT.X2, OffT.Y2) >= MMsToCoord(0.001) then Continue;
-        OffBoard.BeginModify;
-        OffBoard.RemovePCBObject(OffT);
-        OffBoard.EndModify;
-        OffNews.Objects[Offi] := nil;
-        Dec(OffCreated);
+        if OffIsCircle(OffP) then
+            OffOffsetCircle(OffP, OffOutward, OffAN)
+        else
+            OffOffsetArcDir(OffP, False, OffLeft, OffAN);
     end;
 end;
 
@@ -657,7 +661,10 @@ begin
             OffJoinTwo(OffPrims.Objects[OffPrims.Count - 1], News.Objects[News.Count - 1],
                        OffRevs[OffRevs.Count - 1] = '1',
                        OffPrims.Objects[0], News.Objects[0], OffRevs[0] = '1');
-        OffDropTiny(News);
+        { Never delete an offset copy of a full-length side. }
+        for Offi := 0 to OffPrims.Count - 1 do
+            if News.Objects[Offi] = nil then
+                OffOffsetSingleton(OffPrims.Objects[Offi]);
     finally
         News.Free;
     end;
@@ -738,6 +745,13 @@ begin
                 OffRevs.Free;
             end;
         end;
+        { Leftover selected primitives that never joined a chain: still offset. }
+        for Offi := 0 to OffAll.Count - 1 do
+            if OffUsed[Offi] <> '1' then
+            begin
+                OffUsed[Offi] := '1';
+                OffOffsetSingleton(OffAll.Objects[Offi]);
+            end;
     finally
         OffUsed.Free;
         OffAll.Free;
@@ -790,12 +804,14 @@ begin
         OffShowBox(LabelWarnNone.Caption, 48);
         Exit;
     end;
-    OffJoinTol := MMsToCoord(0.01);
+    OffJoinTol := MMsToCoord(0.05);
     OffCreated := 0;
     OffRemoved := 0;
     PCBServer.PreProcess;
     try
         OffBuildAndOffset;
+        { Input vs output: selected prims without an offset partner are
+          singleton-offset inside OffBuildAndOffset (leftover chain + News=nil). }
         if OffReplace then
             OffDeleteSelected;
     finally

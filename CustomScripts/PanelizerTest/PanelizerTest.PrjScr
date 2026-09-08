@@ -1,8 +1,0 @@
-[Design]
-Version=1.0
-
-[Document1]
-DocumentPath=PanelizerTest.pas
-
-[Generic_ScriptingSystem]
-StartProcName=PanelizerTest.pas>StartPanelizerTest

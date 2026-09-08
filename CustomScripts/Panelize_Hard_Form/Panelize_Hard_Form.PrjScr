@@ -1,0 +1,8 @@
+[Design]
+Version=1.0
+
+[Document1]
+DocumentPath=Panelize_Hard_Form.pas
+
+[Generic_ScriptingSystem]
+StartProcName=Panelize_Hard_Form.pas>StartPanelizeHardForm
