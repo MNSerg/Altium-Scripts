@@ -349,29 +349,22 @@ begin
         DrawSlotH(ABoard, Tp, Tp + Gy, L, Rgt, 1, PanALayer);
     end;
 
-    { A: T-stems — alley walls continue into the frame channel (outer mill). }
+    { Standalone T-pockets at panel-edge board-board joints (Example_Panelizer):
+      stem = shared alley (already drawn); crossbar = OUTER mill of the two boards
+      extended until they meet across the alley. Not merged into the panel outline
+      (gap = PanMargin). Interior alleys stay slots. Do not retune tabs. }
     for c := 0 to Cols - 2 do
     begin
         L := BoardOriginX(c) + MMsToCoord(BoardW);
-        AddTrack(ABoard, L, B0 - Gy, L, B0, PanALayer);
-        AddTrack(ABoard, L + Gx, B0 - Gy, L + Gx, B0, PanALayer);
-        AddTrack(ABoard, L, T1, L, T1 + Gy, PanALayer);
-        AddTrack(ABoard, L + Gx, T1, L + Gx, T1 + Gy, PanALayer);
+        AddTrack(ABoard, L - CR, B0 - Gy, L + Gx + CR, B0 - Gy, PanALayer);
+        AddTrack(ABoard, L - CR, T1 + Gy, L + Gx + CR, T1 + Gy, PanALayer);
     end;
     for r := 0 to Rows - 2 do
     begin
         B := BoardOriginY(r) + MMsToCoord(BoardH);
-        AddTrack(ABoard, L0 - Gx, B, L0, B, PanALayer);
-        AddTrack(ABoard, L0 - Gx, B + Gy, L0, B + Gy, PanALayer);
-        AddTrack(ABoard, R1, B, R1 + Gx, B, PanALayer);
-        AddTrack(ABoard, R1, B + Gy, R1 + Gx, B + Gy, PanALayer);
+        AddTrack(ABoard, L0 - Gx, B - CR, L0 - Gx, B + Gy + CR, PanALayer);
+        AddTrack(ABoard, R1 + Gx, B - CR, R1 + Gx, B + Gy + CR, PanALayer);
     end;
-
-    { Continuous frame OUTER across alleys (fuses T). Inset CR for outer corner arcs. }
-    AddTrack(ABoard, L0 + CR, B0 - Gy, R1 - CR, B0 - Gy, PanALayer);
-    AddTrack(ABoard, L0 + CR, T1 + Gy, R1 - CR, T1 + Gy, PanALayer);
-    AddTrack(ABoard, L0 - Gx, B0 + CR, L0 - Gx, T1 - CR, PanALayer);
-    AddTrack(ABoard, R1 + Gx, B0 + CR, R1 + Gx, T1 - CR, PanALayer);
 
     { Outer mill at array corners: concentric with board corner, R = Rboard + mill. }
     if CR > 0 then

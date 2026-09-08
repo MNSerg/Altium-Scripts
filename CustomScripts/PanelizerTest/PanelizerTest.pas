@@ -934,27 +934,20 @@ begin
         PTstDrawSlotH(ABoard, Tp, Tp + Gy, L, Rgt, 1, PTstALayer);
     end;
 
+    { Standalone T-pockets: outer mill of two edge boards meets across the alley.
+      Same tabs as Panelizer (DrawSlotV/H). Not connected to the panel outline. }
     for c := 0 to PTstCols - 2 do
     begin
         L := PTstBoardOriginX(c) + MMsToCoord(PTstBoardW);
-        PTstAddTrack(ABoard, L, B0 - Gy, L, B0, PTstALayer);
-        PTstAddTrack(ABoard, L + Gx, B0 - Gy, L + Gx, B0, PTstALayer);
-        PTstAddTrack(ABoard, L, T1, L, T1 + Gy, PTstALayer);
-        PTstAddTrack(ABoard, L + Gx, T1, L + Gx, T1 + Gy, PTstALayer);
+        PTstAddTrack(ABoard, L - CR, B0 - Gy, L + Gx + CR, B0 - Gy, PTstALayer);
+        PTstAddTrack(ABoard, L - CR, T1 + Gy, L + Gx + CR, T1 + Gy, PTstALayer);
     end;
     for r := 0 to PTstRows - 2 do
     begin
         B := PTstBoardOriginY(r) + MMsToCoord(PTstBoardH);
-        PTstAddTrack(ABoard, L0 - Gx, B, L0, B, PTstALayer);
-        PTstAddTrack(ABoard, L0 - Gx, B + Gy, L0, B + Gy, PTstALayer);
-        PTstAddTrack(ABoard, R1, B, R1 + Gx, B, PTstALayer);
-        PTstAddTrack(ABoard, R1, B + Gy, R1 + Gx, B + Gy, PTstALayer);
+        PTstAddTrack(ABoard, L0 - Gx, B - CR, L0 - Gx, B + Gy + CR, PTstALayer);
+        PTstAddTrack(ABoard, R1 + Gx, B - CR, R1 + Gx, B + Gy + CR, PTstALayer);
     end;
-
-    PTstAddTrack(ABoard, L0 + CR, B0 - Gy, R1 - CR, B0 - Gy, PTstALayer);
-    PTstAddTrack(ABoard, L0 + CR, T1 + Gy, R1 - CR, T1 + Gy, PTstALayer);
-    PTstAddTrack(ABoard, L0 - Gx, B0 + CR, L0 - Gx, T1 - CR, PTstALayer);
-    PTstAddTrack(ABoard, R1 + Gx, B0 + CR, R1 + Gx, T1 - CR, PTstALayer);
 
     if CR > 0 then
     begin
