@@ -7,7 +7,7 @@ Copies also live in each `CustomScripts/<Name>/` folder next to that script’s 
 | File | Script |
 | --- | --- |
 | Fillet.png / Fillet.bmp | TrackCornerFillet |
-| DxfExport.png / DxfExport.bmp | DxfOutlineExport |
+| ProjectZipper.png / ProjectZipper.bmp | ProjectZipper |
 | Panelizer.png / Panelizer.bmp | Panelizer |
 | Panelize_Hard_Form.png / Panelize_Hard_Form.bmp | Panelize_Hard_Form |
 | SchAnnotate.png / SchAnnotate.bmp | SchDesignatorReset |

@@ -1,8 +1,0 @@
-[Design]
-Version=1.0
-
-[Document1]
-DocumentPath=DxfOutlineExport.pas
-
-[Generic_ScriptingSystem]
-StartProcName=DxfOutlineExport.pas>StartDxfOutlineExport

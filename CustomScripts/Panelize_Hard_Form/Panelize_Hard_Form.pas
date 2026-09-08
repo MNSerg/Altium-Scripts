@@ -1,7 +1,9 @@
 ﻿{..............................................................................}
 { Panelize_Hard_Form.pas                                                       }
 { Панель по реальному BoardOutline (треки+дуги), не bbox. Mill = CAD offset.   }
-{ Prefix PHF*. Rectangular boards: use Panelizer.pas.                          }
+{ Prefix PHF*. PHFSpan := MMsToCoord(Len). Outline arcs: concentric R±kerf,    }
+{ same SA/EA; join tracks to StartX/EndX (not Cos/Sin). No chord-for-arc.      }
+{ Rectangular boards: use Panelizer.pas.                                       }
 {..............................................................................}
 
 const
@@ -379,8 +381,35 @@ begin
         PHFSetArcEnd(PHFN0, False, JX, JY);
     if PHFN1.ObjectId = eTrackObject then
         PHFSetTrackPt(PHFN1, True, JX, JY)
-    else if PHFN1.ObjectId = eArcObject then
+    else     if PHFN1.ObjectId = eArcObject then
         PHFSetArcEnd(PHFN1, True, JX, JY);
+end;
+
+{ Keep concentric mill arcs (same SA/EA). Snap tracks to StartX/EndX — not Cos/Sin. }
+procedure PHFConnectMill(PHFN0, PHFN1 : IPCB_Primitive);
+var
+    T0, T1 : IPCB_Track;
+    A0, A1 : IPCB_Arc;
+begin
+    if (PHFN0 = nil) or (PHFN1 = nil) then Exit;
+    if (PHFN0.ObjectId = eTrackObject) and (PHFN1.ObjectId = eArcObject) then
+    begin
+        T0 := PHFN0; A1 := PHFN1;
+        PHFSetTrackPt(T0, False, A1.StartX, A1.StartY);
+        Exit;
+    end;
+    if (PHFN0.ObjectId = eArcObject) and (PHFN1.ObjectId = eTrackObject) then
+    begin
+        A0 := PHFN0; T1 := PHFN1;
+        PHFSetTrackPt(T1, True, A0.EndX, A0.EndY);
+        Exit;
+    end;
+    if (PHFN0.ObjectId = eArcObject) and (PHFN1.ObjectId = eArcObject) then
+    begin
+        A0 := PHFN0; A1 := PHFN1;
+        if (Abs(A0.XCenter - A1.XCenter) < 80) and (Abs(A0.YCenter - A1.YCenter) < 80) then Exit;
+    end;
+    PHFJoinOff(PHFN0, PHFN1, 0, 0);
 end;
 
 procedure PHFOffsetCopiedOutline(ABoard : IPCB_Board; Col, Row : Integer; PHFALayer : TLayer);
@@ -394,7 +423,6 @@ var
     News : TStringList;
     TN : IPCB_Track;
     AN : IPCB_Arc;
-    HX, HY : Double;
     SrcR : TCoordRect;
 begin
     if PHFOffMM <= 0 then Exit;
@@ -501,16 +529,19 @@ begin
             if PHFj >= News.Count then PHFj := 0;
             if News.Objects[PHFi] = nil then Continue;
             if News.Objects[PHFj] = nil then Continue;
-            PHFSeg := PHFSourceBoard.BoardOutline.Segments[PHFj];
-            HX := CoordToMMs(PHFSeg.vx + Dx);
-            HY := CoordToMMs(PHFSeg.vy + Dy);
-            PHFJoinOff(News.Objects[PHFi], News.Objects[PHFj], HX, HY);
+            PHFConnectMill(News.Objects[PHFi], News.Objects[PHFj]);
         end;
-        { Never drop a full-length side: re-offset any nil as a singleton track. }
+        { Never drop a full-length straight side. Do not replace a nil inner
+          arc with a chord — that made Hard_Form fillets crooked. }
         for PHFi := 0 to News.Count - 1 do
         begin
             if News.Objects[PHFi] <> nil then Continue;
             PHFSeg := PHFSourceBoard.BoardOutline.Segments[PHFi];
+            PHFR := 0;
+            CX := 0; CY := 0;
+            try PHFR := PHFSeg.Radius; except PHFR := 0; end;
+            try CX := PHFSeg.cx; CY := PHFSeg.cy; except CX := 0; end;
+            if (PHFR > 1) and ((CX <> 0) or (CY <> 0)) then Continue;
             PHFj := PHFi + 1;
             if PHFj >= PHFn then PHFj := 0;
             PHFNxt := PHFSourceBoard.BoardOutline.Segments[PHFj];
@@ -563,7 +594,7 @@ end;
 procedure PHFPunchOneTrack(ABoard : IPCB_Board; T : IPCB_Track; PHFALayer : TLayer);
 var
     DX, DY, Len : Double;
-    X0, Y0, X1, Y1, RR, Neck, Half, Pos, A, B, Prev : TCoord;
+    X0, Y0, X1, Y1, RR, Neck, Half, Pos, A, B, Prev, PHFSpan : TCoord;
     CX, CY, MX, MY : TCoord;
     NTabs, Ti : Integer;
     Horiz, WastePos : Boolean;
@@ -581,8 +612,8 @@ begin
     Neck := MMsToCoord(PHFTabW);
     if Neck < 1 then Neck := 1;
     Half := (Neck div 2) + RR;
-    Span := MMsToCoord(Len);
-    if MMsToCoord(Len) < (Half + Half) * NTabs then Exit;
+    PHFSpan := MMsToCoord(Len);
+    if PHFSpan < (Half + Half) * NTabs then Exit;
     MX := (T.X1 + T.X2) div 2;
     MY := (T.Y1 + T.Y2) div 2;
     PHFNearestBoardCenter(MX, MY, CX, CY);
@@ -828,7 +859,7 @@ end;
   Шея = PHFTabW, R dogbone = PHFFilletR (не больше Gap/2). Внешних луковиц нет. }
 procedure PHFDrawSlotV(ABoard : IPCB_Board; X0, X1, Y0, Y1 : TCoord; NTabs : Integer; PanALayer : TLayer);
 var
-    RR, Neck, Half, MidX, Span, Yc, Ya, Yb, Yprev : TCoord;
+    RR, Neck, Half, MidX, PHFSlotSpan, Yc, Ya, Yb, Yprev : TCoord;
     Ti : Integer;
 begin
     if (X1 <= X0) or (Y1 <= Y0) then Exit;
@@ -839,9 +870,9 @@ begin
     if Neck < 1 then Neck := 1;
     Half := (Neck div 2) + RR;
     MidX := (X0 + X1) div 2;
-    Span := Y1 - Y0;
+    PHFSlotSpan := Y1 - Y0;
     if NTabs < 1 then NTabs := 1;
-    if Span < (Half + Half) * NTabs then
+    if PHFSlotSpan < (Half + Half) * NTabs then
     begin
         PHFAddTrack(ABoard, X0, Y0, X0, Y1, PanALayer);
         PHFAddTrack(ABoard, X1, Y0, X1, Y1, PanALayer);
@@ -853,7 +884,7 @@ begin
         if NTabs = 1 then
             Yc := (Y0 + Y1) div 2
         else
-            Yc := Y0 + (Span * (2 * Ti - 1)) div (2 * NTabs);
+            Yc := Y0 + (PHFSlotSpan * (2 * Ti - 1)) div (2 * NTabs);
         Ya := Yc - Half;
         Yb := Yc + Half;
         if Ya < Y0 then Ya := Y0;
@@ -876,7 +907,7 @@ end;
 
 procedure PHFDrawSlotH(ABoard : IPCB_Board; Y0, Y1, X0, X1 : TCoord; NTabs : Integer; PanALayer : TLayer);
 var
-    RR, Neck, Half, MidY, Span, Xc, Xa, Xb, Xprev : TCoord;
+    RR, Neck, Half, MidY, PHFSlotSpan, Xc, Xa, Xb, Xprev : TCoord;
     Ti : Integer;
 begin
     if (Y1 <= Y0) or (X1 <= X0) then Exit;
@@ -887,9 +918,9 @@ begin
     if Neck < 1 then Neck := 1;
     Half := (Neck div 2) + RR;
     MidY := (Y0 + Y1) div 2;
-    Span := X1 - X0;
+    PHFSlotSpan := X1 - X0;
     if NTabs < 1 then NTabs := 1;
-    if Span < (Half + Half) * NTabs then
+    if PHFSlotSpan < (Half + Half) * NTabs then
     begin
         PHFAddTrack(ABoard, X0, Y0, X1, Y0, PanALayer);
         PHFAddTrack(ABoard, X0, Y1, X1, Y1, PanALayer);
@@ -901,7 +932,7 @@ begin
         if NTabs = 1 then
             Xc := (X0 + X1) div 2
         else
-            Xc := X0 + (Span * (2 * Ti - 1)) div (2 * NTabs);
+            Xc := X0 + (PHFSlotSpan * (2 * Ti - 1)) div (2 * NTabs);
         Xa := Xc - Half;
         Xb := Xc + Half;
         if Xa < X0 then Xa := X0;

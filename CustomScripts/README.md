@@ -13,7 +13,7 @@
 | Скрипт | Проект | Процедура Run Script |
 | --- | --- | --- |
 | Скругления трека | `CustomScripts/TrackCornerFillet/TrackCornerFillet.PrjScr` | `StartTrackCornerFillet` (`_StartTrackCornerFillet`) |
-| DXF контуров | `CustomScripts/DxfOutlineExport/DxfOutlineExport.PrjScr` | `StartDxfOutlineExport` |
+| Архив проекта | `CustomScripts/ProjectZipper/ProjectZipper.PrjScr` | `StartProjectZipper` (`_StartProjectZipper`) |
 | Панелизация (прямоугольник) | `CustomScripts/Panelizer/Panelizer.PrjScr` | `StartPanelizer` |
 | Панелизация (произвольный контур) | `CustomScripts/Panelize_Hard_Form/Panelize_Hard_Form.PrjScr` | `StartPanelizeHardForm` |
 | Десигнаторы схемы | `CustomScripts/SchDesignatorReset/SchDesignatorReset.PrjScr` | `StartSchDesignatorReset` |
@@ -67,9 +67,15 @@ PNG/BMP **320×214** лежат в папке скрипта (рядом с `.Pr
 
 **Ограничения.** Не скругляет стык трек–дуга, если дуга не является скруглением между двумя треками. Не работает с `IPCB_Connection` (крысы).
 
-### 2. DXF контуров слоёв — `DxfOutlineExport.pas`
+### 2. Архив проекта — `ProjectZipper.pas`
 
-**Не закончен / заброшен.** Скрипт DXF не доведён; не использовать.
+**Назначение.** Упаковать **весь текущий проект** Altium (файл `.PrjPcb` и документы/папки рядом) в zip. Папка **`OLD`** создаётся в корне проекта (рядом с `.PrjPcb`). Zip пишется **внутрь `OLD`**: `ProjectName_YYYYMMDD_HHNN.zip`. Содержимое `OLD` в архив не входит (чтобы не зациклить предыдущие zip).
+
+**API** — как в `Zipper-example.pas` (не OLE, не `BlockWrite`): `Zip : TXceedZip`; `Zip := TXCeedZip.Create(ZipFileName)`; `Zip.UseTempFile := False`; `Zip.BasePath := RemoveSlash(ProjectPath, cPathSeparator)`; `Zip.ProcessSubfolders := False`; `GetAllFilePathsMatchingMask(GeneratedFiles, ProjectPath, '*.*', True)`; `ExtractRelativePath`; пропуск `cFilename_CurrentDir` / `cFilename_ParentDir`; `Zip.AddFilesToProcess(Rel)`; `I := Zip.Zip`; `Zip.InstanceSize`; `Zip.Free`. Путь проекта: `GetWorkspace.DM_FocusedProject.DM_ProjectFullPath`.
+
+**Как запускать.** Откройте `CustomScripts/ProjectZipper/ProjectZipper.PrjScr`, DXP → Run Script → `StartProjectZipper`. Диалог подтверждает папку проекта и путь zip (OK/Отмена). Результат — `ShowMessage` с путём и кодом `Zip.Zip`.
+
+**Ограничения.** Нужен сфокусированный проект. Префикс `Zip*`.
 
 ### 3. Панелизация — `Panelizer.pas`
 
@@ -131,19 +137,19 @@ PNG/BMP **320×214** лежат в папке скрипта (рядом с `.Pr
 
 ### 8. Авторасстановка десигнаторов на PCB — `PlaceDesignators.pas`
 
-**Назначение.** Только **шелкография** (Top/Bottom Overlay). Если выделены компоненты — только они; **если выделения нет — все**.
+**Назначение.** Логика расстановки **взята как есть** из `SilkscreenAutoPlacer/AutoPlaceSilkscreen.pas` (итераторы, коллизии, `MoveToXY`, Autoposition). Не «улучшалась». Обёртка Run Script: `StartPlaceDesignators` / `_StartPlaceDesignators`. Форма — светлая CustomScripts, русские подписи `#NNNN` в `.dfm`. После размещения: единицы мм, сетка **0,1 мм**.
 
-Кандидаты: 8 направлений × 5 шагов (жёсткий потолок). Площадки и чужие имена кэшируются **один раз**. Площадки `BoundingRectangle` + 0.25 мм; имя внутри `BoardOutline.PointInPolygon` (4 угла). Движение как AutoPlaceSilkscreen: `BeginModify`, `ChangeNameAutoposition := eAutoPos_Manual`, `MoveToXY`, `EndModify`, `ViewManager_FullUpdate`. Нет легальной позиции — пропуск, без зависания.
-
-**Ограничения.** Нет courtyard — используется `BoundingRectangleNoNameComment`. При плотной шелкографии остаётся лучший кандидат с предупреждением.
+**Ограничения.** Те же, что у Silkscreen Auto Placer (нет courtyard и т.д.).
 
 ### 3.1 Offset треков — `Offset.pas`
+
+**Пропуск правок.** Скрипт Offset в этой итерации не менялся.
 
 **Назначение.** CAD OFFSET: выбранные треки/дуги → цепи. Snap **0.05 мм или 1 coord**. Концы дуг — `StartX`/`EndX` (не Cos/Sin углов: из-за округления одна сторона скруглённого квадрата не стыковалась и оставалась на месте). Цепь, которая не состыковалась, всё равно offset’ится (новая цепь / singleton). После join **не удаляется** offset полной стороны; если у выбранного объекта нет пары — singleton. Окружность 360° — своя цепь. Замкнутый: signed area, CCW → интерьер слева. Трек: параллель на d. Дуга: **тот же центр**, R±d, те же углы (не инвертировать). Стык в пересечении; острые углы без новых галтелей. Скруглённый прямоугольник (4 трека + 4 дуги) → 8 offset-примитивов. Префикс `Off*`.
 
 ### 3.2 Панелизация произвольного контура — `Panelize_Hard_Form.pas`
 
-**Назначение.** Как Hard_Form: массив **встроенных плат**, mill = CAD-offset **реального** `BoardOutline` (треки + дуги, не bbox) наружу на радиус фрезы (поле mill R, по умолчанию **2 мм**; диаметр фрезы 2R — ширина пропила). Где два offset-контура совпадают в зазоре — один паз. Перемычки (inward dogbones) на **каждом** достаточно длинном ребре offset-контура (счётчики H/V из диалога). T-карманы на стыках **между** контурами у края массива, не в рамку. Рамка = bbox всех offset-контуров + поле; реперы на диагонали рамки (Margin/2); `BoardOutline` панели из рамки; сетка 0.1 мм. Тот же диалог, что у Panelizer (ряды/столбцы, зазор, поле, tab W, H/V, mill R=2, mech 3). Префикс `PHF*`, старт `StartPanelizeHardForm`. Хелперы offset **скопированы** в этот unit (`uses` Offset нет).
+**Назначение.** Как Hard_Form: массив **встроенных плат**, mill = CAD-offset **реального** `BoardOutline` (треки + дуги, не bbox) наружу на радиус фрезы (поле mill R, по умолчанию **2 мм**; диаметр фрезы 2R — ширина пропила). Где два offset-контура совпадают в зазоре — один паз. Перемычки (inward dogbones) на **каждом** достаточно длинном **прямом** ребре offset-контура (счётчики H/V из диалога; `PHFSpan := MMsToCoord(Len)`). На **дугах контура** mill концентрический: тот же центр, те же `SA`/`EA`, радиус R±kerf; стык трека к дуге — `StartX`/`EndX` (не Cos/Sin). Внутреннюю дугу не заменяют хордой. T-карманы на стыках **между** контурами у края массива, не в рамку. Рамка = bbox всех offset-контуров + поле; реперы на диагонали рамки (Margin/2); `BoardOutline` панели из рамки; сетка 0.1 мм. Тот же диалог, что у Panelizer (ряды/столбцы, зазор, поле, tab W, H/V, mill R=2, mech 3). Префикс `PHF*`, старт `StartPanelizeHardForm`. Хелперы offset **скопированы** в этот unit (`uses` Offset нет).
 
 **Panelizer** — прямоугольные платы. **Panelize_Hard_Form** — произвольный контур (уши, вырезы, галтели).
 
