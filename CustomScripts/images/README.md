@@ -14,7 +14,8 @@ Copies also live in each `CustomScripts/<Name>/` folder next to that script’s 
 | BomExport.png / BomExport.bmp | BomExport |
 | GroundPolygons.png / GroundPolygons.bmp | GroundPolygons |
 | PcbWizard.png / PcbWizard.bmp | PcbWizard |
-| PlaceDesignators.png / PlaceDesignators.bmp | PlaceDesignators |
+| PlaceDesignators.png / PlaceDesignators.bmp | PlaceDesignators (вариант 1) |
+| PlaceDesignators_AutoPlacer.png / PlaceDesignators_AutoPlacer.bmp | PlaceDesignators_AutoPlacer (вариант 2) |
 | Offset.png / Offset.bmp | Offset |
 
 Toolbar icons (24×24 / 32×32 BMP) are in [`../Shortcuts/`](../Shortcuts/).

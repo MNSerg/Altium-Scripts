@@ -20,7 +20,8 @@
 | BOM Excel | `CustomScripts/BomExport/BomExport.PrjScr` | `StartBomExport` |
 | Полигоны GND | `CustomScripts/GroundPolygons/GroundPolygons.PrjScr` | `StartGroundPolygons` |
 | Мастер PCB | `CustomScripts/PcbWizard/PcbWizard.PrjScr` | `StartPcbWizard` |
-| Десигнаторы на PCB | `CustomScripts/PlaceDesignators/PlaceDesignators.PrjScr` | `StartPlaceDesignators` |
+| Десигнаторы на PCB (вариант 1) | `CustomScripts/PlaceDesignators/PlaceDesignators.PrjScr` | `StartPlaceDesignators` |
+| Десигнаторы AutoPlacer (вариант 2) | `CustomScripts/PlaceDesignators_AutoPlacer/PlaceDesignators_AutoPlacer.PrjScr` | `StartPlaceDesignatorsAuto` |
 | Offset треков | `CustomScripts/Offset/Offset.PrjScr` | `StartOffset` |
 
 1. **File → Open Project** и откройте нужный `CustomScripts/<Name>/<Name>.PrjScr` **или** добавьте каждый проект в **Preferences → Scripting System → Project Scripts**.
@@ -73,7 +74,7 @@ PNG/BMP **320×214** лежат в папке скрипта (рядом с `.Pr
 
 **API** — как в `Zipper-example.pas` (не OLE, не `BlockWrite`): `Zip : TXceedZip`; `Zip := TXCeedZip.Create(ZipFileName)`; `Zip.UseTempFile := False`; `Zip.BasePath := RemoveSlash(ProjectPath, cPathSeparator)`; `Zip.ProcessSubfolders := False`; `GetAllFilePathsMatchingMask(GeneratedFiles, ProjectPath, '*.*', True)`; `ExtractRelativePath`; пропуск `cFilename_CurrentDir` / `cFilename_ParentDir`; `Zip.AddFilesToProcess(Rel)`; `I := Zip.Zip`; `Zip.InstanceSize`; `Zip.Free`. Путь проекта: `GetWorkspace.DM_FocusedProject.DM_ProjectFullPath`.
 
-**Как запускать.** Откройте `CustomScripts/ProjectZipper/ProjectZipper.PrjScr`, DXP → Run Script → `StartProjectZipper`. Диалог подтверждает папку проекта и путь zip (OK/Отмена). Результат — `ShowMessage` с путём и кодом `Zip.Zip`.
+**Как запускать.** Откройте `CustomScripts/ProjectZipper/ProjectZipper.PrjScr`, DXP → Run Script → `StartProjectZipper`. Диалог: папка проекта и путь zip, кнопки **Обзор…** (`SelectDirectory`, иначе `TOpenDialog` как у Panelizer). Перед `Zip.Zip` — предупреждение, что Altium **замрёт до конца архивации** (`ConfirmNoYes`), подпись «Архивация…» и `TProgressBar` (у TXceedZip нет OnProgress в Zipper-example). Форма не закрывается до конца zip (`Update`/`Refresh`). Результат — `ShowMessage` с путём.
 
 **Ограничения.** Нужен сфокусированный проект. Префикс `Zip*`.
 
@@ -135,11 +136,11 @@ PNG/BMP **320×214** лежат в папке скрипта (рядом с `.Pr
 
 **Ограничения.** Полная перестройка layer stack (2→4→6) через скрипт в AD20+ ненадёжна — стек лучше задать шаблоном / Layer Stack Manager. «Вскрытие маски» — `IPCB_Polygon` по контуру платы **только на Bottom Solder** (не Top, не `IPCB_Fill`). Полигоны GND — копия `BoardOutline.Segments`, без `.Kind`.
 
-### 8. Авторасстановка десигнаторов на PCB — `PlaceDesignators.pas`
+### 8. Авторасстановка десигнаторов на PCB
 
-**Назначение.** Логика расстановки **взята как есть** из `SilkscreenAutoPlacer/AutoPlaceSilkscreen.pas` (итераторы, коллизии, `MoveToXY`, Autoposition). Не «улучшалась». Обёртка Run Script: `StartPlaceDesignators` / `_StartPlaceDesignators`. Форма — светлая CustomScripts, русские подписи `#NNNN` в `.dfm`. После размещения: единицы мм, сетка **0,1 мм**.
+**Вариант 1 — наша расстановка** — `PlaceDesignators.pas`, `StartPlaceDesignators`. Кандидаты сверху/снизу/слева/справа от courtyard, оценка коллизий, `MoveToXY`. Светлая форма CustomScripts.
 
-**Ограничения.** Те же, что у Silkscreen Auto Placer (нет courtyard и т.д.).
+**Вариант 2 — Silkscreen Auto Placer** — `PlaceDesignators_AutoPlacer.pas`, `StartPlaceDesignatorsAuto`. Логика **как есть** из `SilkscreenAutoPlacer/AutoPlaceSilkscreen.pas` (итераторы, коллизии, Autoposition). Русский `.dfm`. После размещения: мм, сетка 0,1 мм. Алгоритмы **не смешаны** в одном файле.
 
 ### 3.1 Offset треков — `Offset.pas`
 
@@ -149,7 +150,7 @@ PNG/BMP **320×214** лежат в папке скрипта (рядом с `.Pr
 
 ### 3.2 Панелизация произвольного контура — `Panelize_Hard_Form.pas`
 
-**Назначение.** Как Hard_Form: массив **встроенных плат**, mill = CAD-offset **реального** `BoardOutline` (треки + дуги, не bbox) наружу на радиус фрезы (поле mill R, по умолчанию **2 мм**; диаметр фрезы 2R — ширина пропила). Где два offset-контура совпадают в зазоре — один паз. Перемычки (inward dogbones) на **каждом** достаточно длинном **прямом** ребре offset-контура (счётчики H/V из диалога; `PHFSpan := MMsToCoord(Len)`). На **дугах контура** mill концентрический: тот же центр, те же `SA`/`EA`, радиус R±kerf; стык трека к дуге — `StartX`/`EndX` (не Cos/Sin). Внутреннюю дугу не заменяют хордой. T-карманы на стыках **между** контурами у края массива, не в рамку. Рамка = bbox всех offset-контуров + поле; реперы на диагонали рамки (Margin/2); `BoardOutline` панели из рамки; сетка 0.1 мм. Тот же диалог, что у Panelizer (ряды/столбцы, зазор, поле, tab W, H/V, mill R=2, mech 3). Префикс `PHF*`, старт `StartPanelizeHardForm`. Хелперы offset **скопированы** в этот unit (`uses` Offset нет).
+**Назначение.** Как Hard_Form: массив **встроенных плат**. Mill строится как **одна замкнутая цепь** `BoardOutline` (порядок контура), затем CAD-offset всей цепи (концентрические дуги, стык трека к `StartX`/`EndX`, не Cos/Sin, без хорд вместо дуг). Копии циклов по массиву с зазором; в общей аллее остаётся **одна** пара стенок. Перемычки — inward dogbones только на **длинных прямых** рёбрах (счётчики H/V как у Panelizer). T-карманы: внешние стенки соседей **друг к другу**, не в рамку. После offset удаляются висячие обрывки. Рамка / реперы / сетка 0.1 мм / mech 3 / R=2 мм — как раньше. Префикс `PHF*`, старт `StartPanelizeHardForm`.
 
 **Panelizer** — прямоугольные платы. **Panelize_Hard_Form** — произвольный контур (уши, вырезы, галтели).
 

@@ -2,24 +2,34 @@
 { ProjectZipper.pas                                                             }
 { Archive the focused Altium project with the scripting-engine zip API          }
 { from Zipper-example.pas: TXceedZip, GetAllFilePathsMatchingMask,              }
-{ ExtractRelativePath, AddFilesToProcess, Zip.Zip.                              }
+{ ExtractRelativePath, AddFilesToProcess, Zip.Zip. No OLE, no BlockWrite.       }
 {..............................................................................}
 
 var
     ZipPrjPath  : String;
     ZipOutPath  : String;
     ZipOldDir   : String;
+    ZipPrjName  : String;
+    ZipLastFile : String;
 
 procedure StartProjectZipper; forward;
 procedure _StartProjectZipper; forward;
 procedure TFormZip.ButtonOKClick(ZipSender: TObject); forward;
 procedure TFormZip.ButtonCancelClick(ZipSender: TObject); forward;
 procedure TFormZip.FormZipShow(ZipSender: TObject); forward;
+procedure TFormZip.ZipBtnBrowsePrjClick(ZipSender: TObject); forward;
+procedure TFormZip.ZipBtnBrowseZipClick(ZipSender: TObject); forward;
 procedure ZipDoArchive; forward;
 
 procedure ZipShowBox(const Msg : String);
 begin
     ShowMessage(Msg);
+end;
+
+procedure ZipUiRefresh;
+begin
+    try FormZip.Update; except end;
+    try FormZip.Refresh; except end;
 end;
 
 function ZipEndsWithOld(const Rel : String) : Boolean;
@@ -46,15 +56,77 @@ begin
         Result := Result + '\';
 end;
 
+function ZipStripSlash(const ZipP : String) : String;
+begin
+    Result := ZipP;
+    if Result = '' then Exit;
+    if (Result[Length(Result)] = '\') or (Result[Length(Result)] = '/') then
+        Result := Copy(Result, 1, Length(Result) - 1);
+end;
+
+function ZipFolderName(const ZipP : String) : String;
+var
+    T : String;
+begin
+    T := ZipStripSlash(ZipP);
+    Result := ExtractFileName(T);
+    if Result = '' then Result := 'Project';
+end;
+
+procedure ZipDefaultOut;
+begin
+    if ZipPrjName = '' then ZipPrjName := ZipFolderName(ZipPrjPath);
+    ZipOldDir := ZipEnsureSlash(ZipPrjPath) + 'OLD';
+    ZipOutPath := ZipOldDir + '\' + ZipPrjName + '_' + ZipStamp + '.zip';
+end;
+
+function ZipPickFolder(const ZipCap, ZipStart : String) : String;
+var
+    ZipDlg : TOpenDialog;
+    ZipDir : String;
+    ZipOk  : Boolean;
+begin
+    Result := '';
+    ZipLastFile := '';
+    ZipDir := ZipStart;
+    ZipOk := False;
+    try
+        ZipOk := SelectDirectory(ZipCap, '', ZipDir);
+    except
+        ZipOk := False;
+    end;
+    if ZipOk and (ZipDir <> '') then
+    begin
+        Result := ZipEnsureSlash(ZipDir);
+        Exit;
+    end;
+    ZipDlg := TOpenDialog.Create(nil);
+    try
+        ZipDlg.Title := ZipCap;
+        ZipDlg.Filter := 'Altium (*.PrjPcb;*.PcbDoc)|*.PrjPcb;*.PcbDoc|Zip (*.zip)|*.zip|All (*.*)|*.*';
+        try ZipDlg.InitialDir := ZipStart; except end;
+        if ZipDlg.Execute then
+        begin
+            ZipLastFile := ZipDlg.FileName;
+            if UpperCase(ExtractFileExt(ZipDlg.FileName)) = '.ZIP' then
+                Result := ZipDlg.FileName
+            else
+                Result := ZipEnsureSlash(ExtractFilePath(ZipDlg.FileName));
+        end;
+    finally
+        ZipDlg.Free;
+    end;
+end;
+
 procedure ZipFillFromProject;
 var
     ZipWS  : IWorkspace;
     ZipPrj : IProject;
-    ZipName : String;
 begin
     ZipPrjPath := '';
     ZipOldDir := '';
     ZipOutPath := '';
+    ZipPrjName := '';
     ZipWS := GetWorkspace;
     if ZipWS = nil then Exit;
     ZipPrj := ZipWS.DM_FocusedProject;
@@ -65,10 +137,20 @@ begin
         ZipPrjPath := '';
     end;
     if (ZipPrjPath = '') or (not FileExists(ZipPrjPath)) then Exit;
-    ZipName := ChangeFileExt(ExtractFileName(ZipPrjPath), '');
+    ZipPrjName := ChangeFileExt(ExtractFileName(ZipPrjPath), '');
     ZipPrjPath := ZipEnsureSlash(ExtractFilePath(ZipPrjPath));
-    ZipOldDir := ZipPrjPath + 'OLD';
-    ZipOutPath := ZipOldDir + '\' + ZipName + '_' + ZipStamp + '.zip';
+    ZipDefaultOut;
+end;
+
+procedure ZipApplyEdits;
+begin
+    if EditPrj.Text <> '' then
+        ZipPrjPath := ZipEnsureSlash(EditPrj.Text);
+    if EditZip.Text <> '' then
+        ZipOutPath := EditZip.Text;
+    ZipOldDir := ZipStripSlash(ExtractFilePath(ZipOutPath));
+    if ZipOldDir = '' then
+        ZipOldDir := ZipEnsureSlash(ZipPrjPath) + 'OLD';
 end;
 
 procedure ZipDoArchive;
@@ -93,7 +175,7 @@ begin
         Exit;
     end;
 
-    ProjectPath := ZipPrjPath;
+    ProjectPath := ZipEnsureSlash(ZipPrjPath);
     Zip := TXCeedZip.Create(ZipOutPath);
     GeneratedFiles := TStringList.Create;
     try
@@ -114,7 +196,15 @@ begin
                 Zip.AddFilesToProcess(Rel);
             end;
 
+        try ZipProgress.Position := 50; except end;
+        ZipUiRefresh;
+
         ZipRc := Zip.Zip;
+
+        try ZipProgress.Position := 100; except end;
+        ZipLabelProg.Caption := LabelProgDone.Caption;
+        ZipUiRefresh;
+
         ZipShowBox(LabelInfoDone.Caption + ZipOutPath + sLineBreak +
                    LabelInfoRc.Caption + IntToStr(ZipRc) + sLineBreak +
                    LabelInfoSize.Caption + IntToStr(Zip.InstanceSize));
@@ -124,19 +214,72 @@ begin
     end;
 end;
 
+procedure TFormZip.ZipBtnBrowsePrjClick(ZipSender: TObject);
+var
+    ZipP, ZipFn : String;
+begin
+    ZipP := ZipPickFolder(LabelDlgPrj.Caption, EditPrj.Text);
+    if ZipP = '' then Exit;
+    if (Length(ZipP) > 4) and (UpperCase(Copy(ZipP, Length(ZipP) - 3, 4)) = '.ZIP') then
+        Exit;
+    ZipFn := ExtractFileName(ZipLastFile);
+    if (ZipFn <> '') and
+       ((UpperCase(ExtractFileExt(ZipFn)) = '.PRJPCB') or
+        (UpperCase(ExtractFileExt(ZipFn)) = '.PCBDOC')) then
+        ZipPrjName := ChangeFileExt(ZipFn, '')
+    else
+        ZipPrjName := ZipFolderName(ZipP);
+    ZipPrjPath := ZipEnsureSlash(ZipP);
+    EditPrj.Text := ZipPrjPath;
+    ZipDefaultOut;
+    EditZip.Text := ZipOutPath;
+end;
+
+procedure TFormZip.ZipBtnBrowseZipClick(ZipSender: TObject);
+var
+    ZipP, ZipFn : String;
+begin
+    ZipP := ZipPickFolder(LabelDlgZip.Caption, ExtractFilePath(EditZip.Text));
+    if ZipP = '' then Exit;
+    if (Length(ZipP) > 4) and (UpperCase(Copy(ZipP, Length(ZipP) - 3, 4)) = '.ZIP') then
+    begin
+        EditZip.Text := ZipP;
+        Exit;
+    end;
+    ZipFn := ExtractFileName(EditZip.Text);
+    if ZipFn = '' then
+        ZipFn := ZipFolderName(EditPrj.Text) + '_' + ZipStamp + '.zip';
+    EditZip.Text := ZipEnsureSlash(ZipP) + ZipFn;
+end;
+
 procedure TFormZip.ButtonOKClick(ZipSender: TObject);
 begin
-    ZipFillFromProject;
-    if EditPrj.Text <> '' then
-        ZipPrjPath := ZipEnsureSlash(EditPrj.Text);
-    if EditZip.Text <> '' then
-        ZipOutPath := EditZip.Text;
-    ZipOldDir := ExtractFilePath(ZipOutPath);
-    if (Length(ZipOldDir) > 0) and
-       ((ZipOldDir[Length(ZipOldDir)] = '\') or (ZipOldDir[Length(ZipOldDir)] = '/')) then
-        ZipOldDir := Copy(ZipOldDir, 1, Length(ZipOldDir) - 1);
-    FormZip.Close;
+    ZipApplyEdits;
+    if (ZipPrjPath = '') or (ZipOutPath = '') then
+    begin
+        ZipShowBox(LabelErrPrj.Caption);
+        Exit;
+    end;
+    if not ConfirmNoYes(LabelAskFreeze.Caption) then Exit;
+
+    ButtonOK.Enabled := False;
+    ButtonCancel.Enabled := False;
+    ZipBtnBrowsePrj.Enabled := False;
+    ZipBtnBrowseZip.Enabled := False;
+    ZipLabelProg.Caption := LabelProgBusy.Caption;
+    try ZipProgress.Position := 10; except end;
+    ZipUiRefresh;
+
     ZipDoArchive;
+
+    ZipLabelProg.Caption := LabelProgDone.Caption;
+    try ZipProgress.Position := 100; except end;
+    ButtonOK.Enabled := True;
+    ButtonCancel.Enabled := True;
+    ZipBtnBrowsePrj.Enabled := True;
+    ZipBtnBrowseZip.Enabled := True;
+    ZipUiRefresh;
+    FormZip.Close;
 end;
 
 procedure TFormZip.ButtonCancelClick(ZipSender: TObject);
@@ -230,6 +373,8 @@ begin
     ZipFillFromProject;
     EditPrj.Text := ZipPrjPath;
     EditZip.Text := ZipOutPath;
+    ZipLabelProg.Caption := '';
+    try ZipProgress.Position := 0; except end;
 end;
 
 procedure StartProjectZipper;

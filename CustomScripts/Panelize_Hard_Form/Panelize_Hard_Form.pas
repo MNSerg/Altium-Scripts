@@ -1,9 +1,8 @@
 ﻿{..............................................................................}
 { Panelize_Hard_Form.pas                                                       }
-{ Панель по реальному BoardOutline (треки+дуги), не bbox. Mill = CAD offset.   }
-{ Prefix PHF*. PHFSpan := MMsToCoord(Len). Outline arcs: concentric R±kerf,    }
-{ same SA/EA; join tracks to StartX/EndX (not Cos/Sin). No chord-for-arc.      }
-{ Rectangular boards: use Panelizer.pas.                                       }
+{ Mill = closed CAD offset of BoardOutline chain (contour order), one loop per }
+{ cell. Alleys collapse to one slot pair. Tabs on long straight edges.         }
+{ T-pockets join neighbor outer walls, not the frame. Prefix PHF*.             }
 {..............................................................................}
 
 const
@@ -38,6 +37,8 @@ function PHFBoardOriginY(Row : Integer) : TCoord; forward;
 procedure PHFOffsetCopiedOutline(ABoard : IPCB_Board; Col, Row : Integer; PHFALayer : TLayer); forward;
 procedure PHFPunchAllTabs(ABoard : IPCB_Board; PHFALayer : TLayer); forward;
 procedure PHFDeleteCoincident(ABoard : IPCB_Board; PHFALayer : TLayer); forward;
+procedure PHFJoinOuterTPockets(ABoard : IPCB_Board; PHFALayer : TLayer); forward;
+procedure PHFDeleteDangling(ABoard : IPCB_Board; PHFALayer : TLayer); forward;
 function PHFInAlley(PHFX, PHFY : TCoord) : Boolean; forward;
 
 function PHFParseFloat(const PanS : String; var PanV : Double) : Boolean;
@@ -385,7 +386,27 @@ begin
         PHFSetArcEnd(PHFN1, True, JX, JY);
 end;
 
-{ Keep concentric mill arcs (same SA/EA). Snap tracks to StartX/EndX — not Cos/Sin. }
+{ Keep concentric mill arcs (same SA/EA). Snap tracks to nearest StartX/EndX. }
+function PHFCoordDist(PHFX1, PHFY1, PHFX2, PHFY2 : TCoord) : Double;
+begin
+    Result := Sqrt(Sqr(1.0 * (PHFX2 - PHFX1)) + Sqr(1.0 * (PHFY2 - PHFY1)));
+end;
+
+procedure PHFSnapTrackToArc(PHFT : IPCB_Track; PHFAtStart : Boolean; PHFA : IPCB_Arc);
+var
+    TX, TY : TCoord;
+    Ds, De : Double;
+begin
+    if PHFAtStart then begin TX := PHFT.X1; TY := PHFT.Y1; end
+    else begin TX := PHFT.X2; TY := PHFT.Y2; end;
+    Ds := PHFCoordDist(TX, TY, PHFA.StartX, PHFA.StartY);
+    De := PHFCoordDist(TX, TY, PHFA.EndX, PHFA.EndY);
+    if Ds <= De then
+        PHFSetTrackPt(PHFT, PHFAtStart, PHFA.StartX, PHFA.StartY)
+    else
+        PHFSetTrackPt(PHFT, PHFAtStart, PHFA.EndX, PHFA.EndY);
+end;
+
 procedure PHFConnectMill(PHFN0, PHFN1 : IPCB_Primitive);
 var
     T0, T1 : IPCB_Track;
@@ -395,13 +416,13 @@ begin
     if (PHFN0.ObjectId = eTrackObject) and (PHFN1.ObjectId = eArcObject) then
     begin
         T0 := PHFN0; A1 := PHFN1;
-        PHFSetTrackPt(T0, False, A1.StartX, A1.StartY);
+        PHFSnapTrackToArc(T0, False, A1);
         Exit;
     end;
     if (PHFN0.ObjectId = eArcObject) and (PHFN1.ObjectId = eTrackObject) then
     begin
         A0 := PHFN0; T1 := PHFN1;
-        PHFSetTrackPt(T1, True, A0.EndX, A0.EndY);
+        PHFSnapTrackToArc(T1, True, A0);
         Exit;
     end;
     if (PHFN0.ObjectId = eArcObject) and (PHFN1.ObjectId = eArcObject) then
@@ -412,9 +433,10 @@ begin
     PHFJoinOff(PHFN0, PHFN1, 0, 0);
 end;
 
+{ Closed-chain CAD offset of BoardOutline (contour order), then translate to cell. }
 procedure PHFOffsetCopiedOutline(ABoard : IPCB_Board; Col, Row : Integer; PHFALayer : TLayer);
 var
-    PHFi, PHFj, PHFn : Integer;
+    PHFi, PHFj, PHFn, PHFGuard : Integer;
     PHFSeg, PHFNxt : TPolySegment;
     Area, Dxmm, Dymm, Len, Nx, Ny, Cross : Double;
     OffLeft, Away : Boolean;
@@ -456,7 +478,8 @@ begin
         Area := Area + CoordToMMs(PHFSeg.vx) * CoordToMMs(PHFNxt.vy) -
                 CoordToMMs(PHFNxt.vx) * CoordToMMs(PHFSeg.vy);
     end;
-    OffLeft := Area <= 0;
+    { CCW (Area>0): interior is left; mill is outside = not left. Same as Offset.pas. }
+    if Area > 0 then OffLeft := False else OffLeft := True;
     News := TStringList.Create;
     try
         for PHFi := 0 to PHFn - 1 do
@@ -484,7 +507,7 @@ begin
                 EY := PHFNxt.vy;
                 Cross := CoordToMMs(EX - SX) * CoordToMMs(CY - SY) -
                          CoordToMMs(EY - SY) * CoordToMMs(CX - SX);
-                if Cross > 0 then Away := OffLeft else Away := not OffLeft;
+                if Cross > 0 then Away := not OffLeft else Away := OffLeft;
                 if Away then
                     NR := PHFR + MMsToCoord(PHFOffMM)
                 else
@@ -523,45 +546,21 @@ begin
                 end;
             end;
         end;
+        { Join consecutive mill pieces, skipping collapsed (nil) inner arcs. }
         for PHFi := 0 to News.Count - 1 do
         begin
+            if News.Objects[PHFi] = nil then Continue;
             PHFj := PHFi + 1;
             if PHFj >= News.Count then PHFj := 0;
-            if News.Objects[PHFi] = nil then Continue;
-            if News.Objects[PHFj] = nil then Continue;
-            PHFConnectMill(News.Objects[PHFi], News.Objects[PHFj]);
-        end;
-        { Never drop a full-length straight side. Do not replace a nil inner
-          arc with a chord — that made Hard_Form fillets crooked. }
-        for PHFi := 0 to News.Count - 1 do
-        begin
-            if News.Objects[PHFi] <> nil then Continue;
-            PHFSeg := PHFSourceBoard.BoardOutline.Segments[PHFi];
-            PHFR := 0;
-            CX := 0; CY := 0;
-            try PHFR := PHFSeg.Radius; except PHFR := 0; end;
-            try CX := PHFSeg.cx; CY := PHFSeg.cy; except CX := 0; end;
-            if (PHFR > 1) and ((CX <> 0) or (CY <> 0)) then Continue;
-            PHFj := PHFi + 1;
-            if PHFj >= PHFn then PHFj := 0;
-            PHFNxt := PHFSourceBoard.BoardOutline.Segments[PHFj];
-            Dxmm := CoordToMMs(PHFNxt.vx - PHFSeg.vx);
-            Dymm := CoordToMMs(PHFNxt.vy - PHFSeg.vy);
-            Len := Sqrt(Dxmm * Dxmm + Dymm * Dymm);
-            if Len < 0.0001 then Continue;
-            Nx := -Dymm / Len;
-            Ny := Dxmm / Len;
-            if not OffLeft then
+            PHFGuard := 0;
+            while (News.Objects[PHFj] = nil) and (PHFj <> PHFi) and (PHFGuard < News.Count + 2) do
             begin
-                Nx := -Nx;
-                Ny := -Ny;
+                Inc(PHFGuard);
+                PHFj := PHFj + 1;
+                if PHFj >= News.Count then PHFj := 0;
             end;
-            PHFAddMillTrack(ABoard,
-                PHFSeg.vx + Dx + MMsToCoord(Nx * PHFOffMM),
-                PHFSeg.vy + Dy + MMsToCoord(Ny * PHFOffMM),
-                PHFNxt.vx + Dx + MMsToCoord(Nx * PHFOffMM),
-                PHFNxt.vy + Dy + MMsToCoord(Ny * PHFOffMM),
-                PHFALayer);
+            if (PHFj <> PHFi) and (News.Objects[PHFj] <> nil) then
+                PHFConnectMill(News.Objects[PHFi], News.Objects[PHFj]);
         end;
     finally
         News.Free;
@@ -604,6 +603,8 @@ begin
     DY := CoordToMMs(T.Y2 - T.Y1);
     Len := Sqrt(DX * DX + DY * DY);
     if Len < 0.2 then Exit;
+    { Tabs only on long axis-aligned edges, not diagonals or fillets. }
+    if (Abs(DX) > 0.3) and (Abs(DY) > 0.3) then Exit;
     Horiz := Abs(DX) >= Abs(DY);
     if Horiz then NTabs := PHFTabCountH else NTabs := PHFTabCountV;
     if NTabs < 1 then NTabs := 1;
@@ -833,6 +834,202 @@ begin
     Kill.Free;
 end;
 
+function PHFMillEnds(PHFP : IPCB_Primitive; var X1, Y1, X2, Y2 : TCoord) : Boolean;
+begin
+    Result := False;
+    if PHFP = nil then Exit;
+    if PHFP.ObjectId = eTrackObject then
+    begin
+        X1 := PHFP.X1; Y1 := PHFP.Y1; X2 := PHFP.X2; Y2 := PHFP.Y2;
+        Result := True;
+    end
+    else if PHFP.ObjectId = eArcObject then
+    begin
+        X1 := PHFP.StartX; Y1 := PHFP.StartY; X2 := PHFP.EndX; Y2 := PHFP.EndY;
+        Result := True;
+    end;
+end;
+
+procedure PHFBestMillEnd(ABoard : IPCB_Board; PHFALayer : TLayer;
+    TX, TY, XLo, XHi, YLo, YHi : TCoord; var BX, BY : TCoord; var Found : Boolean);
+var
+    PHFIter : IPCB_BoardIterator;
+    PHFP : IPCB_Primitive;
+    X1, Y1, X2, Y2 : TCoord;
+    D, Best : Double;
+begin
+    Found := False;
+    Best := 1e100;
+    BX := TX; BY := TY;
+    PHFIter := ABoard.BoardIterator_Create;
+    PHFIter.AddFilter_ObjectSet(MkSet(eTrackObject, eArcObject));
+    PHFIter.AddFilter_LayerSet(MkSet(PHFALayer));
+    PHFIter.AddFilter_Method(eProcessAll);
+    PHFP := PHFIter.FirstPCBObject;
+    while PHFP <> nil do
+    begin
+        if PHFMillEnds(PHFP, X1, Y1, X2, Y2) then
+        begin
+            if (X1 >= XLo) and (X1 <= XHi) and (Y1 >= YLo) and (Y1 <= YHi) then
+            begin
+                D := PHFCoordDist(X1, Y1, TX, TY);
+                if (not Found) or (D < Best) then
+                begin
+                    Best := D; BX := X1; BY := Y1; Found := True;
+                end;
+            end;
+            if (X2 >= XLo) and (X2 <= XHi) and (Y2 >= YLo) and (Y2 <= YHi) then
+            begin
+                D := PHFCoordDist(X2, Y2, TX, TY);
+                if (not Found) or (D < Best) then
+                begin
+                    Best := D; BX := X2; BY := Y2; Found := True;
+                end;
+            end;
+        end;
+        PHFP := PHFIter.NextPCBObject;
+    end;
+    ABoard.BoardIterator_Destroy(PHFIter);
+end;
+
+procedure PHFTryTBar(ABoard : IPCB_Board; PHFALayer : TLayer;
+    TX0, TY0, TX1, TY1, XLo, XHi, YLo, YHi, MaxD : TCoord);
+var
+    Xa, Ya, Xb, Yb : TCoord;
+    Fa, Fb : Boolean;
+begin
+    PHFBestMillEnd(ABoard, PHFALayer, TX0, TY0, XLo, XHi, YLo, YHi, Xa, Ya, Fa);
+    PHFBestMillEnd(ABoard, PHFALayer, TX1, TY1, XLo, XHi, YLo, YHi, Xb, Yb, Fb);
+    if not (Fa and Fb) then Exit;
+    if PHFCoordDist(Xa, Ya, Xb, Yb) < 2 then Exit;
+    if PHFCoordDist(Xa, Ya, Xb, Yb) > MaxD then Exit;
+    PHFAddMillTrack(ABoard, Xa, Ya, Xb, Yb, PHFALayer);
+end;
+
+{ T-pockets: join neighbor OUTER mill walls across the alley, not the frame. }
+procedure PHFJoinOuterTPockets(ABoard : IPCB_Board; PHFALayer : TLayer);
+var
+    c, r : Integer;
+    OffC, Gx, Gy, MaxD, Ax0, Ax1, Ay0, Ay1 : TCoord;
+    L0, B0, R1, T1, Box : TCoord;
+begin
+    OffC := MMsToCoord(PHFOffMM);
+    Gx := MMsToCoord(PHFGapX);
+    Gy := MMsToCoord(PHFGapY);
+    MaxD := Gx + OffC + OffC + MMsToCoord(4);
+    Box := OffC + MMsToCoord(4);
+    L0 := PHFBoardOriginX(0);
+    B0 := PHFBoardOriginY(0);
+    R1 := PHFBoardOriginX(PHFCols - 1) + MMsToCoord(PHFBoardW);
+    T1 := PHFBoardOriginY(PHFRows - 1) + MMsToCoord(PHFBoardH);
+
+    for c := 0 to PHFCols - 2 do
+    begin
+        Ax0 := PHFBoardOriginX(c) + MMsToCoord(PHFBoardW);
+        Ax1 := PHFBoardOriginX(c + 1);
+        { South outer walls of row 0, across alley — not into the frame. }
+        PHFTryTBar(ABoard, PHFALayer,
+            Ax0, B0 - OffC, Ax1, B0 - OffC,
+            Ax0 - Box, Ax1 + Box, B0 - Box - OffC, B0 + Box, MaxD);
+        { North outer walls of last row. }
+        PHFTryTBar(ABoard, PHFALayer,
+            Ax0, T1 + OffC, Ax1, T1 + OffC,
+            Ax0 - Box, Ax1 + Box, T1 - Box, T1 + Box + OffC, MaxD);
+    end;
+    for r := 0 to PHFRows - 2 do
+    begin
+        Ay0 := PHFBoardOriginY(r) + MMsToCoord(PHFBoardH);
+        Ay1 := PHFBoardOriginY(r + 1);
+        MaxD := Gy + OffC + OffC + MMsToCoord(4);
+        PHFTryTBar(ABoard, PHFALayer,
+            L0 - OffC, Ay0, L0 - OffC, Ay1,
+            L0 - Box - OffC, L0 + Box, Ay0 - Box, Ay1 + Box, MaxD);
+        PHFTryTBar(ABoard, PHFALayer,
+            R1 + OffC, Ay0, R1 + OffC, Ay1,
+            R1 - Box, R1 + Box + OffC, Ay0 - Box, Ay1 + Box, MaxD);
+    end;
+end;
+
+function PHFEndConnected(ABoard : IPCB_Board; PHFALayer : TLayer;
+    Skip : IPCB_Primitive; PX, PY, Tol : TCoord) : Boolean;
+var
+    PHFIter : IPCB_BoardIterator;
+    PHFP : IPCB_Primitive;
+    X1, Y1, X2, Y2 : TCoord;
+begin
+    Result := False;
+    PHFIter := ABoard.BoardIterator_Create;
+    PHFIter.AddFilter_ObjectSet(MkSet(eTrackObject, eArcObject));
+    PHFIter.AddFilter_LayerSet(MkSet(PHFALayer));
+    PHFIter.AddFilter_Method(eProcessAll);
+    PHFP := PHFIter.FirstPCBObject;
+    while PHFP <> nil do
+    begin
+        if PHFP <> Skip then
+            if PHFMillEnds(PHFP, X1, Y1, X2, Y2) then
+                if (PHFCoordDist(PX, PY, X1, Y1) <= Tol) or
+                   (PHFCoordDist(PX, PY, X2, Y2) <= Tol) then
+                begin
+                    Result := True;
+                    Break;
+                end;
+        PHFP := PHFIter.NextPCBObject;
+    end;
+    ABoard.BoardIterator_Destroy(PHFIter);
+end;
+
+procedure PHFDeleteDangling(ABoard : IPCB_Board; PHFALayer : TLayer);
+var
+    Pass, PHFi : Integer;
+    PHFIter : IPCB_BoardIterator;
+    PHFP : IPCB_Primitive;
+    Kill : TStringList;
+    X1, Y1, X2, Y2 : TCoord;
+    Tol, MinLen : Double;
+    Hit1, Hit2 : Boolean;
+begin
+    Tol := MMsToCoord(0.15);
+    MinLen := MMsToCoord(0.05);
+    for Pass := 1 to 6 do
+    begin
+        Kill := TStringList.Create;
+        PHFIter := ABoard.BoardIterator_Create;
+        PHFIter.AddFilter_ObjectSet(MkSet(eTrackObject, eArcObject));
+        PHFIter.AddFilter_LayerSet(MkSet(PHFALayer));
+        PHFIter.AddFilter_Method(eProcessAll);
+        PHFP := PHFIter.FirstPCBObject;
+        while PHFP <> nil do
+        begin
+            if PHFMillEnds(PHFP, X1, Y1, X2, Y2) then
+            begin
+                if (PHFP.ObjectId = eTrackObject) and (PHFCoordDist(X1, Y1, X2, Y2) < MinLen) then
+                    Kill.AddObject('K', PHFP)
+                else
+                begin
+                    Hit1 := PHFEndConnected(ABoard, PHFALayer, PHFP, X1, Y1, Tol);
+                    Hit2 := PHFEndConnected(ABoard, PHFALayer, PHFP, X2, Y2, Tol);
+                    if (not Hit1) or (not Hit2) then
+                        Kill.AddObject('K', PHFP);
+                end;
+            end;
+            PHFP := PHFIter.NextPCBObject;
+        end;
+        ABoard.BoardIterator_Destroy(PHFIter);
+        if Kill.Count = 0 then
+        begin
+            Kill.Free;
+            Exit;
+        end;
+        for PHFi := 0 to Kill.Count - 1 do
+        begin
+            ABoard.BeginModify;
+            ABoard.RemovePCBObject(Kill.Objects[PHFi]);
+            ABoard.EndModify;
+        end;
+        Kill.Free;
+    end;
+end;
+
 procedure PHFDrawRoundedRect(ABoard : IPCB_Board; PHFX0, PHFY0, PanX1, PanY1, PHFR : TCoord; PanALayer : TLayer);
 begin
     if PHFR <= 0 then
@@ -987,10 +1184,8 @@ end;
 procedure PHFDrawAllMillPaths(ABoard : IPCB_Board; PanALayer : TLayer);
 var
     r, c : Integer;
-    L, B, Gx, Gy, CR, OffC, L0, B0, R1, T1 : TCoord;
 begin
-    { Mill = CAD offset of the real BoardOutline (tracks+arcs), not the bbox.
-      Offset = mill radius (dialog R, default 2 mm); kerf = mill diameter 2R. }
+    { One closed offset loop per board from BoardOutline chain (not bbox). }
     PHFHaveMill := False;
     for r := 0 to PHFRows - 1 do
         for c := 0 to PHFCols - 1 do
@@ -998,32 +1193,12 @@ begin
 
     { Shared alleys: coincident parallel offset mills collapse to one slot. }
     PHFDeleteCoincident(ABoard, PanALayer);
-    { Tabs = inward dogbones on each offset edge that is long enough. }
+    { Drop unjoined construction leftovers before tabs. }
+    PHFDeleteDangling(ABoard, PanALayer);
+    { Tabs = inward dogbones on long straight mill edges only. }
     PHFPunchAllTabs(ABoard, PanALayer);
-
-    Gx := MMsToCoord(PHFGapX);
-    Gy := MMsToCoord(PHFGapY);
-    CR := PHFBoardCornerR;
-    OffC := MMsToCoord(PHFOffMM);
-    L0 := PHFBoardOriginX(0);
-    B0 := PHFBoardOriginY(0);
-    R1 := PHFBoardOriginX(PHFCols - 1) + MMsToCoord(PHFBoardW);
-    T1 := PHFBoardOriginY(PHFRows - 1) + MMsToCoord(PHFBoardH);
-
-    { T-pockets at edge joints BETWEEN outlines (array edge), not into the frame.
-      Placed on the mill (offset R), not Gap into the margin. }
-    for c := 0 to PHFCols - 2 do
-    begin
-        L := PHFBoardOriginX(c) + MMsToCoord(PHFBoardW);
-        PHFAddTrack(ABoard, L - CR, B0 - OffC, L + Gx + CR, B0 - OffC, PanALayer);
-        PHFAddTrack(ABoard, L - CR, T1 + OffC, L + Gx + CR, T1 + OffC, PanALayer);
-    end;
-    for r := 0 to PHFRows - 2 do
-    begin
-        B := PHFBoardOriginY(r) + MMsToCoord(PHFBoardH);
-        PHFAddTrack(ABoard, L0 - OffC, B - CR, L0 - OffC, B + Gy + CR, PanALayer);
-        PHFAddTrack(ABoard, R1 + OffC, B - CR, R1 + OffC, B + Gy + CR, PanALayer);
-    end;
+    { T-pockets join neighbor outer walls to each other, not the frame. }
+    PHFJoinOuterTPockets(ABoard, PanALayer);
 end;
 
 procedure PHFFrameRect(var X0, Y0, X1, Y1 : TCoord);
