@@ -254,56 +254,141 @@ begin
     end;
 end;
 
+function BoardCornerR : TCoord;
+var
+    PanI, PanN : Integer;
+    PanSeg : TPolySegment;
+    PanR : TCoord;
+begin
+    Result := 0;
+    if SourceBoard = nil then Exit;
+    try
+        PanN := SourceBoard.BoardOutline.PointCount;
+        for PanI := 0 to PanN - 1 do
+        begin
+            PanSeg := SourceBoard.BoardOutline.Segments[PanI];
+            PanR := 0;
+            try PanR := PanSeg.Radius; except PanR := 0; end;
+            if PanR > Result then Result := PanR;
+        end;
+    except
+        Result := 0;
+    end;
+end;
+
+procedure DrawBoardCornerArcs(ABoard : IPCB_Board; L, B, Rgt, Tp, CR : TCoord; PanALayer : TLayer);
+begin
+    if CR < 1 then Exit;
+    AddArc(ABoard, L + CR, B + CR, CR, 180, 270, PanALayer);
+    AddArc(ABoard, Rgt - CR, B + CR, CR, 270, 0, PanALayer);
+    AddArc(ABoard, Rgt - CR, Tp - CR, CR, 0, 90, PanALayer);
+    AddArc(ABoard, L + CR, Tp - CR, CR, 90, 180, PanALayer);
+end;
+
 procedure DrawAllMillPaths(ABoard : IPCB_Board; PanALayer : TLayer);
 var
     r, c : Integer;
-    L, B, Rgt, Tp, Gx, Gy : TCoord;
+    L, B, Rgt, Tp, Gx, Gy, CR, CRo : TCoord;
     L0, B0, R1, T1 : TCoord;
 begin
     Gx := MMsToCoord(GapX);
     Gy := MMsToCoord(GapY);
+    CR := BoardCornerR;
+    L0 := BoardOriginX(0);
+    B0 := BoardOriginY(0);
+    R1 := BoardOriginX(Cols - 1) + MMsToCoord(BoardW);
+    T1 := BoardOriginY(Rows - 1) + MMsToCoord(BoardH);
+
+    { B: inner mill follows board outline corners (arcs), not 90°. }
+    for r := 0 to Rows - 1 do
+        for c := 0 to Cols - 1 do
+        begin
+            L := BoardOriginX(c);
+            B := BoardOriginY(r);
+            Rgt := L + MMsToCoord(BoardW);
+            Tp := B + MMsToCoord(BoardH);
+            DrawBoardCornerArcs(ABoard, L, B, Rgt, Tp, CR, PanALayer);
+        end;
+
+    { Shared vertical alleys (left-right). Inset by CR so corners stay arcs. }
     for r := 0 to Rows - 1 do
         for c := 0 to Cols - 2 do
         begin
             L := BoardOriginX(c) + MMsToCoord(BoardW);
-            B := BoardOriginY(r);
-            Tp := B + MMsToCoord(BoardH);
+            B := BoardOriginY(r) + CR;
+            Tp := BoardOriginY(r) + MMsToCoord(BoardH) - CR;
             DrawSlotV(ABoard, L, L + Gx, B, Tp, 2, PanALayer);
         end;
+    { Shared horizontal alleys (stacked). }
     for r := 0 to Rows - 2 do
         for c := 0 to Cols - 1 do
         begin
-            L := BoardOriginX(c);
-            Rgt := L + MMsToCoord(BoardW);
+            L := BoardOriginX(c) + CR;
+            Rgt := BoardOriginX(c) + MMsToCoord(BoardW) - CR;
             B := BoardOriginY(r) + MMsToCoord(BoardH);
             DrawSlotH(ABoard, B, B + Gy, L, Rgt, 1, PanALayer);
         end;
+    { Frame west/east per row, inset CR. }
     for r := 0 to Rows - 1 do
     begin
         L := BoardOriginX(0);
         Rgt := BoardOriginX(Cols - 1) + MMsToCoord(BoardW);
-        B := BoardOriginY(r);
-        Tp := B + MMsToCoord(BoardH);
+        B := BoardOriginY(r) + CR;
+        Tp := BoardOriginY(r) + MMsToCoord(BoardH) - CR;
         DrawSlotV(ABoard, L - Gx, L, B, Tp, 2, PanALayer);
         DrawSlotV(ABoard, Rgt, Rgt + Gx, B, Tp, 2, PanALayer);
     end;
+    { Frame south/north per col, inset CR. }
     for c := 0 to Cols - 1 do
     begin
-        L := BoardOriginX(c);
-        Rgt := L + MMsToCoord(BoardW);
+        L := BoardOriginX(c) + CR;
+        Rgt := BoardOriginX(c) + MMsToCoord(BoardW) - CR;
         B := BoardOriginY(0);
         Tp := BoardOriginY(Rows - 1) + MMsToCoord(BoardH);
         DrawSlotH(ABoard, B - Gy, B, L, Rgt, 1, PanALayer);
         DrawSlotH(ABoard, Tp, Tp + Gy, L, Rgt, 1, PanALayer);
     end;
-    L0 := BoardOriginX(0);
-    B0 := BoardOriginY(0);
-    R1 := BoardOriginX(Cols - 1) + MMsToCoord(BoardW);
-    T1 := BoardOriginY(Rows - 1) + MMsToCoord(BoardH);
-    AddArc(ABoard, L0, B0, Gx, 180, 270, PanALayer);
-    AddArc(ABoard, R1, B0, Gx, 270, 0, PanALayer);
-    AddArc(ABoard, R1, T1, Gx, 0, 90, PanALayer);
-    AddArc(ABoard, L0, T1, Gx, 90, 180, PanALayer);
+
+    { A: T-stems — alley walls continue into the frame channel (outer mill). }
+    for c := 0 to Cols - 2 do
+    begin
+        L := BoardOriginX(c) + MMsToCoord(BoardW);
+        AddTrack(ABoard, L, B0 - Gy, L, B0, PanALayer);
+        AddTrack(ABoard, L + Gx, B0 - Gy, L + Gx, B0, PanALayer);
+        AddTrack(ABoard, L, T1, L, T1 + Gy, PanALayer);
+        AddTrack(ABoard, L + Gx, T1, L + Gx, T1 + Gy, PanALayer);
+    end;
+    for r := 0 to Rows - 2 do
+    begin
+        B := BoardOriginY(r) + MMsToCoord(BoardH);
+        AddTrack(ABoard, L0 - Gx, B, L0, B, PanALayer);
+        AddTrack(ABoard, L0 - Gx, B + Gy, L0, B + Gy, PanALayer);
+        AddTrack(ABoard, R1, B, R1 + Gx, B, PanALayer);
+        AddTrack(ABoard, R1, B + Gy, R1 + Gx, B + Gy, PanALayer);
+    end;
+
+    { Continuous frame OUTER across alleys (fuses T). Inset CR for outer corner arcs. }
+    AddTrack(ABoard, L0 + CR, B0 - Gy, R1 - CR, B0 - Gy, PanALayer);
+    AddTrack(ABoard, L0 + CR, T1 + Gy, R1 - CR, T1 + Gy, PanALayer);
+    AddTrack(ABoard, L0 - Gx, B0 + CR, L0 - Gx, T1 - CR, PanALayer);
+    AddTrack(ABoard, R1 + Gx, B0 + CR, R1 + Gx, T1 - CR, PanALayer);
+
+    { Outer mill at array corners: concentric with board corner, R = Rboard + mill. }
+    if CR > 0 then
+    begin
+        CRo := CR + Gx;
+        AddArc(ABoard, L0 + CR, B0 + CR, CRo, 180, 270, PanALayer);
+        AddArc(ABoard, R1 - CR, B0 + CR, CRo, 270, 0, PanALayer);
+        AddArc(ABoard, R1 - CR, T1 - CR, CRo, 0, 90, PanALayer);
+        AddArc(ABoard, L0 + CR, T1 - CR, CRo, 90, 180, PanALayer);
+    end
+    else
+    begin
+        AddArc(ABoard, L0, B0, Gx, 180, 270, PanALayer);
+        AddArc(ABoard, R1, B0, Gx, 270, 0, PanALayer);
+        AddArc(ABoard, R1, T1, Gx, 0, 90, PanALayer);
+        AddArc(ABoard, L0, T1, Gx, 90, 180, PanALayer);
+    end;
 end;
 
 { Рамка: bbox массива плат + поле (PanMargin) с каждой стороны. }

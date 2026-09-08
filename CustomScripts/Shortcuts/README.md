@@ -26,4 +26,4 @@ Copies of the 24×24 set also sit in this folder (`TrackCornerFillet.bmp`, …) 
 3. In the command properties, set **Bitmap** (sometimes **Image** / **Button bitmap**) to one of these `.bmp` files.
 4. Use **24×24** for toolbars; **32×32** if the UI looks better with a larger glyph.
 
-Dialog illustrations (left pane of each form) are separate: `CustomScripts/images/*.png` at **320×214** to match the DFM `TImage`.
+Dialog illustrations (left pane of each form) are separate: PNG/BMP **320×214** in each `CustomScripts/<Name>/` folder (and `CustomScripts/images/`).

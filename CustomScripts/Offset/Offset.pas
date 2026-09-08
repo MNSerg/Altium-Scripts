@@ -190,7 +190,8 @@ begin
     B := 2 * (Fx * Dx + Fy * Dy);
     C := Fx * Fx + Fy * Fy - R * R;
     Disc := B * B - 4 * A * C;
-    if Disc < 0 then Exit;
+    if Disc < -1e-9 then Exit;
+    if Disc < 0 then Disc := 0;
     Disc := Sqrt(Disc);
     T1 := (-B - Disc) / (2 * A);
     T2 := (-B + Disc) / (2 * A);
@@ -424,75 +425,124 @@ begin
     OffT.GraphicallyInvalidate;
 end;
 
-procedure OffJoinTwo(OffP0, OffN0 : IPCB_Primitive; OffRev0 : Boolean;
-                     OffP1, OffN1 : IPCB_Primitive; OffRev1 : Boolean);
+{ OffChainStart: join at the chain-start of this offset arc (else chain-end). }
+procedure OffSetArcChain(OffA : IPCB_Arc; OffChainStart : Boolean; OffRev : Boolean; OffX, OffY : TCoord);
 var
-    HX, HY, Xi, Yi : Double;
+    Ang : Double;
+    UseStart : Boolean;
+begin
+    Ang := OffAtan2Deg(CoordToMMs(OffY - OffA.YCenter), CoordToMMs(OffX - OffA.XCenter));
+    if OffChainStart then
+        UseStart := not OffRev
+    else
+        UseStart := OffRev;
+    OffA.BeginModify;
+    if UseStart then
+        OffA.StartAngle := Ang
+    else
+        OffA.EndAngle := Ang;
+    OffA.EndModify;
+    OffA.GraphicallyInvalidate;
+end;
+
+procedure OffJoinTwo(OffP0, OffN0 : IPCB_Primitive; OffRev0 : Boolean;
+                     OffP1, OffN1 : IPCB_Primitive; OffRev1 : Boolean;
+                     OffLeft : Boolean);
+var
+    Xi, Yi : Double;
     TX1, TY1, TX2, TY2, UX1, UY1, UX2, UY2 : TCoord;
+    VX, VY : TCoord;
     A0, A1 : IPCB_Arc;
     T0, T1 : IPCB_Track;
-    R0, R1, C0x, C0y, C1x, C1y : Double;
-    EX, EY : TCoord;
-    Ok : Boolean;
+    EX, EY, SX, SY : TCoord;
+    D0x, D0y, D1x, D1y, Cross : Double;
+    Ok, RoundC : Boolean;
+    HX, HY : Double;
+    W0 : TCoord;
 begin
     if (OffN0 = nil) or (OffN1 = nil) then Exit;
-    OffPrimEnd(OffP0, OffRev0, EX, EY);
-    HX := CoordToMMs(EX);
-    HY := CoordToMMs(EY);
+    OffPrimStart(OffP0, OffRev0, SX, SY);
+    OffPrimEnd(OffP0, OffRev0, VX, VY);
+    OffPrimStart(OffP1, OffRev1, EX, EY);
+    OffPrimEnd(OffP1, OffRev1, UX2, UY2);
+    D0x := CoordToMMs(VX - SX);
+    D0y := CoordToMMs(VY - SY);
+    D1x := CoordToMMs(UX2 - EX);
+    D1y := CoordToMMs(UY2 - EY);
+    Cross := D0x * D1y - D0y * D1x;
+    { Convex sharp (VCarve round): offset side opposite the turn. }
+    RoundC := (OffP0.ObjectId = eTrackObject) and (OffP1.ObjectId = eTrackObject) and
+              (((Cross > 0) and (not OffLeft)) or ((Cross < 0) and OffLeft));
+    if RoundC then
+    begin
+        OffPrimEnd(OffN0, False, TX2, TY2);
+        OffPrimStart(OffN1, False, UX1, UY1);
+        W0 := MMsToCoord(0.2);
+        if OffN0.ObjectId = eTrackObject then
+        begin
+            T0 := OffN0;
+            if T0.Width > 0 then W0 := T0.Width;
+        end;
+        OffAddArc(VX, VY, MMsToCoord(OffDistMM),
+                  OffAtan2Deg(CoordToMMs(TY2 - VY), CoordToMMs(TX2 - VX)),
+                  OffAtan2Deg(CoordToMMs(UY1 - VY), CoordToMMs(UX1 - VX)),
+                  OffN0.Layer, W0);
+        Exit;
+    end;
     Ok := False;
     Xi := 0; Yi := 0;
+    HX := CoordToMMs(VX);
+    HY := CoordToMMs(VY);
     if (OffN0.ObjectId = eTrackObject) and (OffN1.ObjectId = eTrackObject) then
     begin
         T0 := OffN0; T1 := OffN1;
-        TX1 := T0.X1; TY1 := T0.Y1; TX2 := T0.X2; TY2 := T0.Y2;
-        UX1 := T1.X1; UY1 := T1.Y1; UX2 := T1.X2; UY2 := T1.Y2;
-        Ok := OffIntersectLL(CoordToMMs(TX1), CoordToMMs(TY1), CoordToMMs(TX2), CoordToMMs(TY2),
-                             CoordToMMs(UX1), CoordToMMs(UY1), CoordToMMs(UX2), CoordToMMs(UY2),
+        Ok := OffIntersectLL(CoordToMMs(T0.X1), CoordToMMs(T0.Y1), CoordToMMs(T0.X2), CoordToMMs(T0.Y2),
+                             CoordToMMs(T1.X1), CoordToMMs(T1.Y1), CoordToMMs(T1.X2), CoordToMMs(T1.Y2),
                              Xi, Yi);
-        if Ok then
-        begin
-            OffSetTrackPt(T0, False, MMsToCoord(Xi), MMsToCoord(Yi));
-            OffSetTrackPt(T1, True, MMsToCoord(Xi), MMsToCoord(Yi));
-        end;
     end
     else if (OffN0.ObjectId = eTrackObject) and (OffN1.ObjectId = eArcObject) then
     begin
         T0 := OffN0; A1 := OffN1;
-        OffArcXY(A1, A1.StartAngle, UX1, UY1);
         Ok := OffIntersectLC(CoordToMMs(T0.X1), CoordToMMs(T0.Y1), CoordToMMs(T0.X2), CoordToMMs(T0.Y2),
                              CoordToMMs(A1.XCenter), CoordToMMs(A1.YCenter), CoordToMMs(A1.Radius),
-                             CoordToMMs(UX1), CoordToMMs(UY1), Xi, Yi);
-        if Ok then
-            OffSetTrackPt(T0, False, MMsToCoord(Xi), MMsToCoord(Yi));
+                             HX, HY, Xi, Yi);
     end
     else if (OffN0.ObjectId = eArcObject) and (OffN1.ObjectId = eTrackObject) then
     begin
         A0 := OffN0; T1 := OffN1;
-        OffArcXY(A0, A0.EndAngle, TX2, TY2);
         Ok := OffIntersectLC(CoordToMMs(T1.X1), CoordToMMs(T1.Y1), CoordToMMs(T1.X2), CoordToMMs(T1.Y2),
                              CoordToMMs(A0.XCenter), CoordToMMs(A0.YCenter), CoordToMMs(A0.Radius),
-                             CoordToMMs(TX2), CoordToMMs(TY2), Xi, Yi);
-        if Ok then
-            OffSetTrackPt(T1, True, MMsToCoord(Xi), MMsToCoord(Yi));
+                             HX, HY, Xi, Yi);
     end
     else if (OffN0.ObjectId = eArcObject) and (OffN1.ObjectId = eArcObject) then
     begin
         A0 := OffN0; A1 := OffN1;
         if OffSamePt(A0.XCenter, A0.YCenter, A1.XCenter, A1.YCenter) then
             Exit;
-        OffArcXY(A0, A0.EndAngle, TX2, TY2);
         Ok := OffIntersectCC(CoordToMMs(A0.XCenter), CoordToMMs(A0.YCenter), CoordToMMs(A0.Radius),
                              CoordToMMs(A1.XCenter), CoordToMMs(A1.YCenter), CoordToMMs(A1.Radius),
-                             CoordToMMs(TX2), CoordToMMs(TY2), Xi, Yi);
+                             HX, HY, Xi, Yi);
     end;
-    if not Ok then
+    if Ok then
     begin
-        { Нет пересечения: дуга радиуса |d| в исходной вершине. }
+        TX1 := MMsToCoord(Xi);
+        TY1 := MMsToCoord(Yi);
+        if OffN0.ObjectId = eTrackObject then
+            OffSetTrackPt(OffN0, False, TX1, TY1)
+        else if OffN0.ObjectId = eArcObject then
+            OffSetArcChain(OffN0, False, OffRev0, TX1, TY1);
+        if OffN1.ObjectId = eTrackObject then
+            OffSetTrackPt(OffN1, True, TX1, TY1)
+        else if OffN1.ObjectId = eArcObject then
+            OffSetArcChain(OffN1, True, OffRev1, TX1, TY1);
+    end
+    else
+    begin
         OffPrimEnd(OffN0, False, TX2, TY2);
         OffPrimStart(OffN1, False, UX1, UY1);
-        OffAddArc(EX, EY, MMsToCoord(OffDistMM),
-                  OffAtan2Deg(CoordToMMs(TY2 - EY), CoordToMMs(TX2 - EX)),
-                  OffAtan2Deg(CoordToMMs(UY1 - EY), CoordToMMs(UX1 - EX)),
+        OffAddArc(VX, VY, MMsToCoord(OffDistMM),
+                  OffAtan2Deg(CoordToMMs(TY2 - VY), CoordToMMs(TX2 - VX)),
+                  OffAtan2Deg(CoordToMMs(UY1 - VY), CoordToMMs(UX1 - VX)),
                   OffN0.Layer, MMsToCoord(0.2));
     end;
 end;
@@ -594,11 +644,11 @@ begin
         end;
         for Offi := 0 to OffPrims.Count - 2 do
             OffJoinTwo(OffPrims.Objects[Offi], News.Objects[Offi], OffRevs[Offi] = '1',
-                       OffPrims.Objects[Offi + 1], News.Objects[Offi + 1], OffRevs[Offi + 1] = '1');
+                       OffPrims.Objects[Offi + 1], News.Objects[Offi + 1], OffRevs[Offi + 1] = '1', OffLeft);
         if OffClosed and (OffPrims.Count > 1) then
             OffJoinTwo(OffPrims.Objects[OffPrims.Count - 1], News.Objects[News.Count - 1],
                        OffRevs[OffRevs.Count - 1] = '1',
-                       OffPrims.Objects[0], News.Objects[0], OffRevs[0] = '1');
+                       OffPrims.Objects[0], News.Objects[0], OffRevs[0] = '1', OffLeft);
     finally
         News.Free;
     end;

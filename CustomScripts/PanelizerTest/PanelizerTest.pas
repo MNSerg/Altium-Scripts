@@ -32,6 +32,7 @@ procedure TFormPTst.ButtonCancelClick(PTstSender: TObject); forward;
 procedure TFormPTst.FormPTstShow(PTstSender: TObject); forward;
 function PTstBoardOriginX(Col : Integer) : TCoord; forward;
 function PTstBoardOriginY(Row : Integer) : TCoord; forward;
+procedure PTstOffsetCopiedOutline(ABoard : IPCB_Board; Dx, Dy : TCoord; PTstALayer : TLayer; PTstOutMM : Double); forward;
 
 function PTstParseFloat(const PTstS : String; var PTstV : Double) : Boolean;
 var
@@ -168,6 +169,275 @@ begin
     Xi := X1 + PTstT * (X2 - X1);
     Yi := Y1 + PTstT * (Y2 - Y1);
     Result := True;
+end;
+
+function PTstNormDeg(PTstA : Double) : Double;
+begin
+    Result := PTstA;
+    while Result < 0 do Result := Result + 360;
+    while Result >= 360 do Result := Result - 360;
+end;
+
+function PTstAtan2Deg(PTstY, PTstX : Double) : Double;
+begin
+    if Abs(PTstX) < 1e-18 then
+    begin
+        if PTstY >= 0 then Result := 90 else Result := 270;
+        Exit;
+    end;
+    Result := ArcTan(PTstY / PTstX) * 180.0 / PTstPiValue;
+    if PTstX < 0 then Result := Result + 180;
+    Result := PTstNormDeg(Result);
+end;
+
+function PTstIntersectLC(X1, Y1, X2, Y2, Cx, Cy, R : Double; HintX, HintY : Double; var Xi, Yi : Double) : Boolean;
+var
+    Dx, Dy, Fx, Fy, A, B, C, Disc, T1, T2, Px1, Py1, Px2, Py2, D1, D2 : Double;
+begin
+    Result := False;
+    Dx := X2 - X1;
+    Dy := Y2 - Y1;
+    Fx := X1 - Cx;
+    Fy := Y1 - Cy;
+    A := Dx * Dx + Dy * Dy;
+    if A < 1e-18 then Exit;
+    B := 2 * (Fx * Dx + Fy * Dy);
+    C := Fx * Fx + Fy * Fy - R * R;
+    Disc := B * B - 4 * A * C;
+    if Disc < -1e-9 then Exit;
+    if Disc < 0 then Disc := 0;
+    Disc := Sqrt(Disc);
+    T1 := (-B - Disc) / (2 * A);
+    T2 := (-B + Disc) / (2 * A);
+    Px1 := X1 + T1 * Dx;
+    Py1 := Y1 + T1 * Dy;
+    Px2 := X1 + T2 * Dx;
+    Py2 := Y1 + T2 * Dy;
+    D1 := Sqr(Px1 - HintX) + Sqr(Py1 - HintY);
+    D2 := Sqr(Px2 - HintX) + Sqr(Py2 - HintY);
+    if D1 <= D2 then begin Xi := Px1; Yi := Py1; end else begin Xi := Px2; Yi := Py2; end;
+    Result := True;
+end;
+
+function PTstIntersectCC(C1x, C1y, R1, C2x, C2y, R2, HintX, HintY : Double; var Xi, Yi : Double) : Boolean;
+var
+    Dx, Dy, Dist, A, Hx, Hy, Rx, Ry, Px1, Py1, Px2, Py2, D1, D2 : Double;
+begin
+    Result := False;
+    Dx := C2x - C1x;
+    Dy := C2y - C1y;
+    Dist := Sqrt(Dx * Dx + Dy * Dy);
+    if Dist < 1e-12 then Exit;
+    if Dist > R1 + R2 + 1e-9 then Exit;
+    if Dist < Abs(R1 - R2) - 1e-9 then Exit;
+    A := (R1 * R1 - R2 * R2 + Dist * Dist) / (2 * Dist);
+    Hx := C1x + Dx * A / Dist;
+    Hy := C1y + Dy * A / Dist;
+    Rx := -Dy / Dist;
+    Ry := Dx / Dist;
+    D1 := R1 * R1 - A * A;
+    if D1 < 0 then D1 := 0;
+    D1 := Sqrt(D1);
+    Px1 := Hx + Rx * D1;
+    Py1 := Hy + Ry * D1;
+    Px2 := Hx - Rx * D1;
+    Py2 := Hy - Ry * D1;
+    D1 := Sqr(Px1 - HintX) + Sqr(Py1 - HintY);
+    D2 := Sqr(Px2 - HintX) + Sqr(Py2 - HintY);
+    if D1 <= D2 then begin Xi := Px1; Yi := Py1; end else begin Xi := Px2; Yi := Py2; end;
+    Result := True;
+end;
+
+procedure PTstSetTrackPt(PTstT : IPCB_Track; PTstAtStart : Boolean; PTstX, PTstY : TCoord);
+begin
+    PTstT.BeginModify;
+    if PTstAtStart then
+    begin
+        PTstT.X1 := PTstX; PTstT.Y1 := PTstY;
+    end
+    else
+    begin
+        PTstT.X2 := PTstX; PTstT.Y2 := PTstY;
+    end;
+    PTstT.EndModify;
+    PTstT.GraphicallyInvalidate;
+end;
+
+procedure PTstSetArcEnd(PTstA : IPCB_Arc; PTstAtStart : Boolean; PTstX, PTstY : TCoord);
+var
+    Ang : Double;
+begin
+    Ang := PTstAtan2Deg(CoordToMMs(PTstY - PTstA.YCenter), CoordToMMs(PTstX - PTstA.XCenter));
+    PTstA.BeginModify;
+    if PTstAtStart then PTstA.StartAngle := Ang else PTstA.EndAngle := Ang;
+    PTstA.EndModify;
+    PTstA.GraphicallyInvalidate;
+end;
+
+procedure PTstJoinOff(PTstN0, PTstN1 : IPCB_Primitive; HintX, HintY : Double);
+var
+    Xi, Yi : Double;
+    Ok : Boolean;
+    T0, T1 : IPCB_Track;
+    A0, A1 : IPCB_Arc;
+    JX, JY : TCoord;
+begin
+    if (PTstN0 = nil) or (PTstN1 = nil) then Exit;
+    Ok := False;
+    Xi := 0; Yi := 0;
+    if (PTstN0.ObjectId = eTrackObject) and (PTstN1.ObjectId = eTrackObject) then
+    begin
+        T0 := PTstN0; T1 := PTstN1;
+        Ok := PTstIntersectLL(CoordToMMs(T0.X1), CoordToMMs(T0.Y1), CoordToMMs(T0.X2), CoordToMMs(T0.Y2),
+                              CoordToMMs(T1.X1), CoordToMMs(T1.Y1), CoordToMMs(T1.X2), CoordToMMs(T1.Y2),
+                              Xi, Yi);
+    end
+    else if (PTstN0.ObjectId = eTrackObject) and (PTstN1.ObjectId = eArcObject) then
+    begin
+        T0 := PTstN0; A1 := PTstN1;
+        Ok := PTstIntersectLC(CoordToMMs(T0.X1), CoordToMMs(T0.Y1), CoordToMMs(T0.X2), CoordToMMs(T0.Y2),
+                              CoordToMMs(A1.XCenter), CoordToMMs(A1.YCenter), CoordToMMs(A1.Radius),
+                              HintX, HintY, Xi, Yi);
+    end
+    else if (PTstN0.ObjectId = eArcObject) and (PTstN1.ObjectId = eTrackObject) then
+    begin
+        A0 := PTstN0; T1 := PTstN1;
+        Ok := PTstIntersectLC(CoordToMMs(T1.X1), CoordToMMs(T1.Y1), CoordToMMs(T1.X2), CoordToMMs(T1.Y2),
+                              CoordToMMs(A0.XCenter), CoordToMMs(A0.YCenter), CoordToMMs(A0.Radius),
+                              HintX, HintY, Xi, Yi);
+    end
+    else if (PTstN0.ObjectId = eArcObject) and (PTstN1.ObjectId = eArcObject) then
+    begin
+        A0 := PTstN0; A1 := PTstN1;
+        if (Abs(A0.XCenter - A1.XCenter) < 80) and (Abs(A0.YCenter - A1.YCenter) < 80) then Exit;
+        Ok := PTstIntersectCC(CoordToMMs(A0.XCenter), CoordToMMs(A0.YCenter), CoordToMMs(A0.Radius),
+                              CoordToMMs(A1.XCenter), CoordToMMs(A1.YCenter), CoordToMMs(A1.Radius),
+                              HintX, HintY, Xi, Yi);
+    end;
+    if not Ok then Exit;
+    JX := MMsToCoord(Xi);
+    JY := MMsToCoord(Yi);
+    if PTstN0.ObjectId = eTrackObject then
+        PTstSetTrackPt(PTstN0, False, JX, JY)
+    else if PTstN0.ObjectId = eArcObject then
+        PTstSetArcEnd(PTstN0, False, JX, JY);
+    if PTstN1.ObjectId = eTrackObject then
+        PTstSetTrackPt(PTstN1, True, JX, JY)
+    else if PTstN1.ObjectId = eArcObject then
+        PTstSetArcEnd(PTstN1, True, JX, JY);
+end;
+
+procedure PTstOffsetCopiedOutline(ABoard : IPCB_Board; Dx, Dy : TCoord; PTstALayer : TLayer; PTstOutMM : Double);
+var
+    PTsti, PTstj, PTstn : Integer;
+    PTstSeg, PTstNxt : TPolySegment;
+    Area, Dxmm, Dymm, Len, Nx, Ny, Cross : Double;
+    OffLeft, Away : Boolean;
+    PTstR, CX, CY, SX, SY, EX, EY, NR : TCoord;
+    SA, EA : Double;
+    News : TStringList;
+    TN : IPCB_Track;
+    AN : IPCB_Arc;
+    HX, HY : Double;
+begin
+    if PTstOutMM <= 0 then Exit;
+    try
+        PTstn := PTstSourceBoard.BoardOutline.PointCount;
+    except
+        PTstn := 0;
+    end;
+    if PTstn < 2 then Exit;
+    Area := 0;
+    for PTsti := 0 to PTstn - 1 do
+    begin
+        PTstSeg := PTstSourceBoard.BoardOutline.Segments[PTsti];
+        PTstj := PTsti + 1;
+        if PTstj >= PTstn then PTstj := 0;
+        PTstNxt := PTstSourceBoard.BoardOutline.Segments[PTstj];
+        Area := Area + CoordToMMs(PTstSeg.vx) * CoordToMMs(PTstNxt.vy) -
+                CoordToMMs(PTstNxt.vx) * CoordToMMs(PTstSeg.vy);
+    end;
+    OffLeft := Area <= 0;
+    News := TStringList.Create;
+    try
+        for PTsti := 0 to PTstn - 1 do
+        begin
+            PTstSeg := PTstSourceBoard.BoardOutline.Segments[PTsti];
+            PTstj := PTsti + 1;
+            if PTstj >= PTstn then PTstj := 0;
+            PTstNxt := PTstSourceBoard.BoardOutline.Segments[PTstj];
+            PTstR := 0;
+            try PTstR := PTstSeg.Radius; except PTstR := 0; end;
+            CX := 0; CY := 0; SA := 0; EA := 0;
+            try
+                CX := PTstSeg.cx;
+                CY := PTstSeg.cy;
+                SA := PTstSeg.Angle1;
+                EA := PTstSeg.Angle2;
+            except
+                CX := 0;
+            end;
+            if (PTstR > 1) and ((CX <> 0) or (CY <> 0)) then
+            begin
+                SX := PTstSeg.vx;
+                SY := PTstSeg.vy;
+                EX := PTstNxt.vx;
+                EY := PTstNxt.vy;
+                Cross := CoordToMMs(EX - SX) * CoordToMMs(CY - SY) -
+                         CoordToMMs(EY - SY) * CoordToMMs(CX - SX);
+                if Cross > 0 then Away := OffLeft else Away := not OffLeft;
+                if Away then
+                    NR := PTstR + MMsToCoord(PTstOutMM)
+                else
+                    NR := PTstR - MMsToCoord(PTstOutMM);
+                if NR < 1 then
+                    News.AddObject('N', nil)
+                else
+                begin
+                    AN := PTstAddArc(ABoard, CX + Dx, CY + Dy, NR, SA, EA, PTstALayer);
+                    News.AddObject('A', AN);
+                end;
+            end
+            else
+            begin
+                Dxmm := CoordToMMs(PTstNxt.vx - PTstSeg.vx);
+                Dymm := CoordToMMs(PTstNxt.vy - PTstSeg.vy);
+                Len := Sqrt(Dxmm * Dxmm + Dymm * Dymm);
+                if Len < 0.0001 then
+                    News.AddObject('N', nil)
+                else
+                begin
+                    Nx := -Dymm / Len;
+                    Ny := Dxmm / Len;
+                    if not OffLeft then
+                    begin
+                        Nx := -Nx;
+                        Ny := -Ny;
+                    end;
+                    TN := PTstAddTrack(ABoard,
+                        PTstSeg.vx + Dx + MMsToCoord(Nx * PTstOutMM),
+                        PTstSeg.vy + Dy + MMsToCoord(Ny * PTstOutMM),
+                        PTstNxt.vx + Dx + MMsToCoord(Nx * PTstOutMM),
+                        PTstNxt.vy + Dy + MMsToCoord(Ny * PTstOutMM),
+                        PTstALayer);
+                    News.AddObject('T', TN);
+                end;
+            end;
+        end;
+        for PTsti := 0 to News.Count - 1 do
+        begin
+            PTstj := PTsti + 1;
+            if PTstj >= News.Count then PTstj := 0;
+            if News.Objects[PTsti] = nil then Continue;
+            if News.Objects[PTstj] = nil then Continue;
+            PTstSeg := PTstSourceBoard.BoardOutline.Segments[PTstj];
+            HX := CoordToMMs(PTstSeg.vx + Dx);
+            HY := CoordToMMs(PTstSeg.vy + Dy);
+            PTstJoinOff(News.Objects[PTsti], News.Objects[PTstj], HX, HY);
+        end;
+    finally
+        News.Free;
+    end;
 end;
 
 procedure PTstLoadOutlineVerts(Dx, Dy : TCoord);
@@ -449,24 +719,100 @@ begin
     Kill.Free;
 end;
 
-procedure PTstDrawAllMillPaths(ABoard : IPCB_Board; PTstALayer : TLayer);
+procedure PTstCopyOutlineWithArcs(ABoard : IPCB_Board; Col, Row : Integer; PTstALayer : TLayer);
+var
+    SrcR : TCoordRect;
+    Dx, Dy, PTstR, CX, CY : TCoord;
+    PTsti, PTstn, PTstj : Integer;
+    PTstSeg, PTstNxt : TPolySegment;
+    SA, EA : Double;
+begin
+    SrcR := PTstSourceBoard.BoardOutline.BoundingRectangle;
+    Dx := PTstBoardOriginX(Col) - SrcR.Left;
+    Dy := PTstBoardOriginY(Row) - SrcR.Bottom;
+    try
+        PTstn := PTstSourceBoard.BoardOutline.PointCount;
+    except
+        PTstn := 0;
+    end;
+    if PTstn < 2 then
+    begin
+        PTstLoadOutlineVerts(Dx, Dy);
+        PTstDrawLoadedPoly(ABoard, PTstALayer);
+        PTstOffsetCopiedOutline(ABoard, Dx, Dy, PTstALayer, PTstOffMM);
+        Exit;
+    end;
+    for PTsti := 0 to PTstn - 1 do
+    begin
+        PTstSeg := PTstSourceBoard.BoardOutline.Segments[PTsti];
+        PTstj := PTsti + 1;
+        if PTstj >= PTstn then PTstj := 0;
+        PTstNxt := PTstSourceBoard.BoardOutline.Segments[PTstj];
+        PTstR := 0;
+        try PTstR := PTstSeg.Radius; except PTstR := 0; end;
+        CX := 0; CY := 0; SA := 0; EA := 0;
+        try
+            CX := PTstSeg.cx;
+            CY := PTstSeg.cy;
+            SA := PTstSeg.Angle1;
+            EA := PTstSeg.Angle2;
+        except
+            CX := 0;
+        end;
+        if (PTstR > 1) and ((CX <> 0) or (CY <> 0)) then
+            PTstAddArc(ABoard, CX + Dx, CY + Dy, PTstR, SA, EA, PTstALayer)
+        else
+            PTstAddTrack(ABoard, PTstSeg.vx + Dx, PTstSeg.vy + Dy,
+                         PTstNxt.vx + Dx, PTstNxt.vy + Dy, PTstALayer);
+    end;
+end;
+
+function PTstBoardCornerR : TCoord;
+var
+    PTsti, PTstn : Integer;
+    PTstSeg : TPolySegment;
+    PTstR : TCoord;
+begin
+    Result := 0;
+    if PTstSourceBoard = nil then Exit;
+    try
+        PTstn := PTstSourceBoard.BoardOutline.PointCount;
+        for PTsti := 0 to PTstn - 1 do
+        begin
+            PTstSeg := PTstSourceBoard.BoardOutline.Segments[PTsti];
+            PTstR := 0;
+            try PTstR := PTstSeg.Radius; except PTstR := 0; end;
+            if PTstR > Result then Result := PTstR;
+        end;
+    except
+        Result := 0;
+    end;
+end;
+
+function PTstInOpenSlot(PTstX, PTstY : TCoord) : Boolean;
 var
     r, c : Integer;
-    L, B, Rgt, Tp, Gx, Gy : TCoord;
-    L0, B0, R1, T1 : TCoord;
+    L, B, Rgt, Tp, Gx, Gy, L0, B0, R1, T1, M : TCoord;
 begin
-    for r := 0 to PTstRows - 1 do
-        for c := 0 to PTstCols - 1 do
-            PTstDrawCellOutline(ABoard, c, r, PTstALayer);
+    Result := False;
     Gx := MMsToCoord(PTstGapX);
     Gy := MMsToCoord(PTstGapY);
+    M := 80;
+    L0 := PTstBoardOriginX(0);
+    B0 := PTstBoardOriginY(0);
+    R1 := PTstBoardOriginX(PTstCols - 1) + MMsToCoord(PTstBoardW);
+    T1 := PTstBoardOriginY(PTstRows - 1) + MMsToCoord(PTstBoardH);
     for r := 0 to PTstRows - 1 do
         for c := 0 to PTstCols - 2 do
         begin
             L := PTstBoardOriginX(c) + MMsToCoord(PTstBoardW);
             B := PTstBoardOriginY(r);
             Tp := B + MMsToCoord(PTstBoardH);
-            PTstDrawSlotV(ABoard, L, L + Gx, B, Tp, 2, PTstALayer);
+            if (PTstX > L + M) and (PTstX < L + Gx - M) and (PTstY > B + M) and (PTstY < Tp - M) then
+            begin
+                Result := True;
+                Exit;
+            end;
         end;
     for r := 0 to PTstRows - 2 do
         for c := 0 to PTstCols - 1 do
@@ -474,35 +820,160 @@ begin
             L := PTstBoardOriginX(c);
             Rgt := L + MMsToCoord(PTstBoardW);
             B := PTstBoardOriginY(r) + MMsToCoord(PTstBoardH);
+            if (PTstY > B + M) and (PTstY < B + Gy - M) and (PTstX > L + M) and (PTstX < Rgt - M) then
+            begin
+                Result := True;
+                Exit;
+            end;
+        end;
+    if (PTstY > B0 - Gy + M) and (PTstY < B0 - M) and (PTstX > L0 + M) and (PTstX < R1 - M) then
+        Result := True;
+    if (PTstY > T1 + M) and (PTstY < T1 + Gy - M) and (PTstX > L0 + M) and (PTstX < R1 - M) then
+        Result := True;
+    if (PTstX > L0 - Gx + M) and (PTstX < L0 - M) and (PTstY > B0 + M) and (PTstY < T1 - M) then
+        Result := True;
+    if (PTstX > R1 + M) and (PTstX < R1 + Gx - M) and (PTstY > B0 + M) and (PTstY < T1 - M) then
+        Result := True;
+end;
+
+procedure PTstDeleteInterior(ABoard : IPCB_Board; PTstALayer : TLayer);
+var
+    PTstIter : IPCB_BoardIterator;
+    PTstPrim : IPCB_Primitive;
+    Kill : TStringList;
+    PTsti : Integer;
+    T0 : IPCB_Track;
+    A0 : IPCB_Arc;
+    MX, MY : TCoord;
+begin
+    Kill := TStringList.Create;
+    PTstIter := ABoard.BoardIterator_Create;
+    PTstIter.AddFilter_ObjectSet(MkSet(eTrackObject, eArcObject));
+    PTstIter.AddFilter_LayerSet(MkSet(PTstALayer));
+    PTstIter.AddFilter_Method(eProcessAll);
+    PTstPrim := PTstIter.FirstPCBObject;
+    while PTstPrim <> nil do
+    begin
+        if PTstPrim.ObjectId = eTrackObject then
+        begin
+            T0 := PTstPrim;
+            MX := (T0.X1 + T0.X2) div 2;
+            MY := (T0.Y1 + T0.Y2) div 2;
+            if PTstInOpenSlot(MX, MY) then
+                Kill.AddObject('K', PTstPrim);
+        end
+        else if PTstPrim.ObjectId = eArcObject then
+        begin
+            A0 := PTstPrim;
+            if PTstInOpenSlot(A0.XCenter, A0.YCenter) then
+                Kill.AddObject('K', PTstPrim);
+        end;
+        PTstPrim := PTstIter.NextPCBObject;
+    end;
+    ABoard.BoardIterator_Destroy(PTstIter);
+    for PTsti := 0 to Kill.Count - 1 do
+    begin
+        ABoard.BeginModify;
+        ABoard.RemovePCBObject(Kill.Objects[PTsti]);
+        ABoard.EndModify;
+    end;
+    Kill.Free;
+end;
+
+procedure PTstDrawAllMillPaths(ABoard : IPCB_Board; PTstALayer : TLayer);
+var
+    r, c : Integer;
+    L, B, Rgt, Tp, Gx, Gy, CR, CRo : TCoord;
+    L0, B0, R1, T1 : TCoord;
+begin
+    { Inner = actual BoardOutline (tracks+arcs) + CAD offset outer. }
+    for r := 0 to PTstRows - 1 do
+        for c := 0 to PTstCols - 1 do
+            PTstCopyOutlineWithArcs(ABoard, c, r, PTstALayer);
+
+    Gx := MMsToCoord(PTstGapX);
+    Gy := MMsToCoord(PTstGapY);
+    CR := PTstBoardCornerR;
+    L0 := PTstBoardOriginX(0);
+    B0 := PTstBoardOriginY(0);
+    R1 := PTstBoardOriginX(PTstCols - 1) + MMsToCoord(PTstBoardW);
+    T1 := PTstBoardOriginY(PTstRows - 1) + MMsToCoord(PTstBoardH);
+
+    for r := 0 to PTstRows - 1 do
+        for c := 0 to PTstCols - 2 do
+        begin
+            L := PTstBoardOriginX(c) + MMsToCoord(PTstBoardW);
+            B := PTstBoardOriginY(r) + CR;
+            Tp := PTstBoardOriginY(r) + MMsToCoord(PTstBoardH) - CR;
+            PTstDrawSlotV(ABoard, L, L + Gx, B, Tp, 2, PTstALayer);
+        end;
+    for r := 0 to PTstRows - 2 do
+        for c := 0 to PTstCols - 1 do
+        begin
+            L := PTstBoardOriginX(c) + CR;
+            Rgt := PTstBoardOriginX(c) + MMsToCoord(PTstBoardW) - CR;
+            B := PTstBoardOriginY(r) + MMsToCoord(PTstBoardH);
             PTstDrawSlotH(ABoard, B, B + Gy, L, Rgt, 1, PTstALayer);
         end;
     for r := 0 to PTstRows - 1 do
     begin
         L := PTstBoardOriginX(0);
         Rgt := PTstBoardOriginX(PTstCols - 1) + MMsToCoord(PTstBoardW);
-        B := PTstBoardOriginY(r);
-        Tp := B + MMsToCoord(PTstBoardH);
+        B := PTstBoardOriginY(r) + CR;
+        Tp := PTstBoardOriginY(r) + MMsToCoord(PTstBoardH) - CR;
         PTstDrawSlotV(ABoard, L - Gx, L, B, Tp, 2, PTstALayer);
         PTstDrawSlotV(ABoard, Rgt, Rgt + Gx, B, Tp, 2, PTstALayer);
     end;
     for c := 0 to PTstCols - 1 do
     begin
-        L := PTstBoardOriginX(c);
-        Rgt := L + MMsToCoord(PTstBoardW);
+        L := PTstBoardOriginX(c) + CR;
+        Rgt := PTstBoardOriginX(c) + MMsToCoord(PTstBoardW) - CR;
         B := PTstBoardOriginY(0);
         Tp := PTstBoardOriginY(PTstRows - 1) + MMsToCoord(PTstBoardH);
         PTstDrawSlotH(ABoard, B - Gy, B, L, Rgt, 1, PTstALayer);
         PTstDrawSlotH(ABoard, Tp, Tp + Gy, L, Rgt, 1, PTstALayer);
     end;
-    L0 := PTstBoardOriginX(0);
-    B0 := PTstBoardOriginY(0);
-    R1 := PTstBoardOriginX(PTstCols - 1) + MMsToCoord(PTstBoardW);
-    T1 := PTstBoardOriginY(PTstRows - 1) + MMsToCoord(PTstBoardH);
-    PTstAddArc(ABoard, L0, B0, Gx, 180, 270, PTstALayer);
-    PTstAddArc(ABoard, R1, B0, Gx, 270, 0, PTstALayer);
-    PTstAddArc(ABoard, R1, T1, Gx, 0, 90, PTstALayer);
-    PTstAddArc(ABoard, L0, T1, Gx, 90, 180, PTstALayer);
+
+    for c := 0 to PTstCols - 2 do
+    begin
+        L := PTstBoardOriginX(c) + MMsToCoord(PTstBoardW);
+        PTstAddTrack(ABoard, L, B0 - Gy, L, B0, PTstALayer);
+        PTstAddTrack(ABoard, L + Gx, B0 - Gy, L + Gx, B0, PTstALayer);
+        PTstAddTrack(ABoard, L, T1, L, T1 + Gy, PTstALayer);
+        PTstAddTrack(ABoard, L + Gx, T1, L + Gx, T1 + Gy, PTstALayer);
+    end;
+    for r := 0 to PTstRows - 2 do
+    begin
+        B := PTstBoardOriginY(r) + MMsToCoord(PTstBoardH);
+        PTstAddTrack(ABoard, L0 - Gx, B, L0, B, PTstALayer);
+        PTstAddTrack(ABoard, L0 - Gx, B + Gy, L0, B + Gy, PTstALayer);
+        PTstAddTrack(ABoard, R1, B, R1 + Gx, B, PTstALayer);
+        PTstAddTrack(ABoard, R1, B + Gy, R1 + Gx, B + Gy, PTstALayer);
+    end;
+
+    PTstAddTrack(ABoard, L0 + CR, B0 - Gy, R1 - CR, B0 - Gy, PTstALayer);
+    PTstAddTrack(ABoard, L0 + CR, T1 + Gy, R1 - CR, T1 + Gy, PTstALayer);
+    PTstAddTrack(ABoard, L0 - Gx, B0 + CR, L0 - Gx, T1 - CR, PTstALayer);
+    PTstAddTrack(ABoard, R1 + Gx, B0 + CR, R1 + Gx, T1 - CR, PTstALayer);
+
+    if CR > 0 then
+    begin
+        CRo := CR + Gx;
+        PTstAddArc(ABoard, L0 + CR, B0 + CR, CRo, 180, 270, PTstALayer);
+        PTstAddArc(ABoard, R1 - CR, B0 + CR, CRo, 270, 0, PTstALayer);
+        PTstAddArc(ABoard, R1 - CR, T1 - CR, CRo, 0, 90, PTstALayer);
+        PTstAddArc(ABoard, L0 + CR, T1 - CR, CRo, 90, 180, PTstALayer);
+    end
+    else
+    begin
+        PTstAddArc(ABoard, L0, B0, Gx, 180, 270, PTstALayer);
+        PTstAddArc(ABoard, R1, B0, Gx, 270, 0, PTstALayer);
+        PTstAddArc(ABoard, R1, T1, Gx, 0, 90, PTstALayer);
+        PTstAddArc(ABoard, L0, T1, Gx, 90, 180, PTstALayer);
+    end;
+
     PTstDeleteCoincident(ABoard, PTstALayer);
+    PTstDeleteInterior(ABoard, PTstALayer);
 end;
 
 procedure PTstDrawCommonOuterContour(ABoard : IPCB_Board; PTstALayer : TLayer);
