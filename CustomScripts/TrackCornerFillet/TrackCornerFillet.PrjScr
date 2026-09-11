@@ -1,0 +1,8 @@
+[Design]
+Version=1.0
+
+[Document1]
+DocumentPath=TrackCornerFillet.pas
+
+[Generic_ScriptingSystem]
+StartProcName=TrackCornerFillet.pas>StartTrackCornerFillet

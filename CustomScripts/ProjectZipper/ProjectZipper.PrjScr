@@ -1,0 +1,8 @@
+[Design]
+Version=1.0
+
+[Document1]
+DocumentPath=ProjectZipper.pas
+
+[Generic_ScriptingSystem]
+StartProcName=ProjectZipper.pas>StartProjectZipper
