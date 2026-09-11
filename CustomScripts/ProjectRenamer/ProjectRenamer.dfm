@@ -3,7 +3,7 @@ object FormRen: TFormRen
   Top = 0
   BorderStyle = bsDialog
   Caption = #1055#1077#1088#1077#1080#1084#1077#1085#1086#1074#1072#1085#1080#1077' '#1087#1088#1086#1077#1082#1090#1072
-  ClientHeight = 400
+  ClientHeight = 420
   ClientWidth = 760
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
@@ -87,7 +87,7 @@ object FormRen: TFormRen
     Font.Style = []
     ParentFont = False
     Left = 340
-    Top = 60
+    Top = 56
     Width = 400
     Height = 13
     Caption = #1058#1077#1082#1091#1097#1077#1077' '#1080#1084#1103':'
@@ -100,11 +100,43 @@ object FormRen: TFormRen
     Font.Style = []
     ParentFont = False
     Left = 340
-    Top = 76
+    Top = 72
     Width = 396
     Height = 21
     TabOrder = 2
     ReadOnly = True
+  end
+  object RenRadioInc: TRadioButton
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
+    Left = 340
+    Top = 100
+    Width = 396
+    Height = 17
+    Caption = #1059#1074#1077#1083#1080#1095#1080#1090#1100' '#1089#1091#1092#1092#1080#1082#1089' vN / VN'
+    Checked = True
+    TabOrder = 3
+    TabStop = True
+    OnClick = RenRadioIncClick
+  end
+  object RenRadioFull: TRadioButton
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -12
+    Font.Name = 'Segoe UI'
+    Font.Style = []
+    ParentFont = False
+    Left = 340
+    Top = 120
+    Width = 396
+    Height = 17
+    Caption = #1055#1086#1083#1085#1072#1103' '#1079#1072#1084#1077#1085#1072' '#1080#1084#1077#1085#1080
+    TabOrder = 4
+    OnClick = RenRadioFullClick
   end
   object RenLabelNew: TLabel
     Font.Charset = DEFAULT_CHARSET
@@ -114,7 +146,7 @@ object FormRen: TFormRen
     Font.Style = []
     ParentFont = False
     Left = 340
-    Top = 108
+    Top = 144
     Width = 400
     Height = 13
     Caption = #1053#1086#1074#1086#1077' '#1080#1084#1103':'
@@ -127,54 +159,26 @@ object FormRen: TFormRen
     Font.Style = []
     ParentFont = False
     Left = 340
-    Top = 124
+    Top = 160
     Width = 396
     Height = 21
-    TabOrder = 3
-  end
-  object RenCheckDocs: TCheckBox
-    Font.Charset = DEFAULT_CHARSET
-    Font.Color = clWindowText
-    Font.Height = -12
-    Font.Name = 'Segoe UI'
-    Font.Style = []
-    ParentFont = False
-    Left = 340
-    Top = 156
-    Width = 396
-    Height = 17
-    Caption = #1055#1077#1088#1077#1080#1084#1077#1085#1086#1074#1072#1090#1100' '#1076#1086#1082#1091#1084#1077#1085#1090#1099' '#1087#1088#1086#1077#1082#1090#1072
-    Checked = True
-    State = cbChecked
-    TabOrder = 4
-  end
-  object RenCheckFolder: TCheckBox
-    Font.Charset = DEFAULT_CHARSET
-    Font.Color = clWindowText
-    Font.Height = -12
-    Font.Name = 'Segoe UI'
-    Font.Style = []
-    ParentFont = False
-    Left = 340
-    Top = 178
-    Width = 396
-    Height = 17
-    Caption = #1047#1072#1084#1077#1085#1080#1090#1100' '#1080#1084#1103' '#1074#1086' '#1074#1089#1077#1093' '#1092#1072#1081#1083#1072#1093' '#1087#1072#1087#1082#1080' '#1087#1088#1086#1077#1082#1090#1072
     TabOrder = 5
+    OnChange = RenEditNewChange
   end
-  object RenCheckOld: TCheckBox
+  object RenLabelPreview: TLabel
     Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
     Font.Height = -12
     Font.Name = 'Segoe UI'
     Font.Style = []
     ParentFont = False
-    Left = 356
-    Top = 200
-    Width = 380
-    Height = 17
-    Caption = #1074#1082#1083#1102#1095#1072#1103' OLD'
-    TabOrder = 6
+    Left = 340
+    Top = 188
+    Width = 396
+    Height = 32
+    AutoSize = False
+    Caption = #1041#1091#1076#1077#1090':'
+    WordWrap = True
   end
   object RenLabelHint: TLabel
     Font.Charset = DEFAULT_CHARSET
@@ -188,7 +192,7 @@ object FormRen: TFormRen
     Width = 396
     Height = 72
     AutoSize = False
-    Caption = #1047#1072#1082#1088#1086#1081#1090#1077' '#1080' '#1089#1086#1093#1088#1072#1085#1080#1090#1077' '#1076#1086#1082#1091#1084#1077#1085#1090#1099'. '#1055#1086#1089#1083#1077' '#1087#1077#1088#1077#1080#1084#1077#1085#1086#1074#1072#1085#1080#1103' Altium '#1084#1086#1078#1077#1090' '#1087#1086#1090#1088#1077#1073#1086#1074#1072#1090#1100' '#1079#1072#1085#1086#1074#1086' '#1086#1090#1082#1088#1099#1090#1100' '#1087#1088#1086#1077#1082#1090'. '#1057#1085#1072#1095#1072#1083#1072' '#1089#1076#1077#1083#1072#1081#1090#1077' '#1072#1088#1093#1080#1074' ProjectZipper.'
+    Caption = #1051#1080#1089#1090#1099': NewStem_ShN.SchDoc. '#1058#1086#1083#1100#1082#1086' '#1076#1086#1082#1091#1084#1077#1085#1090#1099' '#1087#1088#1086#1077#1082#1090#1072'. '#1053#1077' History, '#1085#1077' Gerbers, '#1085#1077' OLD. '#1057#1086#1093#1088#1072#1085#1080#1090#1077' '#1080' '#1079#1072#1082#1088#1086#1081#1090#1077'. '#1040#1088#1093#1080#1074' - ProjectZipper.'
     WordWrap = True
   end
   object RenLabelProg: TLabel
@@ -212,12 +216,12 @@ object FormRen: TFormRen
     Font.Style = []
     ParentFont = False
     Left = 440
-    Top = 350
+    Top = 370
     Width = 90
     Height = 25
     Caption = 'OK'
     Default = True
-    TabOrder = 7
+    TabOrder = 6
     OnClick = RenButtonOKClick
   end
   object ButtonCancel: TButton
@@ -228,12 +232,12 @@ object FormRen: TFormRen
     Font.Style = []
     ParentFont = False
     Left = 550
-    Top = 350
+    Top = 370
     Width = 90
     Height = 25
     Cancel = True
     Caption = #1054#1090#1084#1077#1085#1072
-    TabOrder = 8
+    TabOrder = 7
     OnClick = RenButtonCancelClick
   end
   object RenLabelErrPrj: TLabel
@@ -339,5 +343,21 @@ object FormRen: TFormRen
     Height = 1
     Visible = False
     Caption = #1060#1072#1081#1083' '#1087#1088#1086#1077#1082#1090#1072' '#1085#1077' '#1085#1072#1081#1076#1077#1085'.'
+  end
+  object RenLabelErrNoVN: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1053#1077#1090' '#1089#1091#1092#1092#1080#1082#1089#1072' vN / VN '#1074' '#1080#1084#1077#1085#1080' '#1087#1088#1086#1077#1082#1090#1072'. '#1042#1099#1073#1077#1088#1080#1090#1077' '#1087#1086#1083#1085#1091#1102' '#1079#1072#1084#1077#1085#1091' '#1080#1084#1077#1085#1080'.'
+  end
+  object RenLabelWill: TLabel
+    Left = 0
+    Top = 0
+    Width = 1
+    Height = 1
+    Visible = False
+    Caption = #1041#1091#1076#1077#1090':'
   end
 end

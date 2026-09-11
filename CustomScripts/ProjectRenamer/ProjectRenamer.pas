@@ -1,17 +1,17 @@
 ﻿{..............................................................................}
 { ProjectRenamer.pas                                                            }
-{ Rename the focused Altium project file and matching documents on disk.        }
-{ Prefix Ren* (no Zip* identifiers). No OLE, no PChar, no Val, no rfReplaceAll. }
+{ Rename focused project + DM_LogicalDocuments. Modes: increment trailing vN/VN }
+{ or full new stem. Sheets always NewStem_ShN. Do not patch sheet symbols.      }
+{ Prefix Ren*. No OLE, no PChar, no Val, no rfReplaceAll.                       }
 {..............................................................................}
 
 var
-    RenPrjFile  : String;
-    RenPrjDir   : String;
-    RenOldName  : String;
-    RenNewName  : String;
-    RenDoDocs   : Boolean;
-    RenDoFolder : Boolean;
-    RenDoOld    : Boolean;
+    RenPrjFile     : String;
+    RenPrjDir      : String;
+    RenOldName     : String;
+    RenNewName     : String;
+    RenIncMode     : Boolean;
+    RenPreviewBusy : Boolean;
 
 procedure StartProjectRenamer; forward;
 procedure _StartProjectRenamer; forward;
@@ -19,6 +19,10 @@ procedure TFormRen.RenButtonOKClick(RenSender: TObject); forward;
 procedure TFormRen.RenButtonCancelClick(RenSender: TObject); forward;
 procedure TFormRen.FormRenShow(RenSender: TObject); forward;
 procedure TFormRen.RenBtnBrowseClick(RenSender: TObject); forward;
+procedure TFormRen.RenRadioIncClick(RenSender: TObject); forward;
+procedure TFormRen.RenRadioFullClick(RenSender: TObject); forward;
+procedure TFormRen.RenEditNewChange(RenSender: TObject); forward;
+procedure RenUpdatePreview; forward;
 procedure RenDoRename; forward;
 
 procedure RenShowBox(const RenMsg : String);
@@ -111,6 +115,50 @@ begin
     Result := True;
 end;
 
+{ Trailing v/V + integer on the stem. Widget_v2 -> prefix Widget_, letter v, N=2. }
+function RenParseVN(const RenStem : String; var RenPrefix, RenLetter : String;
+                    var RenN : Integer) : Boolean;
+var
+    RenLen, RenI, RenJ, RenDigits : Integer;
+    RenCh : String;
+begin
+    Result := False;
+    RenPrefix := '';
+    RenLetter := '';
+    RenN := 0;
+    RenLen := Length(RenStem);
+    if RenLen < 2 then Exit;
+    RenI := RenLen;
+    RenDigits := 0;
+    while (RenI >= 1) and (RenStem[RenI] >= '0') and (RenStem[RenI] <= '9') do
+    begin
+        Inc(RenDigits);
+        RenI := RenI - 1;
+    end;
+    if (RenDigits < 1) or (RenDigits > 9) then Exit;
+    if RenI < 1 then Exit;
+    RenCh := Copy(RenStem, RenI, 1);
+    if (RenCh <> 'v') and (RenCh <> 'V') then Exit;
+    RenPrefix := Copy(RenStem, 1, RenI - 1);
+    RenLetter := RenCh;
+    RenN := 0;
+    for RenJ := RenI + 1 to RenLen do
+        RenN := RenN * 10 + (Ord(RenStem[RenJ]) - Ord('0'));
+    Result := True;
+end;
+
+function RenTryIncStem(const RenOld : String; var RenNew : String) : Boolean;
+var
+    RenPrefix, RenLetter : String;
+    RenN : Integer;
+begin
+    Result := False;
+    RenNew := '';
+    if not RenParseVN(RenOld, RenPrefix, RenLetter, RenN) then Exit;
+    RenNew := RenPrefix + RenLetter + IntToStr(RenN + 1);
+    Result := True;
+end;
+
 function RenIndexOfCI(RenL : TStringList; const RenS : String) : Integer;
 var
     Reni : Integer;
@@ -127,119 +175,160 @@ begin
         end;
 end;
 
-function RenPathHasFolder(const RenRel, RenName : String) : Boolean;
+function RenIsSchDoc(const RenKind, RenPath : String) : Boolean;
 var
-    RenU, RenN : String;
+    RenK, RenE : String;
 begin
-    RenU := UpperCase(RenNormSlash(RenRel));
-    RenN := UpperCase(RenName);
-    Result := (Copy(RenU, 1, Length(RenN) + 1) = RenN + '\') or
-              (RenU = RenN) or
-              (Pos('\' + RenN + '\', RenU) > 0) or
-              (Copy(RenU, Length(RenU) - Length(RenN), Length(RenN) + 1) = '\' + RenN);
+    RenK := UpperCase(RenKind);
+    RenE := UpperCase(ExtractFileExt(RenPath));
+    Result := (RenK = 'SCH') or (RenK = 'SCHDOC') or (RenE = '.SCHDOC');
 end;
 
-function RenEndsWithOld(const RenRel : String) : Boolean;
+function RenIsPcbDoc(const RenKind, RenPath : String) : Boolean;
 var
-    RenU : String;
+    RenK, RenE : String;
 begin
-    RenU := UpperCase(RenNormSlash(RenRel));
-    Result := (Copy(RenU, 1, 4) = 'OLD\') or (RenU = 'OLD') or
-              (Pos('\OLD\', RenU) > 0);
+    RenK := UpperCase(RenKind);
+    RenE := UpperCase(ExtractFileExt(RenPath));
+    Result := (RenK = 'PCB') or (RenK = 'PCBDOC') or (RenE = '.PCBDOC');
 end;
 
-function RenIsPrjBackupZip(const RenPath : String) : Boolean;
+function RenIsOutJob(const RenKind, RenPath : String) : Boolean;
 var
-    RenU : String;
+    RenK, RenE : String;
 begin
-    RenU := UpperCase(RenPath);
-    Result := (Pos('.PRJPCB.ZIP', RenU) > 0) or (Pos('.PRJSCH.ZIP', RenU) > 0) or
-              (Pos('.PRJSCR.ZIP', RenU) > 0);
+    RenK := UpperCase(RenKind);
+    RenE := UpperCase(ExtractFileExt(RenPath));
+    Result := (RenK = 'OUTJOB') or (RenE = '.OUTJOB');
 end;
 
-function RenSkipRel(const RenRel : String) : Boolean;
-begin
-    Result := True;
-    if RenPathHasFolder(RenRel, 'History') then Exit;
-    if RenPathHasFolder(RenRel, '__Previews') then Exit;
-    if RenIsPrjBackupZip(RenRel) then Exit;
-    if (not RenDoOld) and RenEndsWithOld(RenRel) then Exit;
-    Result := False;
-end;
-
-function RenHasStem(const RenFileName, RenStem : String) : Boolean;
-begin
-    Result := False;
-    if (RenFileName = '') or (RenStem = '') then Exit;
-    Result := Pos(UpperCase(RenStem), UpperCase(ExtractFileName(RenFileName))) > 0;
-end;
-
-function RenMapFileName(const RenFileName, RenOld, RenNew : String) : String;
-var
-    RenBase, RenExt : String;
-begin
-    RenExt := ExtractFileExt(RenFileName);
-    RenBase := ChangeFileExt(ExtractFileName(RenFileName), '');
-    if Pos(UpperCase(RenOld), UpperCase(RenBase)) > 0 then
-        RenBase := RenReplaceCI(RenBase, RenOld, RenNew);
-    Result := RenBase + RenExt;
-end;
-
-function RenIsTextExt(const RenPath : String) : Boolean;
+function RenIsPatchExt(const RenPath : String) : Boolean;
 var
     RenE : String;
 begin
     RenE := UpperCase(ExtractFileExt(RenPath));
     Result := (RenE = '.PRJPCB') or (RenE = '.PRJSCH') or (RenE = '.PRJSCR') or
-              (RenE = '.PRJLIB') or (RenE = '.PRJGRP') or (RenE = '.PRJMBD') or
-              (RenE = '.OUTJOB') or (RenE = '.SCHDOC') or (RenE = '.SCHLIB') or
-              (RenE = '.SCHDOT') or (RenE = '.TXT') or (RenE = '.CSV') or
-              (RenE = '.XML') or (RenE = '.INI') or (RenE = '.CFG') or
-              (RenE = '.HARNESS');
+              (RenE = '.OUTJOB');
 end;
 
-function RenFileLooksText(const RenPath : String) : Boolean;
+function RenOtherTag(const RenKind, RenPath : String) : String;
 var
-    RenF : File;
-    RenChunk : String;
-    Reni, RenN : Integer;
+    RenK, RenE : String;
 begin
-    Result := False;
-    if not FileExists(RenPath) then Exit;
-    if not RenIsTextExt(RenPath) then Exit;
-    AssignFile(RenF, RenPath);
-    try
-        Reset(RenF, 1);
-        RenN := FileSize(RenF);
-        if RenN <= 0 then
-        begin
-            Result := True;
-            CloseFile(RenF);
-            Exit;
-        end;
-        if RenN > 2000000 then
-        begin
-            CloseFile(RenF);
-            Exit;
-        end;
-        RenChunk := 'X';
-        Reni := 0;
-        while (Reni < 256) and (not Eof(RenF)) do
-        begin
-            BlockRead(RenF, RenChunk[1], 1);
-            if RenChunk[1] = #0 then
-            begin
-                CloseFile(RenF);
-                Exit;
-            end;
-            Inc(Reni);
-        end;
-        CloseFile(RenF);
-        Result := True;
-    except
-        try CloseFile(RenF); except end;
-        Result := False;
+    RenK := UpperCase(RenKind);
+    RenE := UpperCase(ExtractFileExt(RenPath));
+    if (RenK = 'OUTJOB') or (RenE = '.OUTJOB') then Result := 'OutJob'
+    else if (RenK = 'SCHLIB') or (RenE = '.SCHLIB') then Result := 'SchLib'
+    else if (RenK = 'PCBLIB') or (RenE = '.PCBLIB') then Result := 'PcbLib'
+    else if (RenK = 'HARNESS') or (RenE = '.HARNESS') then Result := 'Harness'
+    else if Length(RenE) > 1 then Result := Copy(RenE, 2, Length(RenE))
+    else Result := 'Doc';
+end;
+
+function RenCountClass(RenPaths, RenKinds : TStringList; const RenClass : String) : Integer;
+var
+    Reni : Integer;
+    RenKind, RenPath : String;
+begin
+    Result := 0;
+    for Reni := 0 to RenPaths.Count - 1 do
+    begin
+        RenPath := RenPaths.Strings[Reni];
+        RenKind := RenKinds.Strings[Reni];
+        if (RenClass = 'SCH') and RenIsSchDoc(RenKind, RenPath) then Inc(Result)
+        else if (RenClass = 'PCB') and RenIsPcbDoc(RenKind, RenPath) then Inc(Result);
     end;
+end;
+
+function RenCountTag(RenPaths, RenKinds : TStringList; const RenTag : String) : Integer;
+var
+    Reni : Integer;
+    RenKind, RenPath : String;
+begin
+    Result := 0;
+    for Reni := 0 to RenPaths.Count - 1 do
+    begin
+        RenPath := RenPaths.Strings[Reni];
+        RenKind := RenKinds.Strings[Reni];
+        if RenIsSchDoc(RenKind, RenPath) then Continue;
+        if RenIsPcbDoc(RenKind, RenPath) then Continue;
+        if RenOtherTag(RenKind, RenPath) = RenTag then Inc(Result);
+    end;
+end;
+
+function RenTagIndexUpTo(RenPaths, RenKinds : TStringList; RenUpTo : Integer;
+                         const RenTag : String) : Integer;
+var
+    Reni : Integer;
+    RenKind, RenPath : String;
+begin
+    Result := 0;
+    for Reni := 0 to RenUpTo do
+    begin
+        RenPath := RenPaths.Strings[Reni];
+        RenKind := RenKinds.Strings[Reni];
+        if RenIsSchDoc(RenKind, RenPath) then Continue;
+        if RenIsPcbDoc(RenKind, RenPath) then Continue;
+        if RenOtherTag(RenKind, RenPath) = RenTag then Inc(Result);
+    end;
+end;
+
+function RenTakeName(RenUsed : TStringList; const RenCandidate : String) : String;
+var
+    RenI : Integer;
+    RenBase, RenExt, RenTry : String;
+begin
+    if RenIndexOfCI(RenUsed, RenCandidate) < 0 then
+    begin
+        RenUsed.Add(RenCandidate);
+        Result := RenCandidate;
+        Exit;
+    end;
+    RenExt := ExtractFileExt(RenCandidate);
+    RenBase := ChangeFileExt(RenCandidate, '');
+    RenI := 2;
+    RenTry := RenBase + '_' + IntToStr(RenI) + RenExt;
+    while (RenIndexOfCI(RenUsed, RenTry) >= 0) and (RenI < 999) do
+    begin
+        Inc(RenI);
+        RenTry := RenBase + '_' + IntToStr(RenI) + RenExt;
+    end;
+    RenUsed.Add(RenTry);
+    Result := RenTry;
+end;
+
+function RenNewDocName(const RenPath, RenKind, RenStem : String;
+                       RenPaths, RenKinds, RenUsed : TStringList;
+                       RenIdx, RenSchN, RenPcbN, RenSchTotal, RenPcbTotal : Integer) : String;
+var
+    RenExt, RenTag, RenCand : String;
+    RenTagTotal, RenTagN : Integer;
+begin
+    RenExt := ExtractFileExt(RenPath);
+    if RenIsSchDoc(RenKind, RenPath) then
+        RenCand := RenStem + '_Sh' + IntToStr(RenSchN) + RenExt
+    else if RenIsPcbDoc(RenKind, RenPath) then
+    begin
+        if RenPcbTotal <= 1 then
+            RenCand := RenStem + RenExt
+        else
+            RenCand := RenStem + '_Pcb' + IntToStr(RenPcbN) + RenExt;
+    end
+    else
+    begin
+        RenTag := RenOtherTag(RenKind, RenPath);
+        RenTagTotal := RenCountTag(RenPaths, RenKinds, RenTag);
+        RenTagN := RenTagIndexUpTo(RenPaths, RenKinds, RenIdx, RenTag);
+        if RenTagTotal <= 1 then
+            RenCand := RenStem + RenExt
+        else
+            RenCand := RenStem + '_' + RenTag + IntToStr(RenTagN) + RenExt;
+        if RenIndexOfCI(RenUsed, RenCand) >= 0 then
+            RenCand := RenStem + '_' + RenTag + RenExt;
+        if RenIndexOfCI(RenUsed, RenCand) >= 0 then
+            RenCand := RenStem + '_' + ChangeFileExt(ExtractFileName(RenPath), '') + RenExt;
+    end;
+    Result := RenTakeName(RenUsed, RenCand);
 end;
 
 procedure RenAddPair(RenOldL, RenNewL : TStringList; const RenAOld, RenANew : String);
@@ -306,6 +395,67 @@ begin
     try
         Result := RenameFile(RenAOld, RenANew);
     except
+        Result := False;
+    end;
+end;
+
+function RenTempName(const RenPath : String; RenI : Integer) : String;
+var
+    RenDir, RenExt : String;
+    RenN : Integer;
+begin
+    RenDir := ExtractFilePath(RenPath);
+    RenExt := ExtractFileExt(RenPath);
+    RenN := RenI;
+    Result := RenDir + '__ren' + IntToStr(RenN) + RenExt;
+    while FileExists(Result) do
+    begin
+        Inc(RenN);
+        Result := RenDir + '__ren' + IntToStr(RenN) + RenExt;
+        if RenN > RenI + 500 then Exit;
+    end;
+end;
+
+function RenFileLooksText(const RenPath : String) : Boolean;
+var
+    RenF : File;
+    RenChunk : String;
+    Reni, RenN : Integer;
+begin
+    Result := False;
+    if not FileExists(RenPath) then Exit;
+    if not RenIsPatchExt(RenPath) then Exit;
+    AssignFile(RenF, RenPath);
+    try
+        Reset(RenF, 1);
+        RenN := FileSize(RenF);
+        if RenN <= 0 then
+        begin
+            Result := True;
+            CloseFile(RenF);
+            Exit;
+        end;
+        if RenN > 2000000 then
+        begin
+            CloseFile(RenF);
+            Exit;
+        end;
+        RenChunk := 'X';
+        Reni := 0;
+        while (Reni < 256) and (not Eof(RenF)) do
+        begin
+            BlockRead(RenF, RenChunk[1], 1);
+            if RenChunk[1] = #0 then
+            begin
+                CloseFile(RenF);
+                Exit;
+            end;
+            Inc(Reni);
+        end;
+        CloseFile(RenF);
+        Result := True;
+    except
+        try CloseFile(RenF); except end;
         Result := False;
     end;
 end;
@@ -447,77 +597,41 @@ begin
         Result := Result + sLineBreak + '... (' + IntToStr(RenL.Count) + ')';
 end;
 
-procedure RenCollectFolder(RenOldL, RenNewL : TStringList);
+procedure RenUpdatePreview;
 var
-    RenFiles : TStringList;
-    Reni : Integer;
-    RenPath, RenRel, RenNewPath, RenDir : String;
+    RenOld, RenNew : String;
 begin
-    if (not RenDoFolder) or (RenPrjDir = '') then Exit;
-    RenFiles := TStringList.Create;
+    if RenPreviewBusy then Exit;
+    RenPreviewBusy := True;
     try
-        try
-            GetAllFilePathsMatchingMask(RenFiles, RenEnsureSlash(RenPrjDir), '*.*', True);
-        except
-            Exit;
-        end;
-        if RenFiles.Count = 0 then Exit;
-        for Reni := 0 to RenFiles.Count - 1 do
+        RenOld := RenTrimName(RenEditOld.Text);
+        if RenRadioInc.Checked then
         begin
-            RenPath := RenNormSlash(RenFiles.Strings[Reni]);
-            RenRel := ExtractRelativePath(RenEnsureSlash(RenPrjDir), RenPath);
-            if (RenRel = cFilename_CurrentDir) or (RenRel = cFilename_ParentDir) then
-                Continue;
-            if RenSkipRel(RenRel) then Continue;
-            if not RenHasStem(RenPath, RenOldName) then Continue;
-            RenDir := ExtractFilePath(RenPath);
-            RenNewPath := RenDir + RenMapFileName(RenPath, RenOldName, RenNewName);
-            RenAddPair(RenOldL, RenNewL, RenPath, RenNewPath);
+            try RenEditNew.ReadOnly := True; except end;
+            if RenTryIncStem(RenOld, RenNew) then
+            begin
+                if RenEditNew.Text <> RenNew then
+                    RenEditNew.Text := RenNew;
+                RenLabelPreview.Caption := RenLabelWill.Caption + ' ' + RenOld + ' -> ' + RenNew;
+            end
+            else
+            begin
+                if RenEditNew.Text <> '' then
+                    RenEditNew.Text := '';
+                RenLabelPreview.Caption := RenLabelErrNoVN.Caption;
+            end;
+        end
+        else
+        begin
+            try RenEditNew.ReadOnly := False; except end;
+            RenNew := RenTrimName(RenEditNew.Text);
+            if RenNew <> '' then
+                RenLabelPreview.Caption := RenLabelWill.Caption + ' ' + RenOld + ' -> ' + RenNew
+            else
+                RenLabelPreview.Caption := RenLabelWill.Caption;
         end;
     finally
-        RenFiles.Free;
-    end;
-end;
-
-procedure RenCollectRewriteTargets(RenTargets, RenOldL, RenNewL : TStringList);
-var
-    RenFiles : TStringList;
-    Reni, RenIdx : Integer;
-    RenPath, RenRel : String;
-begin
-    if RenPrjFile <> '' then
-        if RenIndexOfCI(RenTargets, RenPrjFile) < 0 then
-            RenTargets.Add(RenPrjFile);
-    for Reni := 0 to RenNewL.Count - 1 do
-        if RenIndexOfCI(RenTargets, RenNewL.Strings[Reni]) < 0 then
-            RenTargets.Add(RenNewL.Strings[Reni]);
-    for Reni := 0 to RenOldL.Count - 1 do
-        if RenIndexOfCI(RenTargets, RenOldL.Strings[Reni]) < 0 then
-            RenTargets.Add(RenOldL.Strings[Reni]);
-    if RenPrjDir = '' then Exit;
-    RenFiles := TStringList.Create;
-    try
-        try
-            GetAllFilePathsMatchingMask(RenFiles, RenEnsureSlash(RenPrjDir), '*.*', True);
-        except
-            Exit;
-        end;
-        for Reni := 0 to RenFiles.Count - 1 do
-        begin
-            RenPath := RenNormSlash(RenFiles.Strings[Reni]);
-            RenRel := ExtractRelativePath(RenEnsureSlash(RenPrjDir), RenPath);
-            if (RenRel = cFilename_CurrentDir) or (RenRel = cFilename_ParentDir) then
-                Continue;
-            if RenSkipRel(RenRel) then Continue;
-            if not RenIsTextExt(RenPath) then Continue;
-            RenIdx := RenIndexOfCI(RenOldL, RenPath);
-            if RenIdx >= 0 then
-                RenPath := RenNewL.Strings[RenIdx];
-            if RenIndexOfCI(RenTargets, RenPath) < 0 then
-                RenTargets.Add(RenPath);
-        end;
-    finally
-        RenFiles.Free;
+        RenPreviewBusy := False;
     end;
 end;
 
@@ -526,63 +640,91 @@ var
     RenWS   : IWorkspace;
     RenPrj  : IProject;
     RenDoc  : IDocument;
-    RenOldL, RenNewL, RenMapOld, RenMapNew, RenOkL, RenErrL, RenTargets : TStringList;
-    Reni, RenN, RenIdx : Integer;
-    RenPath, RenNewPath, RenDir, RenNewPrj, RenMsg : String;
+    RenPaths, RenKinds, RenUsed, RenOldL, RenNewL, RenMapOld, RenMapNew : TStringList;
+    RenOkL, RenErrL, RenTemps : TStringList;
+    Reni, RenN, RenSchTotal, RenPcbTotal, RenSchN, RenPcbN : Integer;
+    RenPath, RenKind, RenNewFn, RenNewPath, RenNewPrj, RenTmp, RenMsg : String;
     RenOk : Boolean;
 begin
+    RenPaths := TStringList.Create;
+    RenKinds := TStringList.Create;
+    RenUsed := TStringList.Create;
     RenOldL := TStringList.Create;
     RenNewL := TStringList.Create;
     RenMapOld := TStringList.Create;
     RenMapNew := TStringList.Create;
     RenOkL := TStringList.Create;
     RenErrL := TStringList.Create;
-    RenTargets := TStringList.Create;
+    RenTemps := TStringList.Create;
     try
         RenNewPrj := ExtractFilePath(RenPrjFile) + RenNewName + ExtractFileExt(RenPrjFile);
+        RenUsed.Add(ExtractFileName(RenNewPrj));
         RenAddPair(RenOldL, RenNewL, RenNormSlash(RenPrjFile), RenNormSlash(RenNewPrj));
         RenAddPair(RenMapOld, RenMapNew, RenNormSlash(RenPrjFile), RenNormSlash(RenNewPrj));
 
-        if RenDoDocs then
-        begin
-            RenWS := GetWorkspace;
+        RenWS := GetWorkspace;
+        RenPrj := nil;
+        if RenWS <> nil then
+        try
+            RenPrj := RenWS.DM_FocusedProject;
+        except
             RenPrj := nil;
-            if RenWS <> nil then
-            try
-                RenPrj := RenWS.DM_FocusedProject;
-            except
-                RenPrj := nil;
-            end;
+        end;
+        RenN := 0;
+        if RenPrj <> nil then
+        try
+            RenN := RenPrj.DM_LogicalDocumentCount;
+        except
             RenN := 0;
-            if RenPrj <> nil then
+        end;
+        for Reni := 0 to RenN - 1 do
+        begin
             try
-                RenN := RenPrj.DM_LogicalDocumentCount;
+                RenDoc := RenPrj.DM_LogicalDocuments(Reni);
             except
-                RenN := 0;
+                RenDoc := nil;
             end;
-            for Reni := 0 to RenN - 1 do
-            begin
-                try
-                    RenDoc := RenPrj.DM_LogicalDocuments(Reni);
-                except
-                    RenDoc := nil;
-                end;
-                if RenDoc = nil then Continue;
-                RenPath := '';
-                try RenPath := RenDoc.DM_FullPath; except RenPath := ''; end;
-                if (RenPath = '') or (Pos('*', RenPath) > 0) then Continue;
-                RenPath := RenNormSlash(RenPath);
-                if not FileExists(RenPath) then Continue;
-                if UpperCase(RenPath) = UpperCase(RenNormSlash(RenPrjFile)) then Continue;
-                if not RenHasStem(RenPath, RenOldName) then Continue;
-                RenDir := ExtractFilePath(RenPath);
-                RenNewPath := RenDir + RenMapFileName(RenPath, RenOldName, RenNewName);
-                RenAddPair(RenOldL, RenNewL, RenPath, RenNewPath);
-            end;
+            if RenDoc = nil then Continue;
+            RenPath := '';
+            try RenPath := RenDoc.DM_FullPath; except RenPath := ''; end;
+            if (RenPath = '') or (Pos('*', RenPath) > 0) then Continue;
+            RenPath := RenNormSlash(RenPath);
+            if not FileExists(RenPath) then Continue;
+            if UpperCase(RenPath) = UpperCase(RenNormSlash(RenPrjFile)) then Continue;
+            RenKind := '';
+            try RenKind := RenDoc.DM_DocumentKind; except RenKind := ''; end;
+            RenPaths.Add(RenPath);
+            RenKinds.Add(RenKind);
         end;
 
-        RenCollectFolder(RenOldL, RenNewL);
-        RenSortByOldLen(RenOldL, RenNewL);
+        RenSchTotal := RenCountClass(RenPaths, RenKinds, 'SCH');
+        RenPcbTotal := RenCountClass(RenPaths, RenKinds, 'PCB');
+        RenSchN := 0;
+        RenPcbN := 0;
+        for Reni := 0 to RenPaths.Count - 1 do
+        begin
+            RenPath := RenPaths.Strings[Reni];
+            RenKind := RenKinds.Strings[Reni];
+            if RenIsSchDoc(RenKind, RenPath) then Inc(RenSchN);
+            if RenIsPcbDoc(RenKind, RenPath) then Inc(RenPcbN);
+            RenNewFn := RenNewDocName(RenPath, RenKind, RenNewName, RenPaths, RenKinds,
+                                     RenUsed, Reni, RenSchN, RenPcbN, RenSchTotal, RenPcbTotal);
+            RenNewPath := ExtractFilePath(RenPath) + RenNewFn;
+            RenAddPair(RenOldL, RenNewL, RenPath, RenNewPath);
+        end;
+
+        for Reni := 0 to RenOldL.Count - 1 do
+        begin
+            RenNewPath := RenNewL.Strings[Reni];
+            if FileExists(RenNewPath) and
+               (RenIndexOfCI(RenOldL, RenNewPath) < 0) then
+                RenErrL.Add(ExtractFileName(RenNewPath));
+        end;
+        if RenErrL.Count > 0 then
+        begin
+            RenShowBox(RenLabelInfoErr.Caption + sLineBreak + RenJoinHead(RenErrL, 15));
+            Exit;
+        end;
 
         RenTrySaveAll;
         RenTryClosePrj;
@@ -590,33 +732,57 @@ begin
         for Reni := 0 to RenOldL.Count - 1 do
         begin
             RenPath := RenOldL.Strings[Reni];
-            RenNewPath := RenNewL.Strings[Reni];
             if UpperCase(RenPath) = UpperCase(RenNormSlash(RenPrjFile)) then
+            begin
+                RenTemps.Add('');
                 Continue;
-            RenOk := RenTryRenameFile(RenPath, RenNewPath);
+            end;
+            RenTmp := RenTempName(RenPath, Reni);
+            RenOk := RenTryRenameFile(RenPath, RenTmp);
+            if RenOk then
+                RenTemps.Add(RenTmp)
+            else
+            begin
+                RenTemps.Add('');
+                RenErrL.Add(ExtractFileName(RenPath));
+            end;
+        end;
+
+        for Reni := 0 to RenOldL.Count - 1 do
+        begin
+            if UpperCase(RenOldL.Strings[Reni]) = UpperCase(RenNormSlash(RenPrjFile)) then
+                Continue;
+            RenTmp := '';
+            if Reni < RenTemps.Count then
+                RenTmp := RenTemps.Strings[Reni];
+            if RenTmp = '' then Continue;
+            RenNewPath := RenNewL.Strings[Reni];
+            RenOk := RenTryRenameFile(RenTmp, RenNewPath);
             if RenOk then
             begin
-                RenOkL.Add(ExtractFileName(RenPath) + ' -> ' + ExtractFileName(RenNewPath));
-                RenAddPair(RenMapOld, RenMapNew, RenPath, RenNewPath);
+                RenOkL.Add(ExtractFileName(RenOldL.Strings[Reni]) + ' -> ' + ExtractFileName(RenNewPath));
+                RenAddPair(RenMapOld, RenMapNew, RenOldL.Strings[Reni], RenNewPath);
             end
             else
-                RenErrL.Add(ExtractFileName(RenPath));
+            begin
+                RenErrL.Add(ExtractFileName(RenOldL.Strings[Reni]));
+                RenTryRenameFile(RenTmp, RenOldL.Strings[Reni]);
+            end;
         end;
 
         RenSortByOldLen(RenMapOld, RenMapNew);
-        RenCollectRewriteTargets(RenTargets, RenMapOld, RenMapNew);
-        for Reni := 0 to RenTargets.Count - 1 do
+        RenRewriteFile(RenNormSlash(RenPrjFile), RenMapOld, RenMapNew, RenErrL);
+        for Reni := 0 to RenMapOld.Count - 1 do
         begin
-            RenPath := RenTargets.Strings[Reni];
-            RenIdx := RenIndexOfCI(RenMapOld, RenPath);
-            if RenIdx >= 0 then
+            RenNewPath := RenMapNew.Strings[Reni];
+            if RenIsPatchExt(RenNewPath) and
+               (UpperCase(ExtractFileExt(RenNewPath)) = '.OUTJOB') then
             begin
-                if FileExists(RenMapNew.Strings[RenIdx]) then
-                    RenPath := RenMapNew.Strings[RenIdx]
-                else if not FileExists(RenPath) then
-                    Continue;
+                if FileExists(RenNewPath) then
+                    RenRewriteFile(RenNewPath, RenMapOld, RenMapNew, RenErrL)
+                else if FileExists(RenMapOld.Strings[Reni]) then
+                    RenRewriteFile(RenMapOld.Strings[Reni], RenMapOld, RenMapNew, RenErrL);
             end;
-            RenRewriteFile(RenPath, RenMapOld, RenMapNew, RenErrL);
         end;
 
         RenOk := RenTryRenameFile(RenNormSlash(RenPrjFile), RenNormSlash(RenNewPrj));
@@ -637,13 +803,16 @@ begin
                       sLineBreak + RenJoinHead(RenErrL, 15);
         RenShowBox(RenMsg);
     finally
-        RenTargets.Free;
+        RenTemps.Free;
         RenErrL.Free;
         RenOkL.Free;
         RenMapNew.Free;
         RenMapOld.Free;
         RenNewL.Free;
         RenOldL.Free;
+        RenUsed.Free;
+        RenKinds.Free;
+        RenPaths.Free;
     end;
 end;
 
@@ -669,8 +838,7 @@ begin
                 RenPrjDir := RenEnsureSlash(ExtractFilePath(RenFn));
                 RenEditPath.Text := RenPrjFile;
                 RenEditOld.Text := RenOldName;
-                if RenEditNew.Text = '' then
-                    RenEditNew.Text := RenOldName;
+                RenUpdatePreview;
             end;
         end;
     finally
@@ -678,14 +846,30 @@ begin
     end;
 end;
 
+procedure TFormRen.RenRadioIncClick(RenSender: TObject);
+begin
+    RenUpdatePreview;
+end;
+
+procedure TFormRen.RenRadioFullClick(RenSender: TObject);
+begin
+    RenUpdatePreview;
+    try RenEditNew.SetFocus; except end;
+end;
+
+procedure TFormRen.RenEditNewChange(RenSender: TObject);
+begin
+    if not RenRadioInc.Checked then
+        RenUpdatePreview;
+end;
+
 procedure TFormRen.RenButtonOKClick(RenSender: TObject);
+var
+    RenIncNew : String;
 begin
     RenPrjFile := RenTrimName(RenEditPath.Text);
     RenOldName := RenTrimName(RenEditOld.Text);
-    RenNewName := RenTrimName(RenEditNew.Text);
-    RenDoDocs := RenCheckDocs.Checked;
-    RenDoFolder := RenCheckFolder.Checked;
-    RenDoOld := RenCheckOld.Checked;
+    RenIncMode := RenRadioInc.Checked;
 
     if (RenPrjFile = '') or (Pos('*', RenPrjFile) > 0) then
     begin
@@ -704,6 +888,18 @@ begin
         RenOldName := ChangeFileExt(ExtractFileName(RenPrjFile), '');
     RenPrjDir := RenEnsureSlash(ExtractFilePath(RenPrjFile));
 
+    if RenIncMode then
+    begin
+        if not RenTryIncStem(RenOldName, RenIncNew) then
+        begin
+            RenShowBox(RenLabelErrNoVN.Caption);
+            Exit;
+        end;
+        RenNewName := RenIncNew;
+    end
+    else
+        RenNewName := RenTrimName(RenEditNew.Text);
+
     if (RenNewName = '') or (UpperCase(RenNewName) = UpperCase(RenOldName)) then
     begin
         RenShowBox(RenLabelErrName.Caption);
@@ -721,6 +917,8 @@ begin
     ButtonOK.Enabled := False;
     ButtonCancel.Enabled := False;
     RenBtnBrowse.Enabled := False;
+    RenRadioInc.Enabled := False;
+    RenRadioFull.Enabled := False;
     RenLabelProg.Caption := RenLabelBusy.Caption;
     RenUiRefresh;
 
@@ -730,6 +928,8 @@ begin
     ButtonOK.Enabled := True;
     ButtonCancel.Enabled := True;
     RenBtnBrowse.Enabled := True;
+    RenRadioInc.Enabled := True;
+    RenRadioFull.Enabled := True;
     RenUiRefresh;
     FormRen.Close;
 end;
@@ -825,12 +1025,10 @@ begin
     RenFillFromProject;
     RenEditPath.Text := RenPrjFile;
     RenEditOld.Text := RenOldName;
-    RenEditNew.Text := RenOldName;
-    RenCheckDocs.Checked := True;
-    RenCheckFolder.Checked := False;
-    RenCheckOld.Checked := False;
+    RenRadioInc.Checked := True;
+    RenRadioFull.Checked := False;
     RenLabelProg.Caption := '';
-    try RenEditNew.SetFocus; except end;
+    RenUpdatePreview;
 end;
 
 procedure StartProjectRenamer;
