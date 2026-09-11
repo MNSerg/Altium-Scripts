@@ -8,6 +8,7 @@ Icons for **DXP → Customizing** (Process Launcher / custom menus). Altium expe
 | --- | --- | --- |
 | TrackCornerFillet | `24x24/TrackCornerFillet.bmp` | `32x32/TrackCornerFillet.bmp` |
 | ProjectZipper | `24x24/ProjectZipper.bmp` | `32x32/ProjectZipper.bmp` |
+| ProjectRenamer | `24x24/ProjectRenamer.bmp` | `32x32/ProjectRenamer.bmp` |
 | Panelizer | `24x24/Panelizer.bmp` | `32x32/Panelizer.bmp` |
 | Panelize_Hard_Form | `24x24/Panelize_Hard_Form.bmp` | `32x32/Panelize_Hard_Form.bmp` |
 | SchDesignatorReset | `24x24/SchDesignatorReset.bmp` | `32x32/SchDesignatorReset.bmp` |

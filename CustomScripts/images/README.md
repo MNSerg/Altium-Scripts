@@ -8,6 +8,7 @@ Copies also live in each `CustomScripts/<Name>/` folder next to that script’s 
 | --- | --- |
 | Fillet.png / Fillet.bmp | TrackCornerFillet |
 | ProjectZipper.png / ProjectZipper.bmp | ProjectZipper |
+| ProjectRenamer.png / ProjectRenamer.bmp | ProjectRenamer |
 | Panelizer.png / Panelizer.bmp | Panelizer |
 | Panelize_Hard_Form.png / Panelize_Hard_Form.bmp | Panelize_Hard_Form |
 | SchAnnotate.png / SchAnnotate.bmp | SchDesignatorReset |

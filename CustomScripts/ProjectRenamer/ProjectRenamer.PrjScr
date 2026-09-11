@@ -1,0 +1,8 @@
+[Design]
+Version=1.0
+
+[Document1]
+DocumentPath=ProjectRenamer.pas
+
+[Generic_ScriptingSystem]
+StartProcName=ProjectRenamer.pas>StartProjectRenamer

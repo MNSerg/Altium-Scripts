@@ -14,6 +14,7 @@
 | --- | --- | --- |
 | Скругления трека | `CustomScripts/TrackCornerFillet/TrackCornerFillet.PrjScr` | `StartTrackCornerFillet` (`_StartTrackCornerFillet`) |
 | Архив проекта | `CustomScripts/ProjectZipper/ProjectZipper.PrjScr` | `StartProjectZipper` (`_StartProjectZipper`) |
+| Переименование проекта | `CustomScripts/ProjectRenamer/ProjectRenamer.PrjScr` | `StartProjectRenamer` (`_StartProjectRenamer`) |
 | Панелизация (прямоугольник) | `CustomScripts/Panelizer/Panelizer.PrjScr` | `StartPanelizer` |
 | Панелизация (произвольный контур) | `CustomScripts/Panelize_Hard_Form/Panelize_Hard_Form.PrjScr` | `StartPanelizeHardForm` |
 | Десигнаторы схемы | `CustomScripts/SchDesignatorReset/SchDesignatorReset.PrjScr` | `StartSchDesignatorReset` |
@@ -77,6 +78,25 @@ PNG/BMP **320×214** лежат в папке скрипта (рядом с `.Pr
 **Как запускать.** Откройте `CustomScripts/ProjectZipper/ProjectZipper.PrjScr`, DXP → Run Script → `StartProjectZipper`. Диалог: папка проекта и путь zip, кнопки **Обзор…** (`SelectDirectory`, иначе `TOpenDialog` как у Panelizer). Перед `Zip.Zip` — предупреждение, что Altium **замрёт до конца архивации** (`ConfirmNoYes`), подпись «Архивация…» и `TProgressBar` (у TXceedZip нет OnProgress в Zipper-example). Форма не закрывается до конца zip (`Update`/`Refresh`). Результат — `ShowMessage` с путём.
 
 **Ограничения.** Нужен сфокусированный проект. Префикс `Zip*`.
+
+### 2.1 Переименование проекта — `ProjectRenamer.pas`
+
+**Назначение.** Переименовать **файл проекта** (`.PrjPcb` / `.PrjSch` / `.PrjScr`) и связанные документы на диске. Сначала сделайте архив **ProjectZipper** — скрипт закрывает документы и переименовывает файлы; Altium может потребовать заново открыть проект.
+
+**Как запускать.** Откройте `CustomScripts/ProjectRenamer/ProjectRenamer.PrjScr`, сфокусируйте PCB-проект, DXP → Run Script → `StartProjectRenamer`. Диалог (как у Zipper): текущий путь (только чтение), текущее имя, **новое имя**, флажки документов/папки/`OLD`. **Обзор…** — если проекта нет в фокусе.
+
+**Что переименовывается**
+
+- Всегда: `OldName.PrjPcb` → `NewName.PrjPcb` (расширение как у `DM_ProjectFullPath`).
+- «Переименовать документы проекта» (**вкл.**): каждый `DM_LogicalDocuments` файл, в имени которого есть старый stem. `Sheet1.SchDoc` без stem **не** переименовывается.
+- «Заменить имя во всех файлах папки проекта» (**выкл.**): также файлы на диске в папке проекта, чьи имена содержат stem. Папка `OLD` не трогается, пока не включено «включая OLD».
+- Пропуск: `History`, `__Previews`, `*.PrjPcb.Zip`.
+
+**Пути в .PrjPcb.** После переименования документов файл проекта читается как текст, в нём заменяются **имена успешно переименованных файлов** (без `[rfReplaceAll]` — свой цикл `Pos`), затем сам `.PrjPcb` переименовывается. То же для `.OutJob` и текстовых `.SchDoc` (бинарные с `#0` пропускаются). `PcbDoc` не правится (бинарный).
+
+**После успеха.** `WorkspaceManager:SaveObject`, закрытие проекта, rename, затем `DM_OpenProject` / `Client.OpenDocument` / `ResetParameters` + `ObjectKind=Project`. Если API не открыл — сообщение открыть новый `.PrjPcb` вручную.
+
+**Ограничения.** Имя — безопасное для Windows, не пустое, ≠ старому. Префикс `Ren*`.
 
 ### 3. Панелизация — `Panelizer.pas`
 
